@@ -1,6 +1,6 @@
 import Foundation
 
-final class UserDefaultsStorage<T: Codable> {
+struct UserDefaultsStorage<T: Codable> {
     private let key: String
     private let userDefaults: UserDefaults
     

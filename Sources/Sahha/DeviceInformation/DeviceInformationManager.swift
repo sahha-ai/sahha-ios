@@ -20,7 +20,7 @@ final actor DeviceInformationManager {
         let appVersion = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
         let deviceId = await DeviceIdStore.shared.getDeviceId()
         let deviceModel = getDeviceModel()
-        let timeZone = TimeZone.current.identifier
+        let timeZone = Date().utcOffset
 
         return DeviceInformationRequest(
             sdkId: sdkId,

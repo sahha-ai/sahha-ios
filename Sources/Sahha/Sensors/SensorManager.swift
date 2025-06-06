@@ -19,7 +19,7 @@ final actor SensorManager {
         
         let status = await hkAuthorization.requestAuthorization(for: Set(sampleTypes))
         if status == .unnecessary {
-            await SensorStore.shared.enableSensors(sensors)
+            await SensorStore.shared.setSensors(sensors)
             await HKManager.shared.startSensors()
         }
 

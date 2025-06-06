@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-final class KeychainStorage<T: Codable> {
+struct KeychainStorage<T: Codable> {
     private let account: String
     private let service: String
     

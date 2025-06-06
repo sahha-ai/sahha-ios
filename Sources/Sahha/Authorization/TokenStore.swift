@@ -22,20 +22,25 @@ final actor TokenStore {
         return "\(token.tokenType) \(token.profileToken)"
     }
     
-    func setTokens(_ tokens: TokenResponse) async throws {
+    func setTokens(_ tokens: TokenResponse) throws {
         guard storage.set(tokens) else {
-            throw SahhaError.keychainError
+            throw SahhaError.custom(message: "An error occurred while storing tokens")
         }
         
         cached = tokens
-        await RefreshTokenManager.shared.scheduleRefresh()
+        Sahha.setProfileTokenSnapshot(tokens.profileToken)
+      
+        Task {
+            await RefreshTokenManager.shared.scheduleRefresh()
+        }
     }
     
     func deleteTokens() throws {
         guard storage.delete() else {
-            throw SahhaError.keychainError
+            throw SahhaError.custom(message: "An error occurred while deleting tokens")
         }
-        
+
         cached = nil
+        Sahha.setProfileTokenSnapshot(nil)
     }
 }

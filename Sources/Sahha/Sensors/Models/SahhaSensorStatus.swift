@@ -1,4 +1,4 @@
-public enum SahhaSensorStatus: Int {
+public enum SahhaSensorStatus: Int, Sendable, CustomStringConvertible {
     case pending
     case unavailable
     case disabled

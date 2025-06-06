@@ -11,13 +11,13 @@ final actor RefreshTokenManager {
     
     func refreshIfNeeded() async throws {
         if isRefreshing {
-            // Someone else is already refreshing, wait
             return try await withCheckedThrowingContinuation { continuation in
                 refreshContinuation.append(continuation)
             }
         }
         
         isRefreshing = true
+    
         do {
             try await performRefresh()
             completeAllContinuations(with: .success(()))
@@ -25,6 +25,7 @@ final actor RefreshTokenManager {
             completeAllContinuations(with: .failure(error))
             throw error
         }
+        
         isRefreshing = false
     }
     
@@ -32,9 +33,7 @@ final actor RefreshTokenManager {
         guard !isScheduled else { return }
         isScheduled = true
         
-        Task {
-            defer { isScheduled = false }
-            
+        Task.detached(priority: .utility) {
             guard let token = await TokenStore.shared.getProfileToken(),
                   let expiry = token.jwtExpirationDate() else {
                 return // No valid token; skip scheduling
@@ -47,7 +46,13 @@ final actor RefreshTokenManager {
             
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             try? await self.refreshIfNeeded()
+            
+            await self.setIsScheduledFalse()
         }
+    }
+    
+    private func setIsScheduledFalse() {
+        isScheduled = false
     }
     
     private func performRefresh() async throws {

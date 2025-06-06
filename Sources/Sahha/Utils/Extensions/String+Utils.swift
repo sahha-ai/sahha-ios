@@ -23,4 +23,14 @@ extension String {
         
         return Date(timeIntervalSince1970: exp)
     }
+    
+    var camelToSnake: String {
+        unicodeScalars.reduce("") {
+            if CharacterSet.uppercaseLetters.contains($1) {
+                return ($0 + "_" + String($1)).lowercased()
+            } else {
+                return $0 + String($1)
+            }
+        }
+    }
 }

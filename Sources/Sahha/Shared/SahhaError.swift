@@ -8,19 +8,18 @@ enum SahhaError: Error, CustomStringConvertible {
     case decodingFailed
     case unauthorized
     case apiError(ApiErrorResponse)
-    case keychainError
-    case userDefaultsError
     case healthKitUnavailable
+    case fileStorage(message: String)
     case unknown
     case custom(message: String)
-
+    
     var apiErrorResponse: ApiErrorResponse? {
         if case let .apiError(response) = self {
             return response
         }
         return nil
     }
-
+    
     var code: Int? {
         switch self {
         case .invalidURL:
@@ -35,8 +34,12 @@ enum SahhaError: Error, CustomStringConvertible {
             return nil
         }
     }
-
+    
     var description: String {
+        return "[Sahha] " + message
+    }
+    
+    private var message: String {
         switch self {
         case .notConfigured:
             return "Sahha is not configured. Please call Sahha.configure() before using other features."
@@ -52,17 +55,21 @@ enum SahhaError: Error, CustomStringConvertible {
             return "Unauthorized request. Please check credentials or token."
         case .apiError(let response):
             return response.title
-        case .keychainError:
-            return "An error occurred while accessing the keychain."
-        case .userDefaultsError:
-            return "An error occurred while accessing UserDefaults."
         case .healthKitUnavailable:
             return "HealthKit is not available on this device."
+        case .fileStorage(let message):
+            return "File storage error: \(message)"
         case .unknown:
             return "An unknown error occurred."
         case .custom(let message):
             return message
         }
+    }
+}
+
+extension SahhaError: LocalizedError {
+    var errorDescription: String? {
+        return description
     }
 }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-final class ArchivedUserDefaultsStorage<T: NSObject & NSSecureCoding> {
+struct ArchivedUserDefaultsStorage<T: NSObject & NSSecureCoding> {
     private let key: String
     private let userDefaults: UserDefaults
 
