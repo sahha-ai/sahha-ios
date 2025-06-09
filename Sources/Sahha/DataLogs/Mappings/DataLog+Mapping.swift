@@ -2,28 +2,22 @@ import Foundation
 
 extension DataLog {
     func toRequest() async -> DataLogRequest? {
-        guard let sensor = SahhaSensor(dataType: dataType) else {return nil}
+        guard let sensor = SahhaSensor(dataType: dataType) else { return nil }
         
         let deviceId = await DeviceIdStore.shared.getDeviceId()
         let logType = sensor.logType.rawValue
         let unit = sensor.unitString
-        let additionalPropertiesString = try? additionalProperties?.toJsonString() ?? ""
-        let startDateTimeString = startDateTime.isoDateTime
-        let endDateTimeString = endDateTime.isoDateTime
-        let postDateTime = Date().isoDateTime
-        
-        let identifiers = [
-            dataType,
-            source,
-            deviceType,
-            startDateTimeString,
-            endDateTimeString
-        ]
-        
-        let id = UUIDFactory.v5(from: identifiers.joined(separator: "|")).uuidString
+       
+        let additionalPropertiesString: String?
+        do {
+            additionalPropertiesString = try additionalProperties?.toRequestPayload()?.toJsonString()
+        } catch {
+            print(error.localizedDescription)
+            additionalPropertiesString = nil
+        }
         
         return DataLogRequest(
-            id: id,
+            id: generateId().uuidString,
             parentId: parentId,
             logType: logType,
             dataType: dataType,
@@ -33,9 +27,9 @@ extension DataLog {
             recordingMethod: recordingMethod.stringValue,
             deviceId: deviceId,
             deviceType: deviceType,
-            startDateTime: startDateTimeString,
-            endDateTime: endDateTimeString,
-            postDateTime: postDateTime,
+            startDateTime: startDateTime.isoDateTime,
+            endDateTime: endDateTime.isoDateTime,
+            postDateTime: Date().isoDateTime,
             additionalProperties: additionalPropertiesString
         )
     }

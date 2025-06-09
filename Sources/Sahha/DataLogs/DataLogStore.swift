@@ -3,7 +3,6 @@ import Foundation
 actor DataLogStore {
     private let baseDirectory: URL
     private let storage = FileSystemStorage()
-    private let formatter = DataLogFormatter()
     
     init(baseDirectory: URL) {
         self.baseDirectory = baseDirectory
@@ -12,7 +11,7 @@ actor DataLogStore {
     func store(_ logs: [DataLog]) async throws {
         for log in logs {
             let fileURL = resolveFileURL(for: log)
-            let line = formatter.format(log) + "\n"
+            let line = log.asRawStorageLine() + "\n"
             try storage.ensureDirectoryExists(at: fileURL.deletingLastPathComponent())
             try storage.append(Data(line.utf8), to: fileURL)
         }

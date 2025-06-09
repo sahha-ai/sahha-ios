@@ -1,7 +1,7 @@
 import HealthKit
 
 extension HKSample {
-    var recordingMethod: RecordingMethod {
+    var recordingMethod: DataLogRecordingMethod {
         guard let value = metadata?[HKMetadataKeyWasUserEntered] as? NSNumber else {
             return .unknown
         }

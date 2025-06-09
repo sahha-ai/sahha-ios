@@ -1,4 +1,4 @@
-enum RecordingMethod: Int, Codable, Sendable {
+enum DataLogRecordingMethod: Int, Codable, Sendable {
     case unknown = 0
     case manual = 1
     case automatic = 2

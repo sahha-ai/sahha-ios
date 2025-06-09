@@ -10,7 +10,7 @@ actor AggregationManager {
     }
 
     // TODO: Implement
-    func ingest(_ logs: [DataLog]) async -> IngestionResult {
+    func ingest(_ logs: [DataLog]) async -> BatchIngestionResult {
         return .success
     }
 }

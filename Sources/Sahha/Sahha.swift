@@ -78,7 +78,6 @@ public final class Sahha {
     public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
         Task {
             do {
-                // Delete PII (demographic) first
                 try await DemographicStore.shared.clear()
                 try await TokenStore.shared.deleteTokens()
                 
@@ -228,6 +227,7 @@ public final class Sahha {
 
 // MARK: Helpers
 
+/// This seems kinda silly - just return a typed array?
 private extension Encodable {
     func wrappedAsDataEnvelope(named typeName: String) -> (error: String?, data: String?) {
         let wrapper = ["data": self]

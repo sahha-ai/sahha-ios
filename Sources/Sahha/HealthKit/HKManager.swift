@@ -7,7 +7,7 @@ final actor HKManager {
     
     private let healthStore = HKHealthStore()
     private var activeSensors: Set<HKObjectType> = []
-    private let queryManager = HKQueryManager.shared
+  
     private var isSensorStartInProgress = false
     
     func startSensors() {
@@ -43,7 +43,7 @@ final actor HKManager {
         guard !self.activeSensors.contains(sampleType) else { return }
         
         self.activeSensors.insert(sampleType)
-        await queryManager.startObserverQuery(for: sampleType)
+        await HKQueryManager.shared.startObserverQuery(for: sampleType)
         await self.enableBackgroundDelivery(for: sampleType)
     }
     

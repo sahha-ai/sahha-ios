@@ -1,14 +1,14 @@
 import HealthKit
 
 extension HKSample {
-    func toDataLog() async -> DataLog? {
+    func toDataLogs() -> [DataLog]? {
         switch self {
         case let quantity as HKQuantitySample:
-            return await quantity.toDataLog_internal()
+            return quantity.toDataLogs_internal()
         case let category as HKCategorySample:
-            return await category.toDataLog_internal()
+            return category.toDataLogs_internal()
         case let workout as HKWorkout:
-            return await workout.toDataLog_internal()
+            return workout.toDataLogs_internal()
         default:
             return nil
         }

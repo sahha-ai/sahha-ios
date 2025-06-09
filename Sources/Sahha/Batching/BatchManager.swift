@@ -24,6 +24,19 @@ final actor BatchManager<T: Sendable & Encodable> {
            return nil
     }
 
+    func add(_ items: [T]) -> [[T]] {
+        var batches: [[T]] = []
+        for item in items {
+            buffer.append(item)
+            if buffer.count >= maxBatchSize {
+                let batch = buffer
+                buffer.removeAll()
+                batches.append(batch)
+            }
+        }
+        return batches
+    }
+    
     func flush() -> [T] {
         defer { buffer.removeAll() }
         return buffer

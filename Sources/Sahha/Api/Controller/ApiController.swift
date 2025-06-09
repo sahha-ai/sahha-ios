@@ -1,7 +1,6 @@
 import Foundation
 
 enum ApiController {
-    
     // MARK: Authentication
     
     static func registerProfile(appId: String, appSecret: String, externalId: String) async -> Result<TokenResponse, SahhaError> {

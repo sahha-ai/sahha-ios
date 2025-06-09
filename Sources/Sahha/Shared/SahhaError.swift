@@ -2,6 +2,7 @@ import Foundation
 
 enum SahhaError: Error, CustomStringConvertible {
     case notConfigured
+    case unauthenticated
     case noInternet
     case invalidURL(url: String)
     case serverError(statusCode: Int)
@@ -42,7 +43,9 @@ enum SahhaError: Error, CustomStringConvertible {
     private var message: String {
         switch self {
         case .notConfigured:
-            return "Sahha is not configured. Please call Sahha.configure() before using other features."
+            return "Sahha is not configured. Please call Sahha.configure(...) before calling this method."
+        case .unauthenticated:
+            return "Sahha is unauthenticated. Please call Sahha.authenticate(...) before calling this method."
         case .noInternet:
             return "No internet connection available."
         case .invalidURL(let url):

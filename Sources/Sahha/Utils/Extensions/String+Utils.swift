@@ -25,12 +25,15 @@ extension String {
     }
     
     var camelToSnake: String {
-        unicodeScalars.reduce("") {
-            if CharacterSet.uppercaseLetters.contains($1) {
-                return ($0 + "_" + String($1)).lowercased()
-            } else {
-                return $0 + String($1)
-            }
-        }
+        let pattern = "([a-z0-9])([A-Z])"
+        let regex = try? NSRegularExpression(pattern: pattern, options: [])
+        let range = NSRange(startIndex..., in: self)
+        let modified = regex?.stringByReplacingMatches(
+            in: self,
+            options: [],
+            range: range,
+            withTemplate: "$1_$2"
+        ) ?? self
+        return modified.lowercased()
     }
 }
