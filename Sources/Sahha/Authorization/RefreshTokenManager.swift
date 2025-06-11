@@ -8,6 +8,7 @@ final actor RefreshTokenManager {
     private var isScheduled = false
     private var isRefreshing = false
     private var refreshContinuation: [CheckedContinuation<Void, Error>] = []
+    private var scheduledTask: Task<Void, Never>?
     
     func refreshIfNeeded() async throws {
         if isRefreshing {
@@ -17,7 +18,7 @@ final actor RefreshTokenManager {
         }
         
         isRefreshing = true
-    
+        
         do {
             try await performRefresh()
             completeAllContinuations(with: .success(()))
@@ -33,7 +34,7 @@ final actor RefreshTokenManager {
         guard !isScheduled else { return }
         isScheduled = true
         
-        Task.detached(priority: .utility) {
+        scheduledTask = Task.detached(priority: .utility) {
             guard let token = await TokenStore.shared.getProfileToken(),
                   let expiry = token.jwtExpirationDate() else {
                 return // No valid token; skip scheduling
@@ -44,15 +45,47 @@ final actor RefreshTokenManager {
             let refreshTime = expiry.addingTimeInterval(-oneDay)
             let delay = max(refreshTime.timeIntervalSince(now), 0)
             
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            try? await self.refreshIfNeeded()
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                
+                // Check if task was cancelled during sleep
+                guard !Task.isCancelled else {
+                    await self.setIsScheduledFalse()
+                    return
+                }
+                
+                try await self.refreshIfNeeded()
+            } catch {
+                // Handle cancellation or refresh errors gracefully
+                if Task.isCancelled {
+                    SahhaLogger.info("Refresh token task cancelled")
+                } else {
+                    SahhaLogger.error("Refresh token failed: \(error.localizedDescription)")
+                }
+            }
             
             await self.setIsScheduledFalse()
         }
     }
     
+    func stop() async {
+        // Cancel any scheduled refresh task
+        scheduledTask?.cancel()
+        scheduledTask = nil
+        
+        // Cancel any ongoing refresh operations
+        completeAllContinuations(with: .failure(CancellationError()))
+        
+        // Reset state
+        isScheduled = false
+        isRefreshing = false
+        
+        SahhaLogger.info("RefreshTokenManager stopped")
+    }
+    
     private func setIsScheduledFalse() {
         isScheduled = false
+        scheduledTask = nil
     }
     
     private func performRefresh() async throws {

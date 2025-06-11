@@ -6,6 +6,15 @@ struct FileSystemStorage {
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
     }
+    
+    func fileExists(at url: URL) -> Bool {
+        return fileManager.fileExists(atPath: url.path)
+    }
+    
+    func directoryExists(at url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+    }
 
     func ensureDirectoryExists(at url: URL) throws {
         var isDirectory: ObjCBool = false

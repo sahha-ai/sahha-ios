@@ -52,6 +52,12 @@ final class LifecycleObserver {
         } else {
             hasEmittedAppOpen = true
             logLifecycleEvent(.appOpen)
+            
+            Task {
+                if let token = await TokenStore.shared.getProfileToken() {
+                    await DeviceInformationManager.shared.sync()
+                }
+            }
         }
     }
 

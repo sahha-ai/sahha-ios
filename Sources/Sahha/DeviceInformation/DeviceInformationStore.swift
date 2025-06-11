@@ -29,4 +29,9 @@ final actor DeviceInformationStore {
         cachedInfo = info
         return info
     }
+    
+    func clear() {
+        cachedHash = nil
+        hashStorage.delete()
+    }
 }

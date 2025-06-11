@@ -8,18 +8,17 @@ public final class Sahha {
     public static func configure(_ settings: SahhaSettings, callback: (@Sendable () -> Void)? = nil) {
         Task {
             await ConfigurationStore.shared.set(settings)
-            await restoreSessionIfNeeded()
+            await restoreSessionIfAuthenticated()
             callback?()
         }
     }
     
-    private static func restoreSessionIfNeeded() async {
+    private static func restoreSessionIfAuthenticated() async {
         if let token = await TokenStore.shared.getProfileToken() {
             Task { @MainActor in
                 setProfileTokenSnapshot(token)
                 LifecycleObserver.shared.start()
             }
-            
             await HKManager.shared.startSensors()
             await RefreshTokenManager.shared.scheduleRefresh()
         }
@@ -66,6 +65,7 @@ public final class Sahha {
         Task {
             do {
                 try await TokenStore.shared.setTokens(tokens)
+                await DeviceInformationManager.shared.sync()
                 await HKManager.shared.startSensors()
                 await LifecycleObserver.shared.start()
                 callback(nil, true)
@@ -78,12 +78,21 @@ public final class Sahha {
     public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
         Task {
             do {
+                Task { @MainActor in
+                    setProfileTokenSnapshot(nil)
+                }
+                
+                await RefreshTokenManager.shared.stop()
+                
+                await SensorManager.shared.stopSensors()
+                await LifecycleObserver.shared.stop()
+                
+                await HKManager.shared.reset()
+                await DataLogManager.shared.reset()
+                
+                await DeviceInformationStore.shared.clear()
                 try await DemographicStore.shared.clear()
                 try await TokenStore.shared.deleteTokens()
-                
-                await LifecycleObserver.shared.stop()
-                await SensorStore.shared.clearSensors()
-                await HKAnchorStore.shared.clearAllAnchors()
                 
                 callback(nil, true)
             } catch {

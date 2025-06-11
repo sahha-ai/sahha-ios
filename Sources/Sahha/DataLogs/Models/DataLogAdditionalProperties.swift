@@ -10,7 +10,7 @@ enum DataLogAdditionalPropertiesKey: Int, Codable {
 }
 
 enum BloodRelationToMeal: Int {
-    case before_meal = 0, after_meal, unknown
+    case before_meal, after_meal, unknown
 }
 
 struct DataLogAdditionalProperties: Codable, Equatable, Sendable {

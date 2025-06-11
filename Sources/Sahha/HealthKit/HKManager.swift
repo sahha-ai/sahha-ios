@@ -6,13 +6,25 @@ final actor HKManager {
     private init() {}
     
     private let healthStore = HKHealthStore()
-    private var activeSensors: Set<HKObjectType> = []
-  
+    
+    private var activeSensors: Set<HKSampleType> = []
     private var isSensorStartInProgress = false
     
     func startSensors() {
         Task.detached(priority: .utility) {
             await self._startSensors()
+        }
+    }
+    
+    func reset() async {
+        Task {
+            for sampleType in activeSensors {
+                await disableBackgroundDelivery(for: sampleType)
+            }
+            await HKQueryManager.shared.stopAllQueries()
+            await HKAnchorStore.shared.clearAllAnchors()
+            activeSensors.removeAll()
+            SahhaLogger.info("All sensors stopped and background delivery disabled.")
         }
     }
     
@@ -22,24 +34,31 @@ final actor HKManager {
         isSensorStartInProgress = true
         defer { isSensorStartInProgress = false }
         
-        let sensors = await SensorStore.shared.getEnabledSensors()
+        let enabled = await SensorStore.shared.getEnabledSensors()
+        let enabledTypes = Set(enabled.compactMap(\.hkSampleType))
+        let currentlyActive = self.activeSensors
+        
+        for sampleType in currentlyActive where !enabledTypes.contains(sampleType) {
+            await HKQueryManager.shared.stopObserverQuery(for: sampleType)
+            await HKQueryManager.shared.stopAnchorQuery(for: sampleType)
+            await disableBackgroundDelivery(for: sampleType)
+            activeSensors.remove(sampleType)
+        }
+        
         let semaphore = AsyncSemaphore(value: maxConcurrentTasks)
         
         await withTaskGroup(of: Void.self) { group in
-            for sensor in sensors {
+            for sampleType in enabledTypes {
                 group.addTask {
                     await semaphore.wait()
                     defer { Task { await semaphore.signal() } }
-                    await self.startSensor(sensor)
+                    await self.startSensor(sampleType)
                 }
             }
         }
     }
     
-    private func startSensor(_ sensor: SahhaSensor) async {
-        guard let sampleType = sensor.hkSampleType else { return }
-        
-        // Skip if already observing
+    private func startSensor(_ sampleType: HKSampleType) async {
         guard !self.activeSensors.contains(sampleType) else { return }
         
         self.activeSensors.insert(sampleType)
@@ -51,11 +70,15 @@ final actor HKManager {
         do {
             try await healthStore.enableBackgroundDelivery(for: sampleType, frequency: .immediate)
         } catch {
-            if let sensor = SahhaSensor.from(sampleType: sampleType) {
-                print("Failed to enable background delivery for \(sensor)")
-            } else {
-                print("Failed to enable background delivery for \(sampleType)")
-            }
+            SahhaLogger.error("Failed to enable background delivery for \(sampleType.identifier)")
+        }
+    }
+    
+    private func disableBackgroundDelivery(for sampleType: HKSampleType) async {
+        do {
+            try await healthStore.disableBackgroundDelivery(for: sampleType)
+        } catch {
+            SahhaLogger.error("Failed to disable background delivery for \(sampleType.identifier)")
         }
     }
 }

@@ -24,7 +24,7 @@ struct DataLogStoragePaths {
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first!
             .appendingPathComponent("sahha", isDirectory: true)
-
+        
         return DataLogStoragePaths(baseDirectory: appSupport)
     }
 }

@@ -11,7 +11,9 @@ actor LifecycleEventManager {
     func track(_ event: LifecycleEvent) {
         Task {
             let allowed = await isTrackingAllowed(for: event)
-            guard allowed && shouldTrack(event) else { return }
+            let shouldTrack = await shouldTrackEvent(event)
+            
+            guard allowed && shouldTrack else { return }
             
             lastEventTimestamps[event] = Date()
             
@@ -28,7 +30,11 @@ actor LifecycleEventManager {
         }
     }
     
-    private func shouldTrack(_ event: LifecycleEvent) -> Bool {
+    private func shouldTrackEvent(_ event: LifecycleEvent) async -> Bool {
+        guard await TokenStore.shared.getProfileToken() != nil else {
+            return false
+        }
+        
         let now = Date()
         guard let last = lastEventTimestamps[event] else {
             return true

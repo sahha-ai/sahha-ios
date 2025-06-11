@@ -2,10 +2,11 @@ import Foundation
 
 actor DataLogStore {
     private let baseDirectory: URL
-    private let storage = FileSystemStorage()
+    private let storage: FileSystemStorage
     
-    init(baseDirectory: URL) {
+    init(baseDirectory: URL, storage: FileSystemStorage = FileSystemStorage()) {
         self.baseDirectory = baseDirectory
+        self.storage = storage
     }
     
     func store(_ logs: [DataLog]) async throws {
@@ -17,12 +18,18 @@ actor DataLogStore {
         }
     }
     
+    func deleteAll() async throws {
+        guard storage.directoryExists(at: baseDirectory) else { return }
+        try storage.delete(at: baseDirectory)
+    }
+    
     private func resolveFileURL(for log: DataLog) -> URL {
         let date = log.startDateTime
         let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
         let year = String(format: "%04d", components.year ?? 0)
         let month = String(format: "%02d", components.month ?? 0)
         let day = String(format: "%02d", components.day ?? 0)
+        let filename = "\(day).txt"
         
         return baseDirectory
             .appendingPathComponent(log.dataType)
@@ -30,6 +37,6 @@ actor DataLogStore {
             .appendingPathComponent(log.source)
             .appendingPathComponent(year)
             .appendingPathComponent(month)
-            .appendingPathComponent("\(day).txt")
+            .appendingPathComponent(filename)
     }
 }

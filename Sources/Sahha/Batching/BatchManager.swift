@@ -37,6 +37,10 @@ final actor BatchManager<T: Sendable & Encodable> {
         return batches
     }
     
+    func reset() {
+        buffer.removeAll()
+    }
+    
     func flush() -> [T] {
         defer { buffer.removeAll() }
         return buffer
