@@ -1,7 +1,32 @@
 import Foundation
 import Security
 
-struct KeychainStorage<T: Codable>: StorageProtocol, Sendable {
+protocol KeychainStorageProtocol<T> {
+    associatedtype T: Codable
+    
+    func get() -> T?
+    func set(_ value: T) throws
+    func delete() throws
+}
+
+enum KeychainError: Error, LocalizedError {
+    case encodingFailed
+    case itemAddFailed(OSStatus)
+    case itemDeleteFailed(OSStatus)
+    
+    var errorDescription: String? {
+        switch self {
+        case .encodingFailed:
+            return "Failed to encode data for Keychain storage."
+        case .itemAddFailed(let status):
+            return "Failed to add item to Keychain (status: \(status))."
+        case .itemDeleteFailed(let status):
+            return "Failed to delete item from Keychain (status: \(status))."
+        }
+    }
+}
+
+struct KeychainStorage<T: Codable>: KeychainStorageProtocol {
     private let account: String
     private let service: String = "ai.sahha.ios"
     
@@ -17,17 +42,23 @@ struct KeychainStorage<T: Codable>: StorageProtocol, Sendable {
             kSecReturnData: true,
             kSecMatchLimit: kSecMatchLimitOne
         ]
-
+        
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-
+        
         guard status == errSecSuccess, let data = result as? Data else { return nil }
-
-        return try? JSONDecoder().decode(T.self, from: data)
+        
+        guard let decoded = try? JSONDecoder().decode(T.self, from: data) else {
+            return nil
+        }
+        
+        return decoded
     }
     
-    func set(_ value: T) -> Bool {
-        guard let data = try? JSONEncoder().encode(value) else { return false }
+    func set(_ value: T) throws {
+        guard let data = try? JSONEncoder().encode(value) else {
+            throw KeychainError.encodingFailed
+        }
         
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
@@ -35,20 +66,26 @@ struct KeychainStorage<T: Codable>: StorageProtocol, Sendable {
             kSecAttrService: service,
             kSecValueData: data
         ]
-
+        
         SecItemDelete(query as CFDictionary)
         let status = SecItemAdd(query as CFDictionary, nil)
-        return status == errSecSuccess
+        
+        guard status == errSecSuccess else {
+            throw KeychainError.itemAddFailed(status)
+        }
     }
     
-    func delete() -> Bool {
+    func delete() throws {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrAccount: account,
             kSecAttrService: service
         ]
-
+        
         let status = SecItemDelete(query as CFDictionary)
-        return status == errSecSuccess || status == errSecItemNotFound
+        
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.itemDeleteFailed(status)
+        }
     }
 }
