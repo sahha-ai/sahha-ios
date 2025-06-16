@@ -1,13 +1,13 @@
 import Foundation
 import UIKit
 
-protocol LifecycleObserverProtocol: Actor, DisposableActor {
+protocol LifecycleObserverProtocol: Actor, DisposableAsync {
     func startObserving() async
     func stopObserving() async
 }
 
 actor LifecycleObserver: LifecycleObserverProtocol {
-    private let deviceInfoService: DeviceInfoServiceProtocol
+    private let deviceInfoManager: DeviceInfoManagerProtocol
     
     private var observers: [NSObjectProtocol] = []
     private var hasEmittedAppOpen = false
@@ -36,8 +36,8 @@ actor LifecycleObserver: LifecycleObserverProtocol {
         }
     }
     
-    init(deviceInfoService: DeviceInfoServiceProtocol) {
-        self.deviceInfoService = deviceInfoService
+    init(deviceInfoManager: DeviceInfoManagerProtocol) {
+        self.deviceInfoManager = deviceInfoManager
     }
     
     func startObserving() async {
@@ -110,7 +110,7 @@ actor LifecycleObserver: LifecycleObserverProtocol {
         print("Lifecycle event: \(event)")
         
         do {
-            try await deviceInfoService.sync()
+            try await deviceInfoManager.sync()
             print("Device info synced successfully on \(event)")
             hasEmittedAppOpen = true
         } catch {

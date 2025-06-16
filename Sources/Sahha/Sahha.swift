@@ -7,7 +7,12 @@ public final class Sahha {
     
     public static func configure(settings: SahhaSettings, callback: (@Sendable () -> Void)? = nil) {
         Task {
-            await container.configure(with: settings)
+            do {
+                try await container.configure(with: settings)
+            } catch {
+                print("Failed to configure Sahha: \(error.localizedDescription)")
+            }
+            
             callback?()
         }
     }
@@ -35,7 +40,7 @@ public final class Sahha {
         Task {
             do {
                 let scoreService = try await container.getScoreService()
-                let scores = try await scoreService.getScores(types: types, startDateTime: startDateTime, endDateTime: endDateTime)
+                let _ = try await scoreService.getScores(types: types, startDateTime: startDateTime, endDateTime: endDateTime)
                 callback(nil, "") // TODO: JSON stringify scores as {data: [ {...} ]}
             } catch {
                 print("Get scores error: \(error)")
@@ -50,7 +55,7 @@ public final class Sahha {
         Task {
             do {
                 let biomarkerService = try await container.getBiomarkerService()
-                let biomarkers = try await biomarkerService.getBiomarkers(categories: categories, types: types, startDateTime: startDateTime, endDateTime: endDateTime)
+                let _ = try await biomarkerService.getBiomarkers(categories: categories, types: types, startDateTime: startDateTime, endDateTime: endDateTime)
                 callback(nil, "") // TODO: JSON stringify biomarkers as [data: [ {...} ]]
             } catch {
                 print("Get biomarkers error: \(error)")

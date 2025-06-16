@@ -4,8 +4,7 @@ import CryptoKit
 
 protocol DeviceInfoManagerProtocol: Actor {
     func getDeviceInfo() async -> DeviceInfoRequest
-    func hasDeviceInfoChanged() async throws -> Bool
-    func saveDeviceInfoHash() async throws
+    func sync() async throws
     func clear() async throws
 }
 
@@ -23,15 +22,18 @@ enum DeviceInfoError: Error, LocalizedError {
 actor DeviceInfoManager: DeviceInfoManagerProtocol {
     private let userDefaults: UserDefaults
     private let settings: SahhaSettings
+    private let deviceInfoService: DeviceInfoServiceProtocol
     
     private var cachedDeviceInfo: DeviceInfoRequest?
+    private var cachedHash: String?
     
     private let deviceIdKey = "SahhaDeviceId"
     private let hashKey = "SahhaDeviceInfoHash"
     
-    init(userDefaults: UserDefaults, settings: SahhaSettings) {
+    init(userDefaults: UserDefaults, settings: SahhaSettings, deviceInfoService: DeviceInfoServiceProtocol) {
         self.userDefaults = userDefaults
         self.settings = settings
+        self.deviceInfoService = deviceInfoService
     }
     
     func getDeviceInfo() async -> DeviceInfoRequest {
@@ -49,7 +51,7 @@ actor DeviceInfoManager: DeviceInfoManagerProtocol {
             sdkVersion: "1.0.0", // Replace with actual SDK version
             appId: bundle.bundleIdentifier ?? "unknown",
             appVersion: bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
-            deviceId: device.identifierForVendor?.uuidString ?? UUID().uuidString,
+            deviceId: deviceId,
             deviceType: device.model,
             deviceModel: deviceModel,
             system: device.systemName,
@@ -57,27 +59,33 @@ actor DeviceInfoManager: DeviceInfoManagerProtocol {
             timeZone: Date().utcOffset
         )
         cachedDeviceInfo = deviceInfo
+        do {
+            cachedHash = try deviceInfo.sha256Hash()
+        } catch {
+            print("Failed to hash device info: \(error)")
+            cachedHash = nil
+        }
         return deviceInfo
     }
     
-    func hasDeviceInfoChanged() async throws -> Bool {
-        let currentDeviceInfo = await getDeviceInfo()
-        let currentHash = try hashDeviceInfo(currentDeviceInfo)
-        let storedHash = userDefaults.string(forKey: hashKey)
-        return currentHash != storedHash
-    }
-    
-    func saveDeviceInfoHash() async throws {
-        guard let deviceInfo = cachedDeviceInfo else {
+    func sync() async throws {
+        let deviceInfo = await getDeviceInfo()
+        
+        guard let currentHash = cachedHash else {
             throw DeviceInfoError.missingDeviceInfo
         }
-        let hash = try hashDeviceInfo(deviceInfo)
-        userDefaults.set(hash, forKey: hashKey)
+        
+        let storedHash = userDefaults.string(forKey: hashKey)
+        if storedHash != currentHash {
+            try await deviceInfoService.updateDeviceInformation(deviceInfo)
+            userDefaults.set(currentHash, forKey: hashKey)
+        }
     }
     
     func clear() async {
         userDefaults.removeObject(forKey: hashKey)
         cachedDeviceInfo = nil
+        cachedHash = nil
     }
     
     private func getPersistentDeviceId() async -> String {
@@ -97,14 +105,6 @@ actor DeviceInfoManager: DeviceInfoManagerProtocol {
                 String(validatingCString: $0)
             }
         }
-        return machine ?? ""
-    }
-    
-    private func hashDeviceInfo(_ deviceInfo: DeviceInfoRequest) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys // Ensure consistent hashing
-        let data = try encoder.encode(deviceInfo)
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02hhx", $0) }.joined()
+        return machine ?? "unknown"
     }
 }

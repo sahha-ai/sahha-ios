@@ -2,11 +2,17 @@ import Foundation
 
 enum SahhaError: Error, LocalizedError {
     case notConfigured
+    case alreadyConfigured
+    case lifecycleObserverResolutionFailed(underlyingError: Error)
     
     var errorDescription: String {
         switch self {
         case .notConfigured:
             return "Sahha not configured. Call Sahha.configure(...) first."
+        case .alreadyConfigured:
+            return "Sahha is already configured."
+        case .lifecycleObserverResolutionFailed(let underlyingError):
+            return "Failed to resolve or start LifecycleObserver. Underlying error: \(underlyingError.localizedDescription)"
         }
     }
 }
@@ -14,87 +20,93 @@ enum SahhaError: Error, LocalizedError {
 actor SahhaServiceContainer {
     static let shared = SahhaServiceContainer()
     
-    private let container = DIContainer.shared
+    private let container = DIContainer()
     private var isConfigured = false
     private var cachedSettings: SahhaSettings?
     
     private init() {}
     
-    func configure(with settings: SahhaSettings) async {
+    func configure(with settings: SahhaSettings) async throws {
         guard !isConfigured else {
-            print("Sahha already configured.")
-            return
+            throw SahhaError.alreadyConfigured
         }
         
         // Cache settings for potential reset/rebuild
         cachedSettings = settings
         
         // Register APIService
-        await container.registerSingleton(APIServiceProtocol.self) {
+        await container.register(APIServiceProtocol.self) { _ in
             return APIService(baseURL: settings.environment.baseURL)
         }
         
         // Register AuthenticationService
-        await container.registerSingleton(AuthenticationServiceProtocol.self) { container in
-            let apiService = try await container.resolveAsync(APIServiceProtocol.self)
+        await container.register(AuthenticationServiceProtocol.self) { container in
+            let apiService = try await container.resolve(APIServiceProtocol.self)
             return AuthenticationService(apiService: apiService)
         }
         
         // Register TokenManager
-        await container.registerSingleton(TokenManagerProtocol.self) { container in
-            let tokenStorage = KeychainStorage<AuthenticationResponse>(account: "SahhaToken")
-            let apiService = try await container.resolveAsync(APIServiceProtocol.self)
+        await container.register(TokenManagerProtocol.self) {container in
+            let tokenStorage = KeychainStorage<AuthenticationResponse>(account: "token")
+            let apiService = try await container.resolve(APIServiceProtocol.self)
             return TokenManager(storage: tokenStorage, apiService: apiService)
         }
         
         // Register SecureAPIService
-        await container.registerSingleton(SecureAPIServiceProtocol.self) { container in
-            let tokenManager = try await container.resolveAsync(TokenManagerProtocol.self)
-            let apiService = try await container.resolveAsync(APIServiceProtocol.self)
+        await container.register(SecureAPIServiceProtocol.self) { container in
+            let apiService = try await container.resolve(APIServiceProtocol.self)
+            let tokenManager = try await container.resolve(TokenManagerProtocol.self)
             return SecureAPIService(apiService: apiService, tokenManager: tokenManager)
         }
         
-        // Register DeviceInfoManager
-        await container.registerSingleton(DeviceInfoManagerProtocol.self) {
-            return DeviceInfoManager(userDefaults: .standard, settings: settings)
-        }
-        
         // Register DeviceInfoService
-        await container.registerSingleton(DeviceInfoServiceProtocol.self) { container in
-            let apiService = try await container.resolveAsync(SecureAPIServiceProtocol.self)
-            let deviceInfoManager = try await container.resolveAsync(DeviceInfoManagerProtocol.self)
-            return DeviceInfoService(apiService: apiService, deviceInfoManager: deviceInfoManager)
+        await container.register(DeviceInfoServiceProtocol.self) { container in
+            let apiService = try await container.resolve(SecureAPIServiceProtocol.self)
+            return DeviceInfoService(apiService: apiService)
         }
         
-        // Register LifecycleObserver
-        await container.registerSingleton(LifecycleObserverProtocol.self) { container in
-            let deviceInfoService = try await container.resolveAsync(DeviceInfoServiceProtocol.self)
-            return LifecycleObserver(deviceInfoService: deviceInfoService)
+        // Register DemographicService
+        await container.register(DemographicServiceProtocol.self) { container in
+            let apiService = try await container.resolve(SecureAPIServiceProtocol.self)
+            return DemographicService(apiService: apiService)
         }
         
         // Register BiomarkerService
-        await container.registerSingleton(BiomarkerServiceProtocol.self) { container in
-            let apiService = try await container.resolveAsync(SecureAPIServiceProtocol.self)
+        await container.register(BiomarkerServiceProtocol.self) { container in
+            let apiService = try await container.resolve(SecureAPIServiceProtocol.self)
             return BiomarkerService(apiService: apiService)
         }
         
         // Register ScoreService
-        await container.registerSingleton(ScoreServiceProtocol.self) { container in
-            let apiService = try await container.resolveAsync(SecureAPIServiceProtocol.self)
+        await container.register(ScoreServiceProtocol.self) { container in
+            let apiService = try await container.resolve(SecureAPIServiceProtocol.self)
             return ScoreService(apiService: apiService)
         }
         
-        print("Is LifecycleObserverProtocol registered? \(await container.isRegistered(LifecycleObserverProtocol.self))")
-        print("Is DeviceInfoServiceProtocol registered? \(await container.isRegistered(DeviceInfoServiceProtocol.self))")
-        print("Is SecureAPIServiceProtocol registered? \(await container.isRegistered(SecureAPIServiceProtocol.self))")
-        print("Is DeviceInfoManagerProtocol registered? \(await container.isRegistered(DeviceInfoManagerProtocol.self))")
+        // Register DeviceInfoManager
+        await container.register(DeviceInfoManagerProtocol.self) { container in
+            let deviceInfoService = try await container.resolve(DeviceInfoServiceProtocol.self)
+            return DeviceInfoManager(userDefaults: .standard, settings: settings, deviceInfoService: deviceInfoService)
+        }
+        
+        // Register DemographicManager
+        await container.register(DemographicManagerProtocol.self) { container in
+            let demographicService = try await container.resolve(DemographicServiceProtocol.self)
+            return DemographicManager(userDefaults: .standard, demographicSerivce: demographicService)
+        }
+        
+        // Register LifecycleObserver
+        await container.register(LifecycleObserverProtocol.self) { container in
+            let deviceInfoManager = try await container.resolve(DeviceInfoManagerProtocol.self)
+            return LifecycleObserver(deviceInfoManager: deviceInfoManager)
+        }
         
         // Start lifecycle observer
         do {
             let lifecycleObserver = try await container.resolve(LifecycleObserverProtocol.self)
             await lifecycleObserver.startObserving()
         } catch {
-            print("Failed to resolve LifecycleObserver: \(error)")
+            throw SahhaError.lifecycleObserverResolutionFailed(underlyingError: error)
         }
         
         isConfigured = true
@@ -132,6 +144,16 @@ actor SahhaServiceContainer {
         try await resolveService(TokenManagerProtocol.self)
     }
     
+    func getDeviceInfoManager() async throws -> DeviceInfoManagerProtocol {
+        try await resolveService(DeviceInfoManagerProtocol.self)
+    }
+    
+    func getDemographicManager() async throws -> DemographicManagerProtocol {
+        try await resolveService(DemographicManagerProtocol.self)
+    }
+    
+    // MARK: Helpers
+    
     func getCurrentSettings() -> SahhaSettings? {
         return cachedSettings
     }
@@ -141,20 +163,18 @@ actor SahhaServiceContainer {
     }
     
     func reset() async {
-        await container.reset()
+        await container.dispose()
         isConfigured = false
         cachedSettings = nil
         print("Sahha services reset")
     }
     
-    func rebuild() async {
+    func rebuild() async throws {
         guard let settings = cachedSettings else {
-            print("No cached settings available for rebuild")
-            return
+            throw SahhaError.notConfigured
         }
-        
         await reset()
-        await configure(with: settings)
+        try await configure(with: settings)
         print("Sahha services rebuilt from cached settings")
     }
 }
