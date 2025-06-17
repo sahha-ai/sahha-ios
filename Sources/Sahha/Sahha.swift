@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 public final class Sahha {
     private static let container = SahhaServiceContainer.shared
@@ -24,14 +25,40 @@ public final class Sahha {
             do {
                 let authService = try await container.getAuthenticationService()
                 let tokenManager = try await container.getTokenManager()
+                let deviceInfoManager = try await container.getDeviceInfoManager()
+                
                 let response = try await authService.authenticate(appId: appId, appSecret: appSecret, externalId: externalId)
                 try await tokenManager.save(response)
+                try await deviceInfoManager.sync()
+                
                 callback(nil, true)
             } catch {
                 print("Authentication error: \(error)")
                 callback(error.localizedDescription, false)
             }
         }
+    }
+    
+    public static func authenticate(profileToken: String, refreshToken: String, callback: @escaping @Sendable (String?, Bool) -> Void) {
+        Task {
+            do {
+                let tokenManager = try await container.getTokenManager()
+                let deviceInfoManager = try await container.getDeviceInfoManager()
+                
+                let response = AuthenticationResponse(profileToken: profileToken, refreshToken: refreshToken)
+                try await tokenManager.save(response)
+                try await deviceInfoManager.sync()
+                
+                callback(nil, true)
+            } catch {
+                print("Authentication error: \(error)")
+                callback(error.localizedDescription, false)
+            }
+        }
+    }
+    
+    public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
+        fatalError("Not yet implemented")
     }
     
     // MARK: Scores
@@ -62,5 +89,18 @@ public final class Sahha {
                 callback(error.localizedDescription, nil)
             }
         }
+    }
+    
+    // MARK: Settings
+    
+    @MainActor
+    public static func openAppSettings() {
+        guard let settingsURL = URL(string: UIApplication.openSettingsURLString),
+              UIApplication.shared.canOpenURL(settingsURL) else {
+            print("Sahha SDK: Invalid or unsupported settings URL.")
+            return
+        }
+        
+        UIApplication.shared.open(settingsURL)
     }
 }
