@@ -1,12 +1,12 @@
 import HealthKit
 
-protocol HealthKitAnchorStorageProtocol {
+protocol HKAnchorStorageProtocol {
     func getAnchor(for type: HKSampleType) -> HKQueryAnchor?
     func setAnchor(_ anchor: HKQueryAnchor, for type: HKSampleType)
     func deleteAnchors()
 }
 
-struct HealthKitAnchorStorage: HealthKitAnchorStorageProtocol {
+struct HKAnchorStorage: HKAnchorStorageProtocol {
     private let storage: any UserDefaultsStorageProtocol<[String: Data]>
     
     init(storage: any UserDefaultsStorageProtocol<[String: Data]>) {

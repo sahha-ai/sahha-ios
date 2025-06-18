@@ -51,7 +51,7 @@ public final class Sahha {
                 
                 callback(nil, true)
             } catch {
-                print("Authentication error: \(error)")
+                print("Authentication error: \(error.localizedDescription)")
                 callback(error.localizedDescription, false)
             }
         }
@@ -59,6 +59,19 @@ public final class Sahha {
     
     public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
         fatalError("Not yet implemented")
+    }
+    
+    // MARK: Sensors
+    
+    public static func enableSensors(_ sensors: Set<SahhaSensor>, callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void) {
+        Task {
+            do {
+                let sensorManager = try await container.getSensorManager()
+                try await sensorManager.enableSensors(sensors)
+            } catch {
+                print("Error enabling sensors: \(error.localizedDescription)")
+            }
+        }
     }
     
     // MARK: Scores

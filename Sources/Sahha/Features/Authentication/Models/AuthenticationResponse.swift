@@ -1,6 +1,6 @@
 struct AuthenticationResponse: Codable {
     let profileToken: String
     let refreshToken: String
-    let expiresIn: Int = 0
-    let tokenType: String = "Profile"
+    var expiresIn: Int = 0
+    var tokenType: String = "Profile"
 }

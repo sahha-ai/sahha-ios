@@ -1,6 +1,6 @@
 import HealthKit
 
-protocol HealthKitManagerProtocol: Actor, DisposableAsync {
+protocol HKManagerProtocol: Actor, DisposableAsync {
     func requestPermissions(for types: Set<HKObjectType>) async throws
     func getAuthorizationStatus(for type: HKObjectType) async -> HKAuthorizationStatus
     func getPermissionStatus(for types: Set<HKObjectType>) async throws -> HKAuthorizationRequestStatus
@@ -10,14 +10,17 @@ protocol HealthKitManagerProtocol: Actor, DisposableAsync {
     func stopObserverQuery(for type: HKSampleType) async
 }
 
-actor HealthKitManager: HealthKitManagerProtocol {
-    private let anchorStorage: HealthKitAnchorStorageProtocol
+actor HKManager: HKManagerProtocol {
+    private let anchorStorage: HKAnchorStorageProtocol
     private let healthStore: HKHealthStore
+    private let normaliser: HKNormaliserManagerProtocol
+    
     private var observerQueries: [HKSampleType: HKObserverQuery] = [:]
     
-    init(anchorStorage: HealthKitAnchorStorageProtocol, healthStore: HKHealthStore = HKHealthStore()) {
+    init(anchorStorage: HKAnchorStorageProtocol, healthStore: HKHealthStore = HKHealthStore(), normaliser: HKNormaliserManagerProtocol) {
         self.anchorStorage = anchorStorage
         self.healthStore = healthStore
+        self.normaliser = normaliser
     }
     
     func requestPermissions(for types: Set<HKObjectType>) async throws {
@@ -75,15 +78,15 @@ actor HealthKitManager: HealthKitManagerProtocol {
     
     private func runAnchorQuery(for type: HKSampleType) async {
         var currentAnchor = anchorStorage.getAnchor(for: type)
-        var shouldContinue = false
+        var shouldContinue = true
         
-        repeat {
+        while shouldContinue {
             let (samples, newAnchor): ([HKSample], HKQueryAnchor?) = await withCheckedContinuation { continuation in
                 let query = HKAnchoredObjectQuery(
                     type: type,
                     predicate: nil,
                     anchor: currentAnchor,
-                    limit: 500
+                    limit: 5 // TODO: CHANGE LIMIT AFTER TESTING
                 ) { _, samplesOrNil, _, newAnchor, error in
                     if let error = error {
                         print("Anchor query failed: \(error)")
@@ -97,11 +100,14 @@ actor HealthKitManager: HealthKitManagerProtocol {
                 healthStore.execute(query)
             }
             
-            // TODO: Normalize samples to DataLog
-            // TODO: Ingest DataLogs into DataLogManager
-            // TODO: Repeat n times until ingestion succeeds for fails
-            // TODO: Save anchor on successful ingestion
-        } while shouldContinue
+            let normalised = await samples.concurrentFlatMap { sample in
+                await self.normaliser.normalise(sample: sample)
+            }
+            
+            for log in normalised { print(log) }
+            
+            shouldContinue = false;
+        }
     }
 }
 

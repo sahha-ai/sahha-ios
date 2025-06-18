@@ -7,11 +7,11 @@ protocol SensorManagerProtocol: Actor, DisposableAsync {
 
 actor SensorManager: SensorManagerProtocol {
     private let storage: any UserDefaultsStorageProtocol<Set<SahhaSensor>>
-    private let healthKitManager: HealthKitManagerProtocol
+    private let healthKitManager: HKManagerProtocol
     
     private var cachedSensors: Set<SahhaSensor> = []
     
-    init(storage: any UserDefaultsStorageProtocol<Set<SahhaSensor>>, healthKitManager: HealthKitManagerProtocol) {
+    init(storage: any UserDefaultsStorageProtocol<Set<SahhaSensor>>, healthKitManager: HKManagerProtocol) {
         self.storage = storage
         self.healthKitManager = healthKitManager
         self.cachedSensors = storage.get() ?? []
@@ -42,6 +42,7 @@ actor SensorManager: SensorManagerProtocol {
         return .pending
     }
     
-    // TODO
-    func dispose() async {}
+    func dispose() async {
+        storage.delete()
+    }
 }

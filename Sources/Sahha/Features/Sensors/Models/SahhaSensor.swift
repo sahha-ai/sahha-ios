@@ -1,4 +1,4 @@
-public enum SahhaSensor: String, CaseIterable, Sendable {
+public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case gender
     case date_of_birth
     case sleep

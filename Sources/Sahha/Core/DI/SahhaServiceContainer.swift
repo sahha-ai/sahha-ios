@@ -1,4 +1,5 @@
 import Foundation
+import HealthKit
 
 enum SahhaError: Error, LocalizedError {
     case notConfigured
@@ -101,6 +102,23 @@ actor SahhaServiceContainer {
             return LifecycleObserver(deviceInfoManager: deviceInfoManager)
         }
         
+        // Register HKManager
+        await container.register(HKManagerProtocol.self) { container in
+            let anchorStorage = HKAnchorStorage(storage: UserDefaultsStorage<[String : Data]>(key: "anchors"))
+            let normaliser = HKNormaliserManager(normalisers: [
+                HKQuantityType(.stepCount): HKStepCountNormaliser(),
+                HKQuantityType(.heartRate): HKHeartRateNormaliser(),
+            ])
+            return HKManager(anchorStorage: anchorStorage, normaliser: normaliser)
+        }
+        
+        // Register SensorManager
+        await container.register(SensorManagerProtocol.self) { container in
+            let storage = UserDefaultsStorage<Set<SahhaSensor>>(key: "sensors")
+            let healthKitManager = try await container.resolve(HKManagerProtocol.self)
+            return SensorManager(storage: storage, healthKitManager: healthKitManager)
+        }
+        
         // Start lifecycle observer
         do {
             let lifecycleObserver = try await container.resolve(LifecycleObserverProtocol.self)
@@ -150,6 +168,14 @@ actor SahhaServiceContainer {
     
     func getDemographicManager() async throws -> DemographicManagerProtocol {
         try await resolveService(DemographicManagerProtocol.self)
+    }
+    
+    func getHealthKitManager() async throws -> HKManagerProtocol {
+        try await resolveService(HKManagerProtocol.self)
+    }
+    
+    func getSensorManager() async throws -> SensorManagerProtocol {
+        try await resolveService(SensorManagerProtocol.self)
     }
     
     // MARK: Helpers
