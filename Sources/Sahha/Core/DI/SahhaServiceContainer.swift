@@ -102,14 +102,22 @@ actor SahhaServiceContainer {
             return LifecycleObserver(deviceInfoManager: deviceInfoManager)
         }
         
+        // Register DataLogPipeline
+        await container.register((any DataLogProcessorProtocol).self) { container in
+            return DataLogProcessor()
+        }
+        
         // Register HKManager
         await container.register(HKManagerProtocol.self) { container in
-            let anchorStorage = HKAnchorStorage(storage: UserDefaultsStorage<[String : Data]>(key: "anchors"))
-            let normaliser = HKNormaliserManager(normalisers: [
+            let anchorStorage = HKAnchorStorage()
+            let processor = try await container.resolve((any DataLogProcessorProtocol).self)
+            
+            let normalisers: [HKSampleType: any HKNormaliser] = [
                 HKQuantityType(.stepCount): HKStepCountNormaliser(),
-                HKQuantityType(.heartRate): HKHeartRateNormaliser(),
-            ])
-            return HKManager(anchorStorage: anchorStorage, normaliser: normaliser)
+                HKQuantityType(.heartRate): HKHeartRateNormaliser()
+            ]
+            
+            return HKManager(anchorStorage: anchorStorage, normalisers: normalisers, processor: processor)
         }
         
         // Register SensorManager

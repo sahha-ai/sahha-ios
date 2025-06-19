@@ -7,29 +7,30 @@ protocol HKAnchorStorageProtocol {
 }
 
 struct HKAnchorStorage: HKAnchorStorageProtocol {
-    private let storage: any UserDefaultsStorageProtocol<[String: Data]>
-    
-    init(storage: any UserDefaultsStorageProtocol<[String: Data]>) {
-        self.storage = storage
+    private let userDefaults: UserDefaults
+
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
     }
-    
+
     func getAnchor(for type: HKSampleType) -> HKQueryAnchor? {
-        guard let data = storage.get()?[type.identifier],
+        let key = "anchor_\(type.identifier)"
+        guard let data = userDefaults.data(forKey: key),
               let anchor = try? NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: data) else {
             return nil
         }
         return anchor
     }
-    
+
     func setAnchor(_ anchor: HKQueryAnchor, for type: HKSampleType) {
-        var anchors = storage.get() ?? [:]
+        let key = "anchor_\(type.identifier)"
         if let data = try? NSKeyedArchiver.archivedData(withRootObject: anchor, requiringSecureCoding: true) {
-            anchors[type.identifier] = data
+            userDefaults.set(data, forKey: key)
         }
-        storage.set(anchors)
     }
-    
+
     func deleteAnchors() {
-        storage.delete()
+        let allKeys = userDefaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("anchor_") }
+        allKeys.forEach { userDefaults.removeObject(forKey: $0) }
     }
 }
