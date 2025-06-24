@@ -1,9 +1,9 @@
 import Foundation
 
-struct RefreshTokenEndpoint: APIEndpoint {
-    let request: RefreshTokenRequest
+struct PostDataLogsEndpoint: APIEndpoint {
+    let request: [DataLogRequest]?
     
-    var path: String { "v1/oauth/profile/refreshToken" }
+    var path: String { "v1/profile/data/log" }
     var method: HTTPMethod { .POST }
     var queryParameters: [URLQueryItem]? { nil }
     var headers: [String : String]? { nil }

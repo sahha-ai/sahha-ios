@@ -12,7 +12,7 @@ enum DIError: Error, LocalizedError {
     case serviceNotRegistered(type: Any.Type)
     case serviceCreationFailed(type: Any.Type, underlyingError: Error)
     case typeMismatch(expected: Any.Type, actual: any Sendable)
-    
+
     var errorDescription: String? {
         switch self {
         case .serviceNotRegistered(let type):
@@ -29,7 +29,7 @@ actor DIContainer {
     private var factories: [ObjectIdentifier: (DIContainer) async throws -> any Sendable] = [:]
     private var instances: [ObjectIdentifier: Any] = [:]
     private var registrationOrder: [ObjectIdentifier] = []
-    
+
     func register<T: Sendable>(_ type: T.Type, factory: @escaping (DIContainer) async throws -> T) {
         let key = ObjectIdentifier(type)
         if factories[key] == nil {
@@ -39,7 +39,7 @@ actor DIContainer {
             try await factory(container)
         }
     }
-    
+
     func resolve<T: Sendable>(_ type: T.Type) async throws -> T {
         let key = ObjectIdentifier(type)
         if let instance = instances[key] as? T {
@@ -59,7 +59,7 @@ actor DIContainer {
             throw DIError.serviceNotRegistered(type: T.self)
         }
     }
-    
+
     func dispose() async {
         for key in registrationOrder.reversed() {
             if let instance = instances[key] as? Disposable {

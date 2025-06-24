@@ -2,7 +2,6 @@ import HealthKit
 
 protocol HKManagerProtocol: Actor, DisposableAsync {
     func requestPermissions(for types: Set<HKObjectType>) async throws
-//    func getAuthorizationStatus(for type: HKObjectType) async -> HKAuthorizationStatus // For potential future use?
     func getPermissionStatus(for types: Set<HKObjectType>) async throws -> HKAuthorizationRequestStatus
     func enableBackgroundDelivery(for type: HKObjectType) async throws
     func disableBackgroundDelivery(for type: HKObjectType) async throws
@@ -14,16 +13,16 @@ actor HKManager: HKManagerProtocol {
     private let anchorStorage: HKAnchorStorageProtocol
     private let healthStore: HKHealthStore
     private let normalisers: [HKSampleType: any HKNormaliser]
-    private let processor: any DataLogProcessorProtocol
+    private let processor: DataLogProcessorProtocol
     
     private var observerQueries: [HKSampleType: HKObserverQuery] = [:] // Track running observers
     private var anchorQueryTasks: [HKSampleType: Task<Void, Never>] = [:] // Track running tasks
     
     init(
-        anchorStorage: HKAnchorStorageProtocol,
+        anchorStorage: HKAnchorStorageProtocol = HKAnchorStorage(),
         healthStore: HKHealthStore = HKHealthStore(),
         normalisers: [HKSampleType:  any HKNormaliser],
-        processor: any DataLogProcessorProtocol
+        processor: DataLogProcessorProtocol
     ) {
         self.anchorStorage = anchorStorage
         self.healthStore = healthStore
@@ -34,11 +33,6 @@ actor HKManager: HKManagerProtocol {
     func requestPermissions(for types: Set<HKObjectType>) async throws {
         try await healthStore.requestAuthorization(toShare: [], read: types)
     }
-    
-    // For potential future use?
-//    func getAuthorizationStatus(for type: HKObjectType) -> HKAuthorizationStatus {
-//        return healthStore.authorizationStatus(for: type)
-//    }
     
     func getPermissionStatus(for types: Set<HKObjectType>) async throws -> HKAuthorizationRequestStatus {
         try await healthStore.statusForAuthorizationRequest(toShare: [], read: types)
@@ -105,6 +99,9 @@ actor HKManager: HKManagerProtocol {
         
         // Delete anchors
         anchorStorage.deleteAnchors()
+        
+        // Dispose of the processor
+        await processor.dispose()
     }
     
     private func runAnchorQuery(for type: HKSampleType) async {
@@ -120,7 +117,7 @@ actor HKManager: HKManagerProtocol {
                     type: type,
                     predicate: nil,
                     anchor: currentAnchor,
-                    limit: 5 // TODO: CHANGE LIMIT AFTER TESTING
+                    limit: 50
                 ) { _, samplesOrNil, _, newAnchor, error in
                     if let error = error {
                         print("Anchor query failed: \(error)")
@@ -148,7 +145,7 @@ actor HKManager: HKManagerProtocol {
             }
             
             // Wait for the processor to accept data, with up to 3 retries
-            if await waitForProcessorToAcceptData(maxRetries: 3, delay: 1.0) {
+            if await waitForProcessorToAcceptData() {
                 do {
                     // Process the normalized data
                     try await processor.processData(normalised)
@@ -168,17 +165,17 @@ actor HKManager: HKManagerProtocol {
         }
     }
     
-    private func waitForProcessorToAcceptData(maxRetries: Int, delay: TimeInterval) async -> Bool {
-        var attempts = 0
-        while attempts < maxRetries {
+    private func waitForProcessorToAcceptData() async -> Bool {
+        let delays: [TimeInterval] = [2.0, 5.0, 10.0]
+        for attempt in 0..<delays.count {
             if await processor.isAcceptingData() {
                 return true
             }
-            // Wait for the specified delay before the next attempt
+            let delayIndex = min(attempt, delays.count - 1)
+            let delay = delays[delayIndex]
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            attempts += 1
         }
-        return await processor.isAcceptingData() // Final check after retries
+        return await processor.isAcceptingData()
     }
 }
 

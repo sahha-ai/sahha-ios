@@ -28,7 +28,7 @@ actor DemographicManager: DemographicManagerProtocol {
     
     private let hashKey = "SahhaDemographicHash"
     
-    init(userDefaults: UserDefaults, demographicSerivce: DemographicServiceProtocol) {
+    init(userDefaults: UserDefaults = .standard, demographicSerivce: DemographicServiceProtocol) {
         self.userDefaults = userDefaults
         self.demographicService = demographicSerivce
     }

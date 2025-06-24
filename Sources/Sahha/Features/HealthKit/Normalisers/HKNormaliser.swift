@@ -1,6 +1,7 @@
 import HealthKit
 
-protocol HKNormaliser: Normaliser where Input == HKSample, Output == [any DataLogType] {
+protocol HKNormaliser: Sendable {
+    func normalise(_ sample: HKSample) async -> [any DataLogType]
     func extractCommonData(from sample: HKSample) async -> (source: String, deviceType: String, startDate: Date, endDate: Date, recordingMethod: DataLogRecordingMethod)
 }
 

@@ -58,7 +58,16 @@ public final class Sahha {
     }
     
     public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
-        fatalError("Not yet implemented")
+        Task {
+            do {
+                await container.reset()
+                try await container.rebuild()
+                callback(nil, true)
+            } catch {
+                print("Error deauthenticating: \(error.localizedDescription)")
+                callback(error.localizedDescription, false)
+            }
+        }
     }
     
     // MARK: Sensors

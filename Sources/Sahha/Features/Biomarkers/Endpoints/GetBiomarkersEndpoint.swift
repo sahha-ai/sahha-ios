@@ -1,6 +1,6 @@
 import Foundation
 
-struct GetBiomarkersEndpoint: ApiEndpoint {
+struct GetBiomarkersEndpoint: APIEndpoint {
     let categories: Set<String>
     let types: Set<String>
     let startDateTime: Date
@@ -9,19 +9,19 @@ struct GetBiomarkersEndpoint: ApiEndpoint {
     var path: String { "v2/biomarker" }
     var method: HTTPMethod { .GET }
 
-    var queryItems: [URLQueryItem]? {
-        var items = [URLQueryItem]()
+    var queryParameters: [URLQueryItem]? {
+        var params = [URLQueryItem]()
         
         categories.forEach { category in
-            items.append(URLQueryItem(name: "categories", value: category))
+            params.append(URLQueryItem(name: "categories", value: category))
         }
         types.forEach { type in
-            items.append(URLQueryItem(name: "types", value: type))
+            params.append(URLQueryItem(name: "types", value: type))
         }
-        items.append(URLQueryItem(name: "startDateTime", value: startDateTime.isoDate))
-        items.append(URLQueryItem(name: "endDateTime", value: endDateTime.isoDate))
+        params.append(URLQueryItem(name: "startDateTime", value: startDateTime.isoDate))
+        params.append(URLQueryItem(name: "endDateTime", value: endDateTime.isoDate))
         
-        return items
+        return params
     }
 
     var headers: [String : String]? { nil }

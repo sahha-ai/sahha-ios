@@ -11,20 +11,20 @@ actor SecureAPIService: SecureAPIServiceProtocol {
         self.tokenManager = tokenManager
     }
     
-    func send(_ endpoint: ApiEndpoint) async throws {
+    func send(_ endpoint: APIEndpoint) async throws {
         let modifiedEndpoint = try await endpointWithAuthHeader(endpoint)
         try await apiService.send(modifiedEndpoint)
     }
     
-    func send<T: Decodable & Sendable>(_ endpoint: ApiEndpoint, as type: T.Type) async throws -> T {
+    func send<T: Decodable & Sendable>(_ endpoint: APIEndpoint, as type: T.Type) async throws -> T {
         let modifiedEndpoint = try await endpointWithAuthHeader(endpoint)
         return try await apiService.send(modifiedEndpoint, as: type)
     }
     
-    private func endpointWithAuthHeader(_ endpoint: ApiEndpoint) async throws -> ApiEndpoint {
+    private func endpointWithAuthHeader(_ endpoint: APIEndpoint) async throws -> APIEndpoint {
         guard let token = try await tokenManager.ensureValidToken() else {
             throw APIError.unauthorized
         }
-        return endpoint.withHeaders(["Authorization": "Profile \(token)"])
+        return endpoint.addHeaders(["Authorization": "Profile \(token)"])
     }
 }

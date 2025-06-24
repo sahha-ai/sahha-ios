@@ -59,4 +59,8 @@ extension Date {
     var timestampMillis: String {
         DateFormatter.hhmmssMillis.string(from: self)
     }
+    
+    var unixTimestamp: Int64 {
+        Int64(timeIntervalSince1970 * 1000)
+    }
 }

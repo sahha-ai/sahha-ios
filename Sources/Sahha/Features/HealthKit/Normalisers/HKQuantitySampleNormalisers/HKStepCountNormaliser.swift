@@ -8,12 +8,12 @@ final class HKStepCountNormaliser: HKNormaliser {
         }
         
         let commonData = await extractCommonData(from: sample)
-        let steps = quantitySample.quantity.doubleValue(for: .count())
+        let value = quantitySample.quantity.doubleValue(for: .count())
         
         return [DataLog(
             parentId: nil,
             dataType: "steps",
-            value: steps,
+            value: value,
             source: commonData.source,
             recordingMethod: commonData.recordingMethod,
             deviceType: commonData.deviceType,

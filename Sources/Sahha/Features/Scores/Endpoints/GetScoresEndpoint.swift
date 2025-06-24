@@ -1,6 +1,6 @@
 import Foundation
 
-struct GetScoresEndpoint: ApiEndpoint {
+struct GetScoresEndpoint: APIEndpoint {
     let types: Set<String>
     let startDateTime: Date
     let endDateTime: Date
@@ -8,16 +8,16 @@ struct GetScoresEndpoint: ApiEndpoint {
     var path: String { "v2/score" }
     var method: HTTPMethod { .GET }
     
-    var queryItems: [URLQueryItem]? {
-        var items = [URLQueryItem]()
+    var queryParameters: [URLQueryItem]? {
+        var params = [URLQueryItem]()
         
         types.forEach { type in
-            items.append(URLQueryItem(name: "types", value: type))
+            params.append(URLQueryItem(name: "types", value: type))
         }
-        items.append(URLQueryItem(name: "startDateTime", value: startDateTime.isoDate))
-        items.append(URLQueryItem(name: "endDateTime", value: endDateTime.isoDate))
+        params.append(URLQueryItem(name: "startDateTime", value: startDateTime.isoDate))
+        params.append(URLQueryItem(name: "endDateTime", value: endDateTime.isoDate))
         
-        return items
+        return params
     }
     
     var headers: [String : String]? { nil }

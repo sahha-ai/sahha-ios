@@ -11,15 +11,3 @@ struct DataLog: DataLogType {
     var endDate: Date
     var additionalProperties: String?
 }
-
-extension DataLog {
-    var id: UUID {
-        UUIDFactory.v5(from: [
-            dataType,
-            source,
-            deviceType,
-            startDate.isoDateTime,
-            endDate.isoDateTime
-        ])
-    }
-}

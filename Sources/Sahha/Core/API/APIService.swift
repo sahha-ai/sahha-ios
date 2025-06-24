@@ -1,8 +1,8 @@
 import Foundation
 
 protocol APIServiceProtocol: Actor {
-    func send(_ endpoint: ApiEndpoint) async throws
-    func send<T: Decodable>(_ endpoint: ApiEndpoint, as: T.Type) async throws -> T
+    func send(_ endpoint: APIEndpoint) async throws
+    func send<T: Decodable>(_ endpoint: APIEndpoint, as: T.Type) async throws -> T
 }
 
 enum APIError: Error, LocalizedError {
@@ -61,24 +61,24 @@ actor APIService: APIServiceProtocol {
         self.decoder = decoder
     }
     
-    func send(_ endpoint: any ApiEndpoint) async throws {
+    func send(_ endpoint: any APIEndpoint) async throws {
         let request = try await buildRequest(endpoint)
-        let response = try await performRequest(request, decodeTo: EmptyResponse.self)
+        let _ = try await performRequest(request, decodeTo: EmptyResponse.self)
     }
     
-    func send<T: Decodable>(_ endpoint: any ApiEndpoint, as type: T.Type) async throws -> T {
+    func send<T: Decodable>(_ endpoint: any APIEndpoint, as type: T.Type) async throws -> T {
         let request = try await buildRequest(endpoint)
         return try await performRequest(request, decodeTo: type)
     }
     
-    private func buildRequest(_ endpoint: any ApiEndpoint) async throws -> URLRequest {
+    private func buildRequest(_ endpoint: any APIEndpoint) async throws -> URLRequest {
         do {
             let fullURLString = baseURL + "/" + endpoint.path
             guard var components = URLComponents(string: fullURLString) else {
                 throw APIError.invalidURL(url: fullURLString)
             }
             
-            components.queryItems = endpoint.queryItems
+            components.queryItems = endpoint.queryParameters
             guard let url = components.url else {
                 throw APIError.invalidURL(url: fullURLString)
             }
