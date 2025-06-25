@@ -1,0 +1,72 @@
+import Foundation
+
+final actor DemographicManager: DemographicManagerProtocol {
+    private let userDefaults: UserDefaults
+    private let demographicService: DemographicServiceProtocol
+    private let cacheTTL: TimeInterval
+
+    private let lastFetchKey = Constants.UserDefaultsKeys.demographiclastFetch
+    private let hashKey = Constants.UserDefaultsKeys.demographicHash
+
+    private var cachedDemographic: SahhaDemographic?
+    private var cachedHash: String?
+    private var lastFetchTimestamp: Date?
+
+    init(
+        userDefaults: UserDefaults = .standard,
+        cacheTTL: TimeInterval = .minutes(15),
+        demographicService: DemographicServiceProtocol
+    ) {
+        self.userDefaults = userDefaults
+        self.cacheTTL = cacheTTL
+        self.demographicService = demographicService
+        self.cachedHash = userDefaults.string(forKey: hashKey)
+        self.lastFetchTimestamp = userDefaults.object(forKey: lastFetchKey) as? Date
+    }
+
+    func getDemographic() async throws -> SahhaDemographic {
+        if let cached = cachedDemographic, !isCacheStale() {
+            return cached
+        }
+        let demographic = try await demographicService.getDemographic()
+        updateCache(demographic: demographic)
+        return demographic
+    }
+
+    private func shouldUpdateDemographic(_ demographic: SahhaDemographic) -> Bool {
+        do {
+            let hash = try demographic.sha256Hash()
+            return hash != cachedHash
+        } catch {
+            print("Failed to hash demographic: \(error.localizedDescription)")
+            return true
+        }
+    }
+
+    func updateDemographic(_ demographic: SahhaDemographic) async throws {
+        guard shouldUpdateDemographic(demographic) else {
+            return
+        }
+        try await demographicService.updateDemographic(demographic)
+        updateCache(demographic: demographic)
+    }
+
+    private func isCacheStale() -> Bool {
+        guard let lastFetchTimestamp = lastFetchTimestamp else {
+            return true
+        }
+        return Date().timeIntervalSince(lastFetchTimestamp) >= cacheTTL
+    }
+
+    private func updateCache(demographic: SahhaDemographic) {
+        cachedDemographic = demographic
+        do {
+            cachedHash = try demographic.sha256Hash()
+            userDefaults.set(cachedHash, forKey: hashKey)
+        } catch {
+            print("Failed to hash demographic: \(error.localizedDescription)")
+        }
+        lastFetchTimestamp = Date()
+        userDefaults.set(lastFetchTimestamp, forKey: lastFetchKey)
+    }
+}

@@ -50,4 +50,5 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case activity_summary
     case device_lock
     case exercise
+    case energy_consumed
 }

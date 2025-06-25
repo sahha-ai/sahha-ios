@@ -1,25 +1,27 @@
+import Foundation
 import HealthKit
 
-final class HKHeartRateNormaliser: HKNormaliser {
-    func normalise(_ sample: HKSample) async -> [any DataLogType] {
+struct HKHeartRateNormaliser: HKNormaliser {
+    func normalise(sample: HKSample) -> [DataLog]? {
         guard let quantitySample = sample as? HKQuantitySample,
-              quantitySample.quantityType == HKQuantityType(.heartRate) else {
-            return []
+            quantitySample.quantityType == HKQuantityType.quantityType(forIdentifier: .heartRate)
+        else {
+            return nil
         }
-        
-        let commonData = await extractCommonData(from: sample)
-        let value = quantitySample.quantity.doubleValue(for: .count().unitDivided(by: .minute()))
-        
-        return [DataLog(
+        let value = quantitySample.quantity.doubleValue(for: HKUnit(from: "count/min"))
+        let log = DataLog(
             parentId: nil,
-            dataType: "heart_rate",
+            logType: quantitySample.logType,
+            dataType: quantitySample.dataType,
             value: value,
-            source: commonData.source,
-            recordingMethod: commonData.recordingMethod,
-            deviceType: commonData.deviceType,
-            startDate: commonData.startDate,
-            endDate: commonData.endDate,
+            unit: "bpm",
+            source: quantitySample.sourceId,
+            recordingMethod: quantitySample.recordingMethod,
+            deviceType: quantitySample.deviceType,
+            startDate: quantitySample.startDate,
+            endDate: quantitySample.endDate,
             additionalProperties: nil
-        )]
+        )
+        return [log]
     }
 }
