@@ -1,9 +1,7 @@
 import Foundation
 
 extension Array where Element: Sendable {
-    func concurrentMap<T: Sendable>(
-          _ transform: @Sendable @escaping (Element) async -> T?
-      ) async -> [T] {
+    func concurrentMap<T: Sendable>(_ transform: @Sendable @escaping (Element) async -> T?) async -> [T] {
           await withTaskGroup(of: T?.self) { group in
               for element in self {
                   group.addTask { await transform(element) }
@@ -19,9 +17,7 @@ extension Array where Element: Sendable {
           }
       }
     
-    func concurrentFlatMap<T: Sendable>(
-           _ transform: @Sendable @escaping (Element) async -> [T]?
-       ) async -> [T] {
+    func concurrentFlatMap<T: Sendable>(_ transform: @Sendable @escaping (Element) async -> [T]?) async -> [T] {
            await withTaskGroup(of: [T]?.self) { group in
                for element in self {
                    group.addTask { await transform(element) }
@@ -36,4 +32,17 @@ extension Array where Element: Sendable {
                return Array<T>(results)
            }
        }
+}
+
+extension Array where Element: Encodable {
+    private struct DataWrapper: Encodable {
+        let data: [Element]
+    }
+    
+    func toDataWrappedJSON() throws -> String {
+        let wrapper = DataWrapper(data: self)
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(wrapper)
+        return String(data: jsonData, encoding: .utf8)!
+    }
 }

@@ -1,15 +1,15 @@
 import Foundation
 import HealthKit
 
-struct HKHeartRateNormaliser: HKNormaliser {
+struct HKStepCountNormaliser: HKNormaliser {
     func normalise(sample: HKSample) -> [DataLog]? {
-        let type = HKQuantityType.quantityType(forIdentifier: .heartRate)
+        let type = HKQuantityType.quantityType(forIdentifier: .stepCount)
         
         guard let quantitySample = sample as? HKQuantitySample, quantitySample.quantityType == type else {
             return nil
         }
 
-        let value = quantitySample.quantity.doubleValue(for: HKUnit(from: "count/min")).rounded(toPlaces: 4)
+        let value = quantitySample.quantity.doubleValue(for: .count()).rounded()
 
         return [
             .init(
@@ -17,7 +17,7 @@ struct HKHeartRateNormaliser: HKNormaliser {
                 logType: quantitySample.logType,
                 dataType: quantitySample.dataType,
                 value: value,
-                unit: "bpm",
+                unit: "count",
                 source: quantitySample.sourceId,
                 recordingMethod: quantitySample.recordingMethod,
                 deviceType: quantitySample.deviceType,

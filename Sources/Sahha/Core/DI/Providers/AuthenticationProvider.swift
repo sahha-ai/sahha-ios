@@ -1,5 +1,5 @@
 struct AuthenticationProvider: ServiceProvider {
-    public func registerServices(in container: DIContainer) async {
+    func registerServices(in container: DIContainer) async {
         await container.registerSingleton(AuthenticationServiceProtocol.self) { container in
             let apiService = try await container.resolve(APIServiceProtocol.self)
             return AuthenticationService(apiService: apiService)

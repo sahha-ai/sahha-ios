@@ -1,3 +1,5 @@
+import HealthKit
+
 final actor HKManager: HKManagerProtocol {
     private let permissionManager: HKPermissionManagerProtocol
     private let queryManager: HKQueryManagerProtocol

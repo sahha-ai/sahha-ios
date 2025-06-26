@@ -52,6 +52,55 @@ public final class Sahha {
             }
         }
     }
+    
+    public static func authenticate(profileToken: String, refreshToken: String, callback: @escaping @Sendable (String?, Bool) -> Void) {
+        Task {
+            do {
+                let tokenManager = try await container.getTokenManager()
+                let tokenResponse = TokenResponse(profileToken: profileToken, refreshToken: refreshToken)
+                try await tokenManager.saveToken(tokenResponse)
+                callback(nil, true)
+            } catch {
+                print("Failed to authenticate: \(error.localizedDescription)")
+                callback(error.localizedDescription, false)
+            }
+        }
+    }
+    
+    // TODO: Add disposables where needed and reset container on deauthenticate
+    public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
+        Task {
+            fatalError("Not implemented")
+        }
+    }
+    
+    // MARK: Demographic
+    
+    public static func getDemographic(callback: @escaping @Sendable (String?, SahhaDemographic?) -> Void) {
+        Task {
+            do {
+                let demographicManager = try await container.getDemographicManager()
+                let demographic = try await demographicManager.getDemographic()
+                callback(nil, demographic)
+            } catch {
+                print("Failed to get demographic: \(error.localizedDescription)")
+                callback(error.localizedDescription, nil)
+            }
+        }
+    }
+    
+    public static func postDemographic(_ demographic: SahhaDemographic, callback: @escaping @Sendable (String?, Bool) -> Void) {
+        Task {
+            do {
+                let demographicService = try await container.getDemographicService()
+                try await demographicService.updateDemographic(demographic)
+                callback(nil, true)
+            } catch {
+                print("Failed to get demographic: \(error.localizedDescription)")
+                callback(error.localizedDescription, false)
+            }
+        }
+    }
 
     // MARK: Sensors
 
@@ -67,6 +116,24 @@ public final class Sahha {
             }
         }
     }
+    
+    // MARK: Samples
+    
+    // TODO: Create SahhaSample struct and get samples directly from hkManager
+    public static func getSamples(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [String])->Void) {
+        Task {
+            fatalError("Not implemented")
+        }
+    }
+    
+    // MARK: Stats
+    
+    // TODO: Create SahhaStat struct and get stats directly from hkManager
+    public static func getStats(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [String])->Void) {
+        Task {
+            fatalError("Not implemented")
+        }
+    }
 
     // MARK: Scores
 
@@ -80,7 +147,8 @@ public final class Sahha {
             do {
                 let scoreService = try await container.getScoreService()
                 let scores = try await scoreService.getScores(types: types, startDateTime: startDateTime, endDateTime: endDateTime)
-                callback(nil, "") // TODO: Return json string {data: [...]}
+                let scoreJson = try scores.toDataWrappedJSON()
+                callback(nil, scoreJson)
             } catch {
                 print("Error getting scores: \(error.localizedDescription)")
                 callback(error.localizedDescription, nil)
@@ -100,8 +168,14 @@ public final class Sahha {
         Task {
             do {
                 let biomarkerService = try await container.getBiomarkerService()
-                let biomarkers = try await biomarkerService.getBiomarkers(categories: categories, types: types, startDateTime: startDateTime, endDateTime: endDateTime)
-                callback(nil, "") // TODO: Return json string {data: [...]}
+                let biomarkers = try await biomarkerService.getBiomarkers(
+                    categories: categories,
+                    types: types,
+                    startDateTime: startDateTime,
+                    endDateTime: endDateTime
+                )
+                let biomarkerJson = try biomarkers.toDataWrappedJSON()
+                callback(nil, biomarkerJson)
             } catch {
                 print("Error getting scores: \(error.localizedDescription)")
                 callback(error.localizedDescription, nil)

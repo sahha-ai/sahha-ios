@@ -1,5 +1,5 @@
 struct DemographicProvider: ServiceProvider {
-    public func registerServices(in container: DIContainer) async {
+    func registerServices(in container: DIContainer) async {
         await container.registerSingleton(DemographicServiceProtocol.self) { container in
             let apiService = try await container.resolve(APIServiceProtocol.self)
             return DemographicService(apiService: apiService)

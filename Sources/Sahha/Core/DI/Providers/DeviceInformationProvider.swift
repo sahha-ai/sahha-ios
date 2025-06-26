@@ -1,5 +1,5 @@
 struct DeviceInformationProvider: ServiceProvider {
-    public func registerServices(in container: DIContainer) async {
+    func registerServices(in container: DIContainer) async {
         await container.registerSingleton(DeviceInformationServiceProtocol.self) { container in
             let apiService = try await container.resolve(APIServiceProtocol.self)
             return DeviceInformationService(apiService: apiService)

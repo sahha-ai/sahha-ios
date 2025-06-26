@@ -2,7 +2,7 @@ import HealthKit
 
 final actor HKQueryManager: HKQueryManagerProtocol {
     private let healthStore: HKHealthStore
-    private let persistence = AnchorPersistence()
+    private let anchorPersistence = AnchorPersistence()
     private let normalisers: [String: any HKNormaliser]
     private let processor: any DataLogProcessorProtocol
 
@@ -13,7 +13,7 @@ final actor HKQueryManager: HKQueryManagerProtocol {
         self.healthStore = healthStore
         self.normalisers = normalisers
         self.processor = processor
-        self.anchors = persistence.loadAnchors()
+        self.anchors = anchorPersistence.loadAnchors()
     }
 
     func enableBackgroundDelivery(for type: HKObjectType) async throws {
@@ -64,41 +64,74 @@ final actor HKQueryManager: HKQueryManagerProtocol {
     private func runAnchorQuery(for type: HKSampleType) async {
         let identifier = type.identifier
         let anchor = anchors[identifier]
+        
+        let acceptingData = await processor.isAcceptingData()
+        print("Processor is accepting data: \(acceptingData)")
 
-        let (samples, newAnchor): ([HKSample], HKQueryAnchor?) = await withCheckedContinuation { continuation in
-            let query = HKAnchoredObjectQuery(
-                type: type,
-                predicate: nil,
-                anchor: anchor,
-                limit: 500
-            ) { _, samples, _, newAnchor, error in
-                if let error = error {
-                    print("Anchored query failed for \(type.identifier): \(error.localizedDescription)")
-                    continuation.resume(returning: ([], nil))
-                    return
+        while await processor.isAcceptingData() {
+            let (samples, newAnchor): ([HKSample], HKQueryAnchor?) = await withCheckedContinuation { continuation in
+                let query = HKAnchoredObjectQuery(
+                    type: type,
+                    predicate: nil,
+                    anchor: anchor,
+                    limit: 5000
+                ) { _, samples, _, newAnchor, error in
+                    if let error = error {
+                        print("Anchored query failed for \(type.identifier): \(error.localizedDescription)")
+                        continuation.resume(returning: ([], nil))
+                        return
+                    }
+                    
+                    print("Received \(samples?.count ?? 0) samples for \(identifier)")
+                    
+                    continuation.resume(returning: (samples ?? [], newAnchor))
                 }
                 
-                print("Received \(samples?.count ?? 0) samples for \(identifier)")
-
-                continuation.resume(returning: (samples ?? [], newAnchor))
+                healthStore.execute(query)
             }
-
-            healthStore.execute(query)
-        }
-
-        let normalisedSamples = await samples.concurrentFlatMap {
-            if let normaliser = self.normalisers[identifier] {
-                return normaliser.normalise(sample: $0)
+            
+            if samples.isEmpty {
+                break
             }
-            return nil
+            
+            let normalisedSamples = await samples.concurrentFlatMap {
+                if let normaliser = self.normalisers[identifier] {
+                    return normaliser.normalise(sample: $0)
+                }
+                return nil
+            }
+            
+            if await waitForProcessorToAcceptData() {
+                do {
+                    try await processor.process(normalisedSamples)
+                    if let newAnchor {
+                        self.anchors[identifier] = newAnchor
+                        self.anchorPersistence.saveAnchor(for: identifier, anchor: newAnchor)
+                    }
+                } catch {
+                    print("Error processing data: \(error.localizedDescription)")
+                    break
+                }
+            } else {
+                print("Processor not accepting data after 3 retries, stopping.")
+                break
+            }
         }
-        
-        let silencedError = newAnchor
-        
-        print("Normalised \(normalisedSamples.count) samples for \(identifier)")
-
-        try? await processor.process(normalisedSamples)
     }
+    
+    private func waitForProcessorToAcceptData() async -> Bool {
+            let maxRetries = 3
+            var attempts = 0
+        
+            while attempts < maxRetries {
+                if await processor.isAcceptingData() {
+                    return true
+                }
+                try? await Task.sleep(nanoseconds: UInt64(1_000_000_000))
+                attempts += 1
+            }
+            return await processor.isAcceptingData()
+        }
 }
 
 private struct AnchorPersistence {
