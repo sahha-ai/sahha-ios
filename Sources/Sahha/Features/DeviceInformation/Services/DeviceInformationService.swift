@@ -7,10 +7,10 @@ final class DeviceInformationService: DeviceInformationServiceProtocol {
     
     func updateDeviceInformation(_ deviceInformation: DeviceInformation) async throws {
         let request = APIRequest(
-            endpoint: "v1/profile/deviceInformation",
+            endpoint: Constants.Endpoints.deviceInformation,
             method: .PUT,
             body: deviceInformation
         )
-        try await apiService.request(request)
+        try await apiService.send(request)
     }
 }

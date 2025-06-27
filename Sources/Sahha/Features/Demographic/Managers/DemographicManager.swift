@@ -50,6 +50,15 @@ final actor DemographicManager: DemographicManagerProtocol {
         try await demographicService.updateDemographic(demographic)
         updateCache(demographic: demographic)
     }
+    
+    func dispose() async throws {
+        cachedDemographic = nil
+        cachedHash = nil
+        lastFetchTimestamp = nil
+        userDefaults.removeObject(forKey: hashKey)
+        userDefaults.removeObject(forKey: lastFetchKey)
+        
+    }
 
     private func isCacheStale() -> Bool {
         guard let lastFetchTimestamp = lastFetchTimestamp else {

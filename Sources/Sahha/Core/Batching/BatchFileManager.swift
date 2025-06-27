@@ -4,17 +4,12 @@ final class BatchFileManager {
     private let fileManager: FileManager
     private let directory: URL
 
-    init(directory: URL, fileManager: FileManager = .default) {
+    init(directory: URL, fileManager: FileManager = .default) throws {
         self.directory = directory
         self.fileManager = fileManager
         
         print("Batch directory set to: \(directory.absoluteString)")
-        
-        do {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
-        } catch {
-            print("Failed to create batch directory \(directory): \(error)")
-        }
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
     }
 
     func saveBatch<T: Encodable>(_ batch: [T]) -> URL? {
@@ -41,20 +36,12 @@ final class BatchFileManager {
         return files.compactMap { self.loadBatch(form: $0) }
     }
 
-    func deleteBatch(at fileURL: URL) {
-        do {
-            try fileManager.removeItem(at: fileURL)
-        } catch {
-            print("Failed to delete batch file \(fileURL): \(error)")
-        }
+    func deleteBatch(at fileURL: URL) throws {
+        try fileManager.removeItem(at: fileURL)
     }
     
-    func deleteAllBatches() {
-        do {
-            try fileManager.removeItem(at: directory)
-        } catch {
-            print("Failed to delete batches: \(error)")
-        }
+    func deleteAllBatches() throws {
+        try fileManager.removeItem(at: directory)
     }
     
     private func loadBatch<T: Decodable>(form fileURL: URL) -> ([T], URL)? {

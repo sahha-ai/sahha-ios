@@ -1,6 +1,8 @@
 import Foundation
 
-final actor SensorsManager: SensorsManagerProtocol {
+final actor SensorsManager: SensorsManagerProtocol, LifecycleHandler {
+   
+
     private let userDefaults: UserDefaults
     private let hkManager: HKManagerProtocol
 
@@ -21,12 +23,16 @@ final actor SensorsManager: SensorsManagerProtocol {
             print("Failed to enable sensors: \(error.localizedDescription)")
         }
     }
+    
+    func handleLifecycleEvent(event: LifecycleEvent) async {
+    
+    }
 
     func getSensorStatus(_ sensor: Set<SahhaSensor>) async -> SahhaSensorStatus {
         return .pending  // TODO: Implementation
     }
 
     func dispose() async {
-        // TODO: Clean up
+        userDefaults.removeObject(forKey: enabledSensorsKey)
     }
 }

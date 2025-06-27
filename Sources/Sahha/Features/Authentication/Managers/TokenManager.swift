@@ -27,10 +27,10 @@ final actor TokenManager: TokenManagerProtocol {
         if !token.isEmpty, let exp = JWTDecoder.decodeExp(jwt: token) {
             let expiry = Date(timeIntervalSince1970: exp)
             cachedExpiry = expiry
-            Sahha.updateToken(token: token, expiry: expiry)
+            await Sahha.updateToken(token: token, expiry: expiry)
         } else {
             cachedExpiry = nil
-            Sahha.updateToken(token: token, expiry: nil)
+            await Sahha.updateToken(token: token, expiry: nil)
         }
     }
 
@@ -48,12 +48,18 @@ final actor TokenManager: TokenManagerProtocol {
         return cachedResponse?.refreshToken
     }
 
+    func dispose() async throws {
+        refreshTask?.cancel()
+        refreshTask = nil
+        try await removeTokens()
+    }
+
     func removeTokens() async throws {
         try await storage.delete()
         cachedResponse = nil
         cachedExpiry = nil
         refreshTask = nil
-        Sahha.updateToken(token: nil, expiry: nil)
+        await Sahha.updateToken(token: nil, expiry: nil)
     }
 
     func ensureValidProfileToken() async throws -> String? {

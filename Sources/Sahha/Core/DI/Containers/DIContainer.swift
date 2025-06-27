@@ -52,16 +52,26 @@ final actor DIContainer {
         try await provider.registerServices(in: self)
     }
     
-    func reset() async {
+    func reset() async throws {
+        var errors: [Error] = []
         for disposable in disposables {
-            if let syncDisposable = disposable as? Disposable {
-                syncDisposable.dispose()
-            } else if let asyncDisposable = disposable as? DisposableAsync {
-                await asyncDisposable.dispose()
+            do {
+                if let syncDisposable = disposable as? Disposable {
+                    try syncDisposable.dispose()
+                } else if let asyncDisposable = disposable as? DisposableAsync {
+                    try await asyncDisposable.dispose()
+                }
+            } catch {
+                errors.append(error)
             }
         }
+        
         disposables.removeAll()
         registrations.removeAll()
+        
+        if !errors.isEmpty {
+            throw DIError.disposalFailed(errors)
+        }
     }
     
     private func trackDisposable(_ instance: Any?) {

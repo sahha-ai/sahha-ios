@@ -61,10 +61,14 @@ final actor HKQueryManager: HKQueryManagerProtocol {
         }
     }
 
+    func dispose() async throws {
+        anchorPersistence.deleteAnchors()
+    }
+
     private func runAnchorQuery(for type: HKSampleType) async {
         let identifier = type.identifier
         let anchor = anchors[identifier]
-        
+
         let acceptingData = await processor.isAcceptingData()
         print("Processor is accepting data: \(acceptingData)")
 
@@ -81,26 +85,26 @@ final actor HKQueryManager: HKQueryManagerProtocol {
                         continuation.resume(returning: ([], nil))
                         return
                     }
-                    
+
                     print("Received \(samples?.count ?? 0) samples for \(identifier)")
-                    
+
                     continuation.resume(returning: (samples ?? [], newAnchor))
                 }
-                
+
                 healthStore.execute(query)
             }
-            
+
             if samples.isEmpty {
                 break
             }
-            
+
             let normalisedSamples = await samples.concurrentFlatMap {
                 if let normaliser = self.normalisers[identifier] {
                     return normaliser.normalise(sample: $0)
                 }
                 return nil
             }
-            
+
             if await waitForProcessorToAcceptData() {
                 do {
                     try await processor.process(normalisedSamples)
@@ -118,27 +122,28 @@ final actor HKQueryManager: HKQueryManagerProtocol {
             }
         }
     }
-    
+
     private func waitForProcessorToAcceptData() async -> Bool {
-            let maxRetries = 3
-            var attempts = 0
-        
-            while attempts < maxRetries {
-                if await processor.isAcceptingData() {
-                    return true
-                }
-                try? await Task.sleep(nanoseconds: UInt64(1_000_000_000))
-                attempts += 1
+        let maxRetries = 3
+        var attempts = 0
+
+        while attempts < maxRetries {
+            if await processor.isAcceptingData() {
+                return true
             }
-            return await processor.isAcceptingData()
+            try? await Task.sleep(nanoseconds: UInt64(1_000_000_000))
+            attempts += 1
         }
+        return await processor.isAcceptingData()
+    }
 }
 
 private struct AnchorPersistence {
     private let key = Constants.UserDefaultsKeys.healthKitAnchors
+    private let userDefaults = UserDefaults.standard
 
     func loadAnchors() -> [String: HKQueryAnchor] {
-        guard let dataDict = UserDefaults.standard.dictionary(forKey: key) as? [String: Data] else {
+        guard let dataDict = userDefaults.dictionary(forKey: key) as? [String: Data] else {
             return [:]
         }
         return dataDict.compactMapValues { data in
@@ -147,10 +152,14 @@ private struct AnchorPersistence {
     }
 
     func saveAnchor(for identifier: String, anchor: HKQueryAnchor) {
-        var anchorDataDict = (UserDefaults.standard.dictionary(forKey: key) as? [String: Data]) ?? [:]
+        var anchorDataDict = (userDefaults.dictionary(forKey: key) as? [String: Data]) ?? [:]
         if let data = try? NSKeyedArchiver.archivedData(withRootObject: anchor, requiringSecureCoding: true) {
             anchorDataDict[identifier] = data
             UserDefaults.standard.set(anchorDataDict, forKey: key)
         }
+    }
+    
+    func deleteAnchors() {
+        userDefaults.removeObject(forKey: key)
     }
 }

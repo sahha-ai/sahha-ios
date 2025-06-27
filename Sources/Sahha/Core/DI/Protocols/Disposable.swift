@@ -1,7 +1,7 @@
 protocol Disposable: Sendable {
-    func dispose()
+    func dispose() throws
 }
 
 protocol DisposableAsync: Sendable {
-    func dispose() async
+    func dispose() async throws
 }

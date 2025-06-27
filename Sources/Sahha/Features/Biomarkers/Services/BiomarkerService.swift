@@ -24,7 +24,7 @@ final class BiomarkerService: BiomarkerServiceProtocol {
         queryParameters.append(URLQueryItem(name: "startDateTime", value: startDateTime.isoDate))
         queryParameters.append(URLQueryItem(name: "endDateTime", value: endDateTime.isoDate))
         
-        let request = APIRequest(endpoint: "v1/profile/biomarker", queryParameters: queryParameters)
-        return try await apiService.request(request)
+        let request = APIRequest(endpoint: Constants.Endpoints.biomarker, queryParameters: queryParameters)
+        return try await apiService.send(request)
     }
 }

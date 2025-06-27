@@ -18,9 +18,10 @@ final actor SahhaContainer {
         configurationTask = Task {
             // Register all providers sequentially
             try await container?.registerProvider(APIProvider())
-            try await container?.registerProvider(AuthenticationProvider())
+            try await container?.registerProvider(LoggingProvider())
             try await container?.registerProvider(LifecycleProvider())
             try await container?.registerProvider(DeviceInformationProvider())
+            try await container?.registerProvider(AuthenticationProvider())
             try await container?.registerProvider(DemographicProvider())
             try await container?.registerProvider(DataLogProvider())
             try await container?.registerProvider(HealthKitProvider())
@@ -32,12 +33,23 @@ final actor SahhaContainer {
         // Wait for the configuration to complete
         try await configurationTask?.value
         configurationTask = nil
-        
-        // Resolve required services after registrations
-        let _ = try await getTokenManager()
-        let _ = try await getDeviceInformationManager()
 
+        // Resolve required services after registrations
+        let _ = try await getDeviceInformationManager()
+        let _ = try await getLogger()
+        let _ = try await getTokenManager()
+        
         print("Configuration completed.")
+    }
+
+    func deauthenticate() async throws {
+        guard let settings = container?.sahhaSettings else {
+            throw SahhaError.missingConfiguration
+        }
+
+        container = nil
+
+        try await configure(with: settings)
     }
 
     private func resolve<T: Sendable>(_ type: T.Type) async throws -> T {
@@ -45,7 +57,6 @@ final actor SahhaContainer {
         if let task = configurationTask {
             try await task.value
         }
-
         guard let container else {
             throw SahhaError.notConfigured
         }
@@ -69,16 +80,20 @@ final actor SahhaContainer {
     func getDemographicService() async throws -> DemographicServiceProtocol {
         return try await resolve(DemographicServiceProtocol.self)
     }
-    
+
     func getBiomarkerService() async throws -> BiomarkerServiceProtocol {
         return try await resolve(BiomarkerServiceProtocol.self)
     }
-    
+
     func getScoreService() async throws -> ScoreServiceProtocol {
         return try await resolve(ScoreServiceProtocol.self)
     }
 
     // MARK: Managers
+    
+    func getLogger() async throws -> LoggerProtocol {
+        return try await resolve(LoggerProtocol.self)
+    }
 
     func getTokenManager() async throws -> TokenManagerProtocol {
         return try await resolve(TokenManagerProtocol.self)

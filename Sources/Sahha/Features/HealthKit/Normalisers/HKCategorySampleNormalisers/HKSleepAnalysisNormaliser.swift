@@ -8,7 +8,7 @@ struct HKSleepAnalysisNormaliser: HKNormaliser {
         guard let categorySample = sample as? HKCategorySample, categorySample.categoryType == type else {
             return nil
         }
-
+        
         let sleepStage = HKCategoryValueSleepAnalysis(rawValue: categorySample.value)?.name ?? "unknown"
         let duration = Calendar.current.dateComponents([.minute], from: categorySample.startDate, to: categorySample.endDate).minute ?? 0
         let value = Double(duration).rounded(toPlaces: 4)

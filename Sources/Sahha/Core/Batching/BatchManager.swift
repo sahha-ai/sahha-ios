@@ -47,13 +47,13 @@ final actor BatchManager<T: Codable>: DisposableAsync {
         return pendingBatches.removeFirst()
     }
 
-    func deleteBatch(url: URL) {
-        fileManager.deleteBatch(at: url)
+    func deleteBatch(url: URL) throws {
+        try fileManager.deleteBatch(at: url)
     }
     
-    func dispose() async {
+    func dispose() async throws {
         buffer.removeAll()
         pendingBatches.removeAll()
-        fileManager.deleteAllBatches()
+        try fileManager.deleteAllBatches()
     }
 }

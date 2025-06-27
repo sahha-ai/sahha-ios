@@ -25,6 +25,17 @@ struct Constants {
         static let tokenAccount = "sahha_token"
     }
     
+    struct Endpoints {
+        static let error = "v1/error"
+        static let registerProfile = "v1/oauth/profile/register/appId"
+        static let refreshToken = "v1/oauth/profile/refreshToken"
+        static let deviceInformation = "v1/profile/deviceInformation"
+        static let demographic = "v1/profile/demographic"
+        static let score = "v1/profile/score"
+        static let biomarker = "v1/profile/biomarker"
+        static let dataLog = "v1/profile/data/log"
+    }
+    
     struct Directories {
         static let baseDirectory = getBaseDirectory()
         

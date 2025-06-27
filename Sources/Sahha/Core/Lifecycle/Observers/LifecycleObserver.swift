@@ -28,6 +28,8 @@ final actor LifecycleObserver: LifecycleObserverProtocol {
     private var observers: [LifecycleEvent: NSObjectProtocol] = [:]
     private var handlers: [(wrapper: HandlerWrapper, events: Set<LifecycleEvent>)] = []
     private var registeredEvents: Set<LifecycleEvent> = []
+    private var lastNotificationTimes: [LifecycleEvent: Date] = [:]
+    private let debounceInterval: TimeInterval = 0.5
 
     func addHandler(_ handler: LifecycleHandler, for events: Set<LifecycleEvent>) {
         let wrapper = HandlerWrapper(handler)
@@ -58,11 +60,21 @@ final actor LifecycleObserver: LifecycleObserverProtocol {
                 notificationCenter.removeObserver(observer)
                 observers.removeValue(forKey: event)
                 registeredEvents.remove(event)
+                lastNotificationTimes.removeValue(forKey: event)
             }
         }
     }
 
     private func notifyHandlers(event: LifecycleEvent) async {
+        let currentTime = Date()
+        if let lastTime = lastNotificationTimes[event],
+            currentTime.timeIntervalSince(lastTime) < debounceInterval
+        {
+            print("LifeCycleObserver: Debounced event: \(event)")
+            return
+        }
+
+        lastNotificationTimes[event] = currentTime
         print("LifeCycleObserver: Notifying handlers for event: \(event)")
         for (wrapper, events) in handlers where wrapper.handler != nil && events.contains(event) {
             await wrapper.handler!.handleLifecycleEvent(event: event)

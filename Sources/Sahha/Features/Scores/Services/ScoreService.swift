@@ -20,7 +20,7 @@ final class ScoreService: ScoreServiceProtocol{
         queryParameters.append(URLQueryItem(name: "startDateTime", value: startDateTime.isoDate))
         queryParameters.append(URLQueryItem(name: "endDateTime", value: endDateTime.isoDate))
         
-        let request = APIRequest(endpoint: "v1/profile/score", queryParameters: queryParameters)
-        return try await apiService.request(request)
+        let request = APIRequest(endpoint: Constants.Endpoints.score, queryParameters: queryParameters)
+        return try await apiService.send(request)
     }
 }

@@ -1,5 +1,20 @@
 import UIKit
 
+/*:
+ TODO:
+ 
+ - Inject logging
+ - HK Anchors stored against uuid v5 of appId, appSecret and externalId
+ - isAuthenticated validation for sensors and public funcs etc.
+ - Validation on service funcs for early return
+ - Resume sensors and HK stuff on app init
+ - AppEvents feature (inject SensorsManager, DataLogProcessor etc.)
+ - Get stats / get samples
+ - Stub DataLogAggregator and inject into DataLogProcessor
+ 
+ */
+
+
 public final class Sahha {
     private static let container: SahhaContainer = .shared
 
@@ -21,8 +36,8 @@ public final class Sahha {
 
     // MARK: Authentication
 
-    static func updateToken(token: String?, expiry: Date?) {
-        Task { @MainActor in
+    static func updateToken(token: String?, expiry: Date?) async {
+        await MainActor.run {
             _profileToken = token
             _tokenExpiry = expiry
         }
@@ -52,7 +67,7 @@ public final class Sahha {
             }
         }
     }
-    
+
     public static func authenticate(profileToken: String, refreshToken: String, callback: @escaping @Sendable (String?, Bool) -> Void) {
         Task {
             do {
@@ -66,16 +81,22 @@ public final class Sahha {
             }
         }
     }
-    
+
     // TODO: Add disposables where needed and reset container on deauthenticate
     public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
         Task {
-            fatalError("Not implemented")
+            do {
+                try await container.deauthenticate()
+                callback(nil, true)
+            } catch {
+                print("Failed to deauthenticate: \(error.localizedDescription)")
+                callback(error.localizedDescription, false)
+            }
         }
     }
-    
+
     // MARK: Demographic
-    
+
     public static func getDemographic(callback: @escaping @Sendable (String?, SahhaDemographic?) -> Void) {
         Task {
             do {
@@ -88,7 +109,7 @@ public final class Sahha {
             }
         }
     }
-    
+
     public static func postDemographic(_ demographic: SahhaDemographic, callback: @escaping @Sendable (String?, Bool) -> Void) {
         Task {
             do {
@@ -116,20 +137,20 @@ public final class Sahha {
             }
         }
     }
-    
+
     // MARK: Samples
-    
+
     // TODO: Create SahhaSample struct and get samples directly from hkManager
-    public static func getSamples(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [String])->Void) {
+    public static func getSamples(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [String]) -> Void) {
         Task {
             fatalError("Not implemented")
         }
     }
-    
+
     // MARK: Stats
-    
+
     // TODO: Create SahhaStat struct and get stats directly from hkManager
-    public static func getStats(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [String])->Void) {
+    public static func getStats(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [String]) -> Void) {
         Task {
             fatalError("Not implemented")
         }

@@ -1,4 +1,4 @@
-protocol TokenManagerProtocol: Actor {
+protocol TokenManagerProtocol: Actor, DisposableAsync {
     func saveToken(_ token: TokenResponse) async throws
     func getProfileToken() async -> String?
     func getRefreshToken() async -> String?

@@ -1,6 +1,6 @@
 import Foundation
 
-final actor DataLogProcessor: DataLogProcessorProtocol {
+final actor DataLogProcessor: DataLogProcessorProtocol, LifecycleHandler {
     private let batchManager: BatchManager<DataLog>
     private let dataLogService: DataLogServiceProtocol
     private let semaphore: AsyncSemaphore
@@ -15,6 +15,10 @@ final actor DataLogProcessor: DataLogProcessorProtocol {
             await self?.processBatches()
         }
     }
+    
+    func handleLifecycleEvent(event: LifecycleEvent) async {
+        <#code#>
+    }
 
     func process(_ inputs: [DataLog]) async throws {
         await batchManager.add(inputs)
@@ -25,11 +29,11 @@ final actor DataLogProcessor: DataLogProcessorProtocol {
         return await batchManager.isAcceptingData
     }
 
-    func dispose() async {
+    func dispose() async throws {
         processingTask?.cancel()
         processingTask = nil
         await semaphore.waitForAll()
-        await batchManager.dispose()
+        try await batchManager.dispose()
     }
 
     private func processBatches() async {
@@ -52,7 +56,7 @@ final actor DataLogProcessor: DataLogProcessorProtocol {
                     group.addTask { [weak self] in
                         do {
                             try await self?.uploadBatchWithRetry(batch)
-                            await self?.batchManager.deleteBatch(url: url)
+                            try await self?.batchManager.deleteBatch(url: url)
                             print("Processed and deleted batch at \(url)")
                         } catch {
                             print("Failed to process batch at \(url): \(error)")
