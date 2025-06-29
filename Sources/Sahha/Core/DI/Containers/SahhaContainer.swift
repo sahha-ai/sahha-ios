@@ -26,6 +26,7 @@ final actor SahhaContainer {
             try await container?.registerProvider(DataLogProvider())
             try await container?.registerProvider(HealthKitProvider())
             try await container?.registerProvider(SensorsProvider())
+            try await container?.registerProvider(AppEventProvider())
             try await container?.registerProvider(BiomarkerProvider())
             try await container?.registerProvider(ScoreProvider())
         }
@@ -35,7 +36,12 @@ final actor SahhaContainer {
         configurationTask = nil
 
         // Resolve required services after registrations
-        let _ = try await getDeviceInformationManager()
+        let deviceInfoManager = try await getDeviceInformationManager()
+        await deviceInfoManager.start()
+        
+        let appEventManager = try await getAppEventManager()
+        await appEventManager.start()
+        
         let _ = try await getLogger()
         let _ = try await getTokenManager()
         
@@ -109,5 +115,9 @@ final actor SahhaContainer {
 
     func getSensorsManager() async throws -> SensorsManagerProtocol {
         return try await resolve(SensorsManagerProtocol.self)
+    }
+    
+    func getAppEventManager() async throws -> AppEventManagerProtocol {
+        return try await resolve(AppEventManagerProtocol.self)
     }
 }

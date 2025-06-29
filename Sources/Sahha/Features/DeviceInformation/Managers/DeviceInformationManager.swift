@@ -6,6 +6,7 @@ final actor DeviceInformationManager: DeviceInformationManagerProtocol, Lifecycl
     private let userDefaults: UserDefaults
     private let framework: SahhaFramework
     private let deviceInfoService: DeviceInformationServiceProtocol
+    private let lifecycleObserver: LifecycleObserverProtocol
     private let cacheTTL: TimeInterval
 
     private let lastSyncKey = Constants.UserDefaultsKeys.deviceInfoLastSync
@@ -21,12 +22,14 @@ final actor DeviceInformationManager: DeviceInformationManagerProtocol, Lifecycl
         userDefaults: UserDefaults = .standard,
         cacheTTL: TimeInterval = .hours(1),
         framework: SahhaFramework,
-        deviceInfoService: DeviceInformationServiceProtocol
+        deviceInfoService: DeviceInformationServiceProtocol,
+        lifecycleObserver: LifecycleObserverProtocol
     ) {
         self.userDefaults = userDefaults
         self.cacheTTL = cacheTTL
         self.framework = framework
         self.deviceInfoService = deviceInfoService
+        self.lifecycleObserver = lifecycleObserver
         self.cachedHash = userDefaults.string(forKey: hashKey)
         self.lastSyncTimestamp = userDefaults.object(forKey: lastSyncKey) as? Date
         Task { await collectDeviceInformation() }
@@ -59,9 +62,17 @@ final actor DeviceInformationManager: DeviceInformationManagerProtocol, Lifecycl
             return true
         }
     }
+    
+    func start() async {
+        await lifecycleObserver.addHandler(self, for: [.didBecomeActive])
+    }
 
     func handleLifecycleEvent(event: LifecycleEvent) async {
         await syncDeviceInformation()
+    }
+    
+    func dispose() async throws {
+        await lifecycleObserver.removeHandler(self)
     }
 
     private func syncDeviceInformation() async {

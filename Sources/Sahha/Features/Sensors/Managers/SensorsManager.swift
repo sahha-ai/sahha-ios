@@ -1,8 +1,6 @@
 import Foundation
 
-final actor SensorsManager: SensorsManagerProtocol, LifecycleHandler {
-   
-
+final actor SensorsManager: SensorsManagerProtocol {
     private let userDefaults: UserDefaults
     private let hkManager: HKManagerProtocol
 
@@ -24,8 +22,12 @@ final actor SensorsManager: SensorsManagerProtocol, LifecycleHandler {
         }
     }
     
-    func handleLifecycleEvent(event: LifecycleEvent) async {
-    
+    func getEnabledSensors() async -> Set<SahhaSensor> {
+        if let rawSensors = userDefaults.array(forKey: enabledSensorsKey) as? [String] {
+            return Set(rawSensors.compactMap { SahhaSensor(rawValue: $0) })
+        } else {
+            return []
+        }
     }
 
     func getSensorStatus(_ sensor: Set<SahhaSensor>) async -> SahhaSensorStatus {

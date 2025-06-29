@@ -105,36 +105,16 @@ final actor HKQueryManager: HKQueryManagerProtocol {
                 return nil
             }
 
-            if await waitForProcessorToAcceptData() {
-                do {
-                    try await processor.process(normalisedSamples)
-                    if let newAnchor {
-                        self.anchors[identifier] = newAnchor
-                        self.anchorPersistence.saveAnchor(for: identifier, anchor: newAnchor)
-                    }
-                } catch {
-                    print("Error processing data: \(error.localizedDescription)")
-                    break
+            do {
+                try await processor.process(normalisedSamples)
+                if let newAnchor {
+                    self.anchors[identifier] = newAnchor
+                    self.anchorPersistence.saveAnchor(for: identifier, anchor: newAnchor)
                 }
-            } else {
-                print("Processor not accepting data after 3 retries, stopping.")
-                break
+            } catch {
+                print("Error processing data: \(error.localizedDescription)")
             }
         }
-    }
-
-    private func waitForProcessorToAcceptData() async -> Bool {
-        let maxRetries = 3
-        var attempts = 0
-
-        while attempts < maxRetries {
-            if await processor.isAcceptingData() {
-                return true
-            }
-            try? await Task.sleep(nanoseconds: UInt64(1_000_000_000))
-            attempts += 1
-        }
-        return await processor.isAcceptingData()
     }
 }
 
@@ -158,7 +138,7 @@ private struct AnchorPersistence {
             UserDefaults.standard.set(anchorDataDict, forKey: key)
         }
     }
-    
+
     func deleteAnchors() {
         userDefaults.removeObject(forKey: key)
     }

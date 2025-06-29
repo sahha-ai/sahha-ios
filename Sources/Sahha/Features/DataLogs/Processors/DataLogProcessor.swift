@@ -1,6 +1,6 @@
 import Foundation
 
-final actor DataLogProcessor: DataLogProcessorProtocol, LifecycleHandler {
+final actor DataLogProcessor: DataLogProcessorProtocol {
     private let batchManager: BatchManager<DataLog>
     private let dataLogService: DataLogServiceProtocol
     private let semaphore: AsyncSemaphore
@@ -15,14 +15,27 @@ final actor DataLogProcessor: DataLogProcessorProtocol, LifecycleHandler {
             await self?.processBatches()
         }
     }
-    
-    func handleLifecycleEvent(event: LifecycleEvent) async {
-        <#code#>
-    }
 
     func process(_ inputs: [DataLog]) async throws {
-        await batchManager.add(inputs)
-        await processBatches()
+        let maxRetries = 3
+        var attempts = 0
+
+        while attempts < maxRetries {
+            if await isAcceptingData() {
+                await batchManager.add(inputs)
+                await processBatches()
+                return
+            }
+            try await Task.sleep(nanoseconds: UInt64(1_000_000_000))
+            attempts += 1
+        }
+
+        if await isAcceptingData() {
+            await batchManager.add(inputs)
+            await processBatches()
+        } else {
+            throw DataLogError.processorNotAcceptingData
+        }
     }
 
     func isAcceptingData() async -> Bool {
@@ -38,7 +51,7 @@ final actor DataLogProcessor: DataLogProcessorProtocol, LifecycleHandler {
 
     private func processBatches() async {
         guard processingTask == nil else { return }
-        
+
         print("Processing batches...")
 
         processingTask = Task {
@@ -84,16 +97,16 @@ final actor DataLogProcessor: DataLogProcessorProtocol, LifecycleHandler {
                 return
             } catch {
                 try Task.checkCancellation()
-                
+
                 let delayIndex = min(attempts, retryDelays.count - 1)
                 let delay = retryDelays[delayIndex]
                 print("Upload attempt \(attempts + 1) failed: \(error). Retrying after \(delay)s")
-                
+
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 attempts += 1
             }
         }
-        
+
         throw DataLogError.maxUploadRetriesExceeded
     }
 }

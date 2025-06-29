@@ -6,10 +6,12 @@ struct DeviceInformationProvider: ServiceProvider {
         }
         await container.registerSingleton(DeviceInformationManagerProtocol.self) {container in
             let deviceInfoService = try await container.resolve(DeviceInformationServiceProtocol.self)
-            let deviceInfoManager = DeviceInformationManager(framework: container.sahhaSettings.framework, deviceInfoService: deviceInfoService)
             let lifecycleObserver = try await container.resolve(LifecycleObserverProtocol.self)
-            await lifecycleObserver.addHandler(deviceInfoManager, for: [.appDidBecomeActive])
-            return deviceInfoManager
+            return DeviceInformationManager(
+                framework: container.sahhaSettings.framework,
+                deviceInfoService: deviceInfoService,
+                lifecycleObserver: lifecycleObserver
+            )
         }
     }
 }

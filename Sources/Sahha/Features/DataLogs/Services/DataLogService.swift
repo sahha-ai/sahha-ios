@@ -9,7 +9,7 @@ final class DataLogService: DataLogServiceProtocol {
     
     // TODO: Validate against empty array?
     func postDataLogs(_ logs: [DataLog]) async throws {
-        let request = APIRequest(endpoint: Constants.Endpoints.dataLog, method: .POST, body: logs)
+        let _ = APIRequest(endpoint: Constants.Endpoints.dataLog, method: .POST, body: logs)
 //        try await apiService.send(request)
         print("Posting data logs...")
     }

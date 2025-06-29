@@ -1,10 +1,10 @@
 enum LifecycleEvent: String, Sendable, CaseIterable {
-    case appStart
-    case appDidBecomeActive
-    case appPause
-    case appForeground
-    case appBackground
-    case appClose
-    case deviceUnlock
-    case deviceLock
+    case start
+    case didBecomeActive
+    case pause
+    case foreground
+    case background
+    case close
+    case unlock
+    case lock
 }
