@@ -14,23 +14,33 @@ final actor TokenManager: TokenManagerProtocol {
         storage: any KeychainProtocol<TokenResponse> = KeychainStorage(key: Constants.Keychain.tokenAccount),
         refreshOffset: TimeInterval = 600  // 10 Minutes
 
-    ) {
+    ) async {
         self.authService = authService
         self.storage = storage
         self.refreshOffset = refreshOffset
+        cachedResponse = try? await storage.retrieve()
+        await updateSahhaWithToken()
     }
 
     func saveToken(_ token: TokenResponse) async throws {
+        // Save the token to storage
         try await storage.save(token)
         cachedResponse = token
-        let token = token.profileToken
+        await updateSahhaWithToken()
+    }
+
+    // Helper function to update Sahha with token and expiry
+    private func updateSahhaWithToken() async {
+        guard let response = cachedResponse else { return }
+        let token = response.profileToken
+
         if !token.isEmpty, let exp = JWTDecoder.decodeExp(jwt: token) {
             let expiry = Date(timeIntervalSince1970: exp)
             cachedExpiry = expiry
             await Sahha.updateToken(token: token, expiry: expiry)
         } else {
             cachedExpiry = nil
-            await Sahha.updateToken(token: token, expiry: nil)
+            await Sahha.updateToken(token: nil, expiry: nil)
         }
     }
 

@@ -1,5 +1,6 @@
 protocol SensorsManagerProtocol: Actor, DisposableAsync {
-    func enableSensors(_ sensors: Set<SahhaSensor>) async
-    func getSensorStatus(_ sensor: Set<SahhaSensor>) async -> SahhaSensorStatus
+    func resumeSensors() async throws
+    func enableSensors(_ sensors: Set<SahhaSensor>) async throws
+    func getSensorStatus(_ sensor: Set<SahhaSensor>) async throws -> SahhaSensorStatus
     func getEnabledSensors() async -> Set<SahhaSensor>
 }

@@ -7,7 +7,7 @@ struct DataLogProvider: ServiceProvider {
             return DataLogService(apiService: apiService)
         }
         await container.registerSingleton((any DataLogProcessorProtocol).self) { container in
-            let batchDirectory = Constants.Directories.baseDirectory.appendingPathComponent("batches")
+            let batchDirectory = Constants.Directories.baseDirectory.appendingPathComponent("data-logs").appendingPathComponent("batches")
             let fileManager = try BatchFileManager(directory: batchDirectory)
             let batchManager = BatchManager<DataLog>(batchSize: 100, maxPendingBatches: 50, fileManager: fileManager)
             let dataLogService = try await container.resolve(DataLogServiceProtocol.self)

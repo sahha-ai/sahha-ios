@@ -2,18 +2,12 @@ import UIKit
 
 /*:
  TODO:
- 
+
  - Inject logging
- - HK Anchors stored against uuid v5 of appId, appSecret and externalId
- - isAuthenticated validation for sensors and public funcs etc.
- - Validation on service funcs for early return
- - Resume sensors and HK stuff on app init
- - AppEvents feature (inject SensorsManager, DataLogProcessor etc.)
  - Get stats / get samples
  - Stub DataLogAggregator and inject into DataLogProcessor
- 
- */
 
+ */
 
 public final class Sahha {
     private static let container: SahhaContainer = .shared
@@ -27,6 +21,12 @@ public final class Sahha {
         Task {
             do {
                 try await container.configure(with: settings)
+
+                if let tokenManager = try? await container.getTokenManager(),
+                    let token = try? await tokenManager.ensureValidProfileToken(),
+                    !token.isEmpty {
+                    try await container.startAuthenticatedServices()
+                }
             } catch {
                 print("Failed to configure Sahha: \(error.localizedDescription)")
             }
@@ -60,6 +60,7 @@ public final class Sahha {
                 let tokenManager = try await container.getTokenManager()
                 let response = try await authService.registerProfile(appId: appId, appSecret: appSecret, externalId: externalId)
                 try await tokenManager.saveToken(response)
+                try await container.startAuthenticatedServices()
                 callback(nil, true)
             } catch {
                 print("Failed to authenticate: \(error.localizedDescription)")
@@ -74,6 +75,7 @@ public final class Sahha {
                 let tokenManager = try await container.getTokenManager()
                 let tokenResponse = TokenResponse(profileToken: profileToken, refreshToken: refreshToken)
                 try await tokenManager.saveToken(tokenResponse)
+                try await container.startAuthenticatedServices()
                 callback(nil, true)
             } catch {
                 print("Failed to authenticate: \(error.localizedDescription)")
@@ -82,11 +84,10 @@ public final class Sahha {
         }
     }
 
-    // TODO: Add disposables where needed and reset container on deauthenticate
     public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
         Task {
             do {
-                try await container.deauthenticate()
+                try await container.resetContainer()
                 callback(nil, true)
             } catch {
                 print("Failed to deauthenticate: \(error.localizedDescription)")
@@ -129,7 +130,7 @@ public final class Sahha {
         Task {
             do {
                 let sensorsManager = try await container.getSensorsManager()
-                await sensorsManager.enableSensors(sensors)
+                try await sensorsManager.enableSensors(sensors)
                 callback(nil, .pending)
             } catch {
                 print("Error enabling sensors: \(error.localizedDescription)")

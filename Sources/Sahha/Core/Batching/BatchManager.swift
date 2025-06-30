@@ -1,6 +1,6 @@
 import Foundation
 
-final actor BatchManager<T: Codable>: DisposableAsync {
+final actor BatchManager<T: Codable> {
     private let batchSize: Int
     private let maxPendingBatches: Int
     private let fileManager: BatchFileManager
@@ -51,7 +51,7 @@ final actor BatchManager<T: Codable>: DisposableAsync {
         try fileManager.deleteBatch(at: url)
     }
     
-    func dispose() async throws {
+    func cleanup() async throws {
         buffer.removeAll()
         pendingBatches.removeAll()
         try fileManager.deleteAllBatches()

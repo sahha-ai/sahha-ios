@@ -46,7 +46,7 @@ final actor DataLogProcessor: DataLogProcessorProtocol {
         processingTask?.cancel()
         processingTask = nil
         await semaphore.waitForAll()
-        try await batchManager.dispose()
+        try await batchManager.cleanup()
     }
 
     private func processBatches() async {

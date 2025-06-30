@@ -5,36 +5,37 @@ final actor SensorsManager: SensorsManagerProtocol {
     private let hkManager: HKManagerProtocol
 
     private let enabledSensorsKey = Constants.UserDefaultsKeys.enabledSensors
+    private var enabledSensorsCache: Set<SahhaSensor>
 
     init(userDefaults: UserDefaults = .standard, hkManager: HKManagerProtocol) {
         self.userDefaults = userDefaults
         self.hkManager = hkManager
-    }
 
-    func enableSensors(_ sensors: Set<SahhaSensor>) async {
-        let rawSensors = sensors.map { $0.rawValue }
-        userDefaults.set(rawSensors, forKey: enabledSensorsKey)
-        
-        do {
-            try await hkManager.enableSensors(sensors)
-        } catch {
-            print("Failed to enable sensors: \(error.localizedDescription)")
-        }
+        let rawSensors = userDefaults.array(forKey: enabledSensorsKey) as? [String] ?? []
+        self.enabledSensorsCache = Set(rawSensors.compactMap { SahhaSensor(rawValue: $0) })
     }
     
-    func getEnabledSensors() async -> Set<SahhaSensor> {
-        if let rawSensors = userDefaults.array(forKey: enabledSensorsKey) as? [String] {
-            return Set(rawSensors.compactMap { SahhaSensor(rawValue: $0) })
-        } else {
-            return []
-        }
+    func resumeSensors() async throws {
+        try await hkManager.enableSensors(enabledSensorsCache)
     }
 
-    func getSensorStatus(_ sensor: Set<SahhaSensor>) async -> SahhaSensorStatus {
+    func enableSensors(_ sensors: Set<SahhaSensor>) async throws {
+        let rawSensors = sensors.map { $0.rawValue }
+        userDefaults.set(rawSensors, forKey: enabledSensorsKey)
+        self.enabledSensorsCache = sensors
+        try await hkManager.enableSensors(sensors)
+    }
+
+    func getEnabledSensors() async -> Set<SahhaSensor> {
+        enabledSensorsCache
+    }
+
+    func getSensorStatus(_ sensor: Set<SahhaSensor>) async throws -> SahhaSensorStatus {
         return .pending  // TODO: Implementation
     }
 
     func dispose() async {
         userDefaults.removeObject(forKey: enabledSensorsKey)
+        self.enabledSensorsCache = []
     }
 }

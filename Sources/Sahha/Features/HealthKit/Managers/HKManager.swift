@@ -5,15 +5,13 @@ final actor HKManager: HKManagerProtocol {
     private let queryManager: HKQueryManagerProtocol
 
     init(permissionManager: HKPermissionManagerProtocol, queryManager: HKQueryManagerProtocol) {
-        self.permissionManager = permissionManager
-        self.queryManager = queryManager
-    }
+            self.permissionManager = permissionManager
+            self.queryManager = queryManager
+        }
 
     func enableSensors(_ sensors: Set<SahhaSensor>) async throws {
         let sampleTypes = sensors.compactMap { SensorMapper.objectType(for: $0) }
         let sampleTypeSet = Set(sampleTypes)
-        
-        print("Enabling sensors...")
 
         try await permissionManager.requestPermissions(for: sampleTypeSet)
 
@@ -31,5 +29,29 @@ final actor HKManager: HKManagerProtocol {
             }
             for try await _ in group {}
         }
+    }
+
+    func disableSensors(_ sensors: Set<SahhaSensor>) async throws {
+        let sampleTypes = sensors.compactMap { SensorMapper.objectType(for: $0) }
+        let sampleTypeSet = Set(sampleTypes)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for sampleType in sampleTypeSet {
+                group.addTask {
+                    do {
+                        try await self.queryManager.disableBackgroundDelivery(for: sampleType)
+                    } catch {
+                        let sensor = SensorMapper.sensor(for: sampleType)
+                        print("Failed to disable background delivery for \(sensor?.rawValue ?? "unknown"): \(error)")
+                    }
+                    await self.queryManager.stopObserverQuery(for: sampleType)
+                }
+            }
+            for try await _ in group {}
+        }
+    }
+
+    func dispose() async throws {
+        try await queryManager.stopAllAndClear()
     }
 }

@@ -35,27 +35,38 @@ final actor SahhaContainer {
         try await configurationTask?.value
         configurationTask = nil
 
-        // Resolve required services after registrations
-        let deviceInfoManager = try await getDeviceInformationManager()
-        await deviceInfoManager.start()
-        
-        let appEventManager = try await getAppEventManager()
-        await appEventManager.start()
-        
-        let _ = try await getLogger()
-        let _ = try await getTokenManager()
-        
         print("Configuration completed.")
     }
 
-    func deauthenticate() async throws {
+    func startAuthenticatedServices() async throws {
+        let deviceInfoManager = try await getDeviceInformationManager()
+        await deviceInfoManager.start()
+        let appEventManager = try await getAppEventManager()
+        await appEventManager.start()
+        let sensorsManager = try await getSensorsManager()
+        try await sensorsManager.resumeSensors()
+    }
+
+    func resetContainer() async throws {
         guard let settings = container?.sahhaSettings else {
             throw SahhaError.missingConfiguration
         }
-
+        if let oldContainer = container {
+            try await oldContainer.reset()
+        }
         container = nil
-
         try await configure(with: settings)
+    }
+
+    private func requiresAuthentication<T: Sendable>(_ type: T.Type) -> Bool {
+        let protectedTypes: [any Sendable.Type] = [
+            DeviceInformationServiceProtocol.self,
+            DeviceInformationManagerProtocol.self,
+            DemographicManagerProtocol.self,
+            SensorsManagerProtocol.self,
+            AppEventManagerProtocol.self,
+        ]
+        return protectedTypes.contains { $0 == type }
     }
 
     private func resolve<T: Sendable>(_ type: T.Type) async throws -> T {
@@ -65,6 +76,11 @@ final actor SahhaContainer {
         }
         guard let container else {
             throw SahhaError.notConfigured
+        }
+        if requiresAuthentication(type) {
+            guard await Sahha.isAuthenticated else {
+                throw SahhaError.unauthorized
+            }
         }
         return try await container.resolve(type)
     }
@@ -96,7 +112,7 @@ final actor SahhaContainer {
     }
 
     // MARK: Managers
-    
+
     func getLogger() async throws -> LoggerProtocol {
         return try await resolve(LoggerProtocol.self)
     }
@@ -116,7 +132,7 @@ final actor SahhaContainer {
     func getSensorsManager() async throws -> SensorsManagerProtocol {
         return try await resolve(SensorsManagerProtocol.self)
     }
-    
+
     func getAppEventManager() async throws -> AppEventManagerProtocol {
         return try await resolve(AppEventManagerProtocol.self)
     }
