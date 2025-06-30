@@ -24,12 +24,17 @@ private class HandlerWrapper {
 }
 
 final actor LifecycleObserver: LifecycleObserverProtocol {
+    private let logger: LoggerProtocol
     private let notificationCenter = NotificationCenter.default
     private var observers: [LifecycleEvent: NSObjectProtocol] = [:]
     private var handlers: [(wrapper: HandlerWrapper, events: Set<LifecycleEvent>)] = []
     private var registeredEvents: Set<LifecycleEvent> = []
     private var lastNotificationTimes: [LifecycleEvent: Date] = [:]
     private let debounceInterval: TimeInterval = 0.5
+    
+    init(logger: LoggerProtocol) {
+        self.logger = logger
+    }
 
     func addHandler(_ handler: LifecycleHandler, for events: Set<LifecycleEvent>) {
         let wrapper = HandlerWrapper(handler)
@@ -75,12 +80,12 @@ final actor LifecycleObserver: LifecycleObserverProtocol {
         if let lastTime = lastNotificationTimes[event],
             currentTime.timeIntervalSince(lastTime) < debounceInterval
         {
-            print("LifeCycleObserver: Debounced event: \(event)")
+            logger.info("LifeCycleObserver: Debounced event: \(event)")
             return
         }
 
         lastNotificationTimes[event] = currentTime
-        print("LifeCycleObserver: Notifying handlers for event: \(event)")
+        logger.info("LifeCycleObserver: Notifying handlers for event: \(event)")
         for (wrapper, events) in handlers where wrapper.handler != nil && events.contains(event) {
             await wrapper.handler!.handleLifecycleEvent(event: event)
         }

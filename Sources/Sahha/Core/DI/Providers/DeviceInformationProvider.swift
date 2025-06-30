@@ -5,9 +5,11 @@ struct DeviceInformationProvider: ServiceProvider {
             return DeviceInformationService(apiService: apiService)
         }
         await container.registerSingleton(DeviceInformationManagerProtocol.self) {container in
+            let logger = try await container.resolve(LoggerProtocol.self)
             let deviceInfoService = try await container.resolve(DeviceInformationServiceProtocol.self)
             let lifecycleObserver = try await container.resolve(LifecycleObserverProtocol.self)
             return DeviceInformationManager(
+                logger: logger,
                 framework: container.sahhaSettings.framework,
                 deviceInfoService: deviceInfoService,
                 lifecycleObserver: lifecycleObserver

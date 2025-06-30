@@ -3,6 +3,7 @@ import Foundation
 import UIKit
 
 final actor DeviceInformationManager: DeviceInformationManagerProtocol, LifecycleHandler {
+    private let logger: LoggerProtocol
     private let userDefaults: UserDefaults
     private let framework: SahhaFramework
     private let deviceInfoService: DeviceInformationServiceProtocol
@@ -19,12 +20,14 @@ final actor DeviceInformationManager: DeviceInformationManagerProtocol, Lifecycl
     private var syncTask: Task<Void, Never>?
 
     init(
+        logger: LoggerProtocol,
         userDefaults: UserDefaults = .standard,
         cacheTTL: TimeInterval = .hours(1),
         framework: SahhaFramework,
         deviceInfoService: DeviceInformationServiceProtocol,
         lifecycleObserver: LifecycleObserverProtocol
     ) {
+        self.logger = logger
         self.userDefaults = userDefaults
         self.cacheTTL = cacheTTL
         self.framework = framework
@@ -58,7 +61,7 @@ final actor DeviceInformationManager: DeviceInformationManagerProtocol, Lifecycl
             let hash = try current.sha256Hash()
             return cachedHash == nil || cachedHash != hash
         } catch {
-            print("Failed to hash device information: \(error.localizedDescription)")
+            logger.error("Failed to hash device information: \(error.localizedDescription)")
             return true
         }
     }
@@ -77,13 +80,13 @@ final actor DeviceInformationManager: DeviceInformationManagerProtocol, Lifecycl
 
     private func syncDeviceInformation() async {
         if let task = syncTask {
-            print("Device information sync already in progress, awaiting completion...")
+            logger.warning("Device information sync already in progress, awaiting completion...")
             await task.value
             return
         }
 
         guard await self.requiresSync() else {
-            print("Skipping device information sync, information unchanged")
+            logger.info("Skipping device information sync, information unchanged")
             return
         }
 
@@ -97,13 +100,13 @@ final actor DeviceInformationManager: DeviceInformationManagerProtocol, Lifecycl
                     cachedHash = try info.sha256Hash()
                     userDefaults.set(cachedHash, forKey: hashKey)
                 } catch {
-                    print("Failed to hash device information: \(error.localizedDescription)")
+                    logger.error("Failed to hash device information: \(error.localizedDescription)")
                 }
                 lastSyncTimestamp = Date()
                 userDefaults.set(lastSyncTimestamp, forKey: lastSyncKey)
-                print("Updated device information successfully")
+                logger.info("Updated device information successfully")
             } catch {
-                print("Failed to sync device information: \(error.localizedDescription)")
+                logger.error("Failed to sync device information: \(error.localizedDescription)")
             }
         }
 

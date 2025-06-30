@@ -18,8 +18,8 @@ final class ErrorLoggingInterceptor: APIInterceptor {
             }
 
             var errorSource: ErrorSource = .sdk
-            var errorCode: Int?
-            var errorLocation: String?
+            var errorCode = 500
+            var errorLocation: String = request.endpoint
             var errorBody: String?
 
             if let apiError = error as? APIError {
@@ -53,19 +53,16 @@ final class ErrorLoggingInterceptor: APIInterceptor {
                 errorBody = "NSError: \(nsError.domain) code \(nsError.code)"
             }
 
-            if let code = errorCode, ignoredStatusCodes.contains(code) {
+            if ignoredStatusCodes.contains(errorCode) {
                 throw error
             }
 
             logger.error(
                 error.localizedDescription,
-                errorCode: errorCode,
                 errorSource: errorSource,
+                errorCode: errorCode,
                 errorLocation: errorLocation,
                 errorBody: errorBody,
-                codeBody: nil,
-                file: nil,
-                function: request.endpoint
             )
 
             throw error

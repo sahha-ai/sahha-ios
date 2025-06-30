@@ -1,6 +1,7 @@
 import Foundation
 
 final actor DemographicManager: DemographicManagerProtocol {
+    private let logger: LoggerProtocol
     private let userDefaults: UserDefaults
     private let demographicService: DemographicServiceProtocol
     private let cacheTTL: TimeInterval
@@ -13,10 +14,12 @@ final actor DemographicManager: DemographicManagerProtocol {
     private var lastFetchTimestamp: Date?
 
     init(
+        logger: LoggerProtocol,
         userDefaults: UserDefaults = .standard,
         cacheTTL: TimeInterval = .minutes(15),
         demographicService: DemographicServiceProtocol
     ) {
+        self.logger = logger
         self.userDefaults = userDefaults
         self.cacheTTL = cacheTTL
         self.demographicService = demographicService
@@ -38,7 +41,7 @@ final actor DemographicManager: DemographicManagerProtocol {
             let hash = try demographic.sha256Hash()
             return hash != cachedHash
         } catch {
-            print("Failed to hash demographic: \(error.localizedDescription)")
+            logger.error("Failed to hash demographic: \(error.localizedDescription)")
             return true
         }
     }
@@ -73,7 +76,7 @@ final actor DemographicManager: DemographicManagerProtocol {
             cachedHash = try demographic.sha256Hash()
             userDefaults.set(cachedHash, forKey: hashKey)
         } catch {
-            print("Failed to hash demographic: \(error.localizedDescription)")
+            logger.error("Failed to hash demographic: \(error.localizedDescription)")
         }
         lastFetchTimestamp = Date()
         userDefaults.set(lastFetchTimestamp, forKey: lastFetchKey)

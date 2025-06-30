@@ -7,23 +7,31 @@ final class Logger: LoggerProtocol {
         self.deviceInfoManager = deviceInfoManager
     }
 
-    func info(_ message: String, file: String? = #file, function: String? = #function) {
-        log(message, file: file, function: function, logLevel: .info)
+    func info(_ message: String) {
+        log(message, file: #file, function: #function, logLevel: .info)
     }
 
-    func warning(_ message: String, file: String? = #file, function: String? = #function) {
-        log(message, file: file, function: function, logLevel: .warning)
+    func warning(_ message: String) {
+        log(message, file: #file, function: #function, logLevel: .warning)
     }
 
-    func error(
+    func error(_ message: String) {
+        error(message, errorCode: nil, errorSource: .sdk, errorLocation: nil, errorBody: nil, codeBody: nil)
+    }
+
+    func error(_ message: String, errorSource: ErrorSource = .api, errorCode: Int, errorLocation: String, errorBody: String? = nil) {
+        error(message, errorCode: errorCode, errorSource: errorSource, errorLocation: errorLocation, errorBody: errorBody)
+    }
+
+    private func error(
         _ message: String,
         errorCode: Int? = nil,
         errorSource: ErrorSource = .sdk,
         errorLocation: String? = nil,
         errorBody: String? = nil,
         codeBody: String? = nil,
-        file: String? = #file,
-        function: String? = #function
+        file: String = #file,
+        function: String = #function
     ) {
         log(message, file: file, function: function, logLevel: .error)
 

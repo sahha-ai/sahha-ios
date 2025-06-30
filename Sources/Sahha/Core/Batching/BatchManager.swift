@@ -13,8 +13,6 @@ final actor BatchManager<T: Codable> {
         self.maxPendingBatches = max(maxPendingBatches, 1)
         self.fileManager = fileManager
         pendingBatches = fileManager.loadBatches()
-        
-        print("Loaded \(pendingBatches.count) batches from disk.")
     }
 
     var isAcceptingData: Bool {

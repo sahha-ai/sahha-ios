@@ -1,14 +1,16 @@
 import Foundation
 
 final class BatchFileManager {
+    private let logger: LoggerProtocol
     private let fileManager: FileManager
     private let directory: URL
 
-    init(directory: URL, fileManager: FileManager = .default) throws {
+    init(directory: URL, fileManager: FileManager = .default, logger: LoggerProtocol) throws {
+        self.logger = logger
         self.directory = directory
         self.fileManager = fileManager
-        
-        print("Batch directory set to: \(directory.absoluteString)")
+
+        logger.info("Batch directory set to: \(directory.absoluteString)")
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
     }
 
@@ -20,11 +22,13 @@ final class BatchFileManager {
             try data.write(to: fileURL)
             return fileURL
         } catch {
-            print("Failed to save batch to \(fileURL): \(error)")
+            logger.error(
+                "Failed to save batch to \(fileURL): \(error)",
+            )
             return nil
         }
     }
-    
+
     private func generateFileName() -> String {
         let timestamp = Date().timeIntervalSince1970
         let uuid = UUID().uuidString
@@ -39,18 +43,18 @@ final class BatchFileManager {
     func deleteBatch(at fileURL: URL) throws {
         try fileManager.removeItem(at: fileURL)
     }
-    
+
     func deleteAllBatches() throws {
         try fileManager.removeItem(at: directory)
     }
-    
+
     private func loadBatch<T: Decodable>(form fileURL: URL) -> ([T], URL)? {
         do {
             let data = try Data(contentsOf: fileURL)
             let batch = try JSONDecoder().decode([T].self, from: data)
             return (batch, fileURL)
         } catch {
-            print("Failed to load batch from \(fileURL): \(error)")
+            logger.error("Failed to load batch from \(fileURL): \(error)")
             return nil
         }
     }

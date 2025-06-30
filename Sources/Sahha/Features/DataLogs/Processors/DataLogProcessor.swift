@@ -1,13 +1,15 @@
 import Foundation
 
 final actor DataLogProcessor: DataLogProcessorProtocol {
+    private let logger: LoggerProtocol
     private let batchManager: BatchManager<DataLog>
     private let dataLogService: DataLogServiceProtocol
     private let semaphore: AsyncSemaphore
 
     private var processingTask: Task<Void, Never>?
 
-    init(batchManager: BatchManager<DataLog>, dataLogService: DataLogServiceProtocol, maxConcurrentUploads: Int = 3) {
+    init(logger: LoggerProtocol, batchManager: BatchManager<DataLog>, dataLogService: DataLogServiceProtocol, maxConcurrentUploads: Int = 3) {
+        self.logger = logger
         self.batchManager = batchManager
         self.dataLogService = dataLogService
         self.semaphore = AsyncSemaphore(value: max(1, maxConcurrentUploads))
@@ -52,8 +54,6 @@ final actor DataLogProcessor: DataLogProcessorProtocol {
     private func processBatches() async {
         guard processingTask == nil else { return }
 
-        print("Processing batches...")
-
         processingTask = Task {
             defer { self.processingTask = nil }
 
@@ -70,9 +70,9 @@ final actor DataLogProcessor: DataLogProcessorProtocol {
                         do {
                             try await self?.uploadBatchWithRetry(batch)
                             try await self?.batchManager.deleteBatch(url: url)
-                            print("Processed and deleted batch at \(url)")
+                            self?.logger.info("Processed and deleted batch at \(url)")
                         } catch {
-                            print("Failed to process batch at \(url): \(error)")
+                            self?.logger.error("Failed to process batch at \(url): \(error)")
                             await self?.batchManager.add(batch)
                         }
                         await self?.semaphore.signal()
@@ -100,7 +100,7 @@ final actor DataLogProcessor: DataLogProcessorProtocol {
 
                 let delayIndex = min(attempts, retryDelays.count - 1)
                 let delay = retryDelays[delayIndex]
-                print("Upload attempt \(attempts + 1) failed: \(error). Retrying after \(delay)s")
+                logger.info("Upload attempt \(attempts + 1) failed: \(error). Retrying after \(delay)s")
 
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 attempts += 1

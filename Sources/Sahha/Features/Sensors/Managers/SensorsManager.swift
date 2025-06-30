@@ -1,13 +1,15 @@
 import Foundation
 
 final actor SensorsManager: SensorsManagerProtocol {
+    private let logger: LoggerProtocol
     private let userDefaults: UserDefaults
     private let hkManager: HKManagerProtocol
 
     private let enabledSensorsKey = Constants.UserDefaultsKeys.enabledSensors
     private var enabledSensorsCache: Set<SahhaSensor>
 
-    init(userDefaults: UserDefaults = .standard, hkManager: HKManagerProtocol) {
+    init(logger: LoggerProtocol, userDefaults: UserDefaults = .standard, hkManager: HKManagerProtocol) {
+        self.logger = logger
         self.userDefaults = userDefaults
         self.hkManager = hkManager
 
@@ -16,6 +18,7 @@ final actor SensorsManager: SensorsManagerProtocol {
     }
     
     func resumeSensors() async throws {
+        logger.info("Resuming sensors")
         try await hkManager.enableSensors(enabledSensorsCache)
     }
 

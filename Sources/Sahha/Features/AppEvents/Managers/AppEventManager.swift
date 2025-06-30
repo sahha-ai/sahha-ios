@@ -16,17 +16,20 @@ extension LifecycleEvent {
 }
 
 final class AppEventManager: AppEventManagerProtocol {
+    private let logger: LoggerProtocol
     private let lifecycleObserver: LifecycleObserverProtocol
     private let sensorsManager: SensorsManagerProtocol
     private let dataLogProcessor: any DataLogProcessorProtocol
     private let deviceInfoManager: DeviceInformationManagerProtocol
 
     init(
+        logger: LoggerProtocol,
         lifecycleObserver: LifecycleObserverProtocol,
         sensorsManager: SensorsManagerProtocol,
         dataLogProcessor: any DataLogProcessorProtocol,
         deviceInfoManager: DeviceInformationManagerProtocol
     ) {
+        self.logger = logger
         self.lifecycleObserver = lifecycleObserver
         self.sensorsManager = sensorsManager
         self.dataLogProcessor = dataLogProcessor
@@ -70,7 +73,7 @@ final class AppEventManager: AppEventManagerProtocol {
         do {
             try await dataLogProcessor.process([dataLog])
         } catch {
-            print("Failed to process DataLog for event \(event): \(error)")
+            logger.error("Failed to process DataLog for event \(event): \(error)")
         }
     }
 

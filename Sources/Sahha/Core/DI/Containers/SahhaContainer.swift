@@ -7,13 +7,10 @@ final actor SahhaContainer {
     private init() {}
 
     func configure(with settings: SahhaSettings) async throws {
-        guard container == nil else {
-            print("Sahha is already configured.")
-            return
-        }
+        // Already configured, return early.
+        guard container == nil else { return }
+        
         container = DIContainer(sahhaSettings: settings)
-
-        print("Configuring Sahha...")
 
         configurationTask = Task {
             // Register all providers sequentially
@@ -34,8 +31,6 @@ final actor SahhaContainer {
         // Wait for the configuration to complete
         try await configurationTask?.value
         configurationTask = nil
-
-        print("Configuration completed.")
     }
 
     func startAuthenticatedServices() async throws {

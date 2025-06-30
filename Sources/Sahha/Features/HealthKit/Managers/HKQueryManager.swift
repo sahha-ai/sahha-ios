@@ -1,6 +1,7 @@
 import HealthKit
 
 final actor HKQueryManager: HKQueryManagerProtocol {
+    private let logger: LoggerProtocol
     private let healthStore: HKHealthStore
     private let anchorPersistence = AnchorPersistence()
     private let normalisers: [String: any HKNormaliser]
@@ -10,57 +11,63 @@ final actor HKQueryManager: HKQueryManagerProtocol {
     private var observerQueries: [String: HKObserverQuery] = [:]
     private var isDisposed = false
 
-    init(healthStore: HKHealthStore = HKHealthStore(), normalisers: [String: any HKNormaliser], processor: any DataLogProcessorProtocol) {
+    init(
+        logger: LoggerProtocol,
+        healthStore: HKHealthStore = HKHealthStore(),
+        normalisers: [String: any HKNormaliser],
+        processor: any DataLogProcessorProtocol
+    ) {
+        self.logger = logger
         self.healthStore = healthStore
         self.normalisers = normalisers
         self.processor = processor
         self.anchors = anchorPersistence.loadAnchors()
     }
-    
-    func enableBackgroundDelivery(for type: HKObjectType) async throws {
-            try await healthStore.enableBackgroundDelivery(for: type, frequency: .immediate)
-        }
 
-        func disableBackgroundDelivery(for type: HKObjectType) async throws {
-            try await healthStore.disableBackgroundDelivery(for: type)
-        }
+    func enableBackgroundDelivery(for type: HKObjectType) async throws {
+        try await healthStore.enableBackgroundDelivery(for: type, frequency: .immediate)
+    }
+
+    func disableBackgroundDelivery(for type: HKObjectType) async throws {
+        try await healthStore.disableBackgroundDelivery(for: type)
+    }
 
     func startObserverQuery(for type: HKObjectType) async {
-            guard let sampleType = type as? HKSampleType else { return }
-            let identifier = sampleType.identifier
+        guard let sampleType = type as? HKSampleType else { return }
+        let identifier = sampleType.identifier
 
-            if observerQueries[identifier] != nil {
-                print("Already observing \(identifier), skipping.")
-                return
-            }
-
-            let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { _, completionHandler, error in
-                if let error = error as? HKError, error.code == .errorAuthorizationDenied {
-                    print("Authorization denied for \(identifier), stopping observer query.")
-                    Task {
-                        await self.stopObserverQuery(for: sampleType)
-                    }
-                } else if let error = error {
-                    print("Observer query failed for \(identifier): \(error.localizedDescription)")
-                } else {
-                    Task {
-                        await self.runAnchorQuery(for: sampleType)
-                    }
-                }
-                completionHandler()
-            }
-
-            observerQueries[identifier] = query
-            healthStore.execute(query)
-            print("Started observer query for \(identifier)")
+        if observerQueries[identifier] != nil {
+            logger.warning("Already observing \(identifier), skipping.")
+            return
         }
+
+        let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { _, completionHandler, error in
+            if let error = error as? HKError, error.code == .errorAuthorizationDenied {
+                self.logger.warning("Authorization denied for \(identifier), stopping observer query.")
+                Task {
+                    await self.stopObserverQuery(for: sampleType)
+                }
+            } else if let error = error {
+                self.logger.error("Observer query failed for \(identifier): \(error.localizedDescription)")
+            } else {
+                Task {
+                    await self.runAnchorQuery(for: sampleType)
+                }
+            }
+            completionHandler()
+        }
+
+        observerQueries[identifier] = query
+        healthStore.execute(query)
+        logger.info("Started observer query for \(identifier)")
+    }
 
     func stopObserverQuery(for type: HKObjectType) async {
         let identifier = type.identifier
         if let query = observerQueries[identifier] {
             healthStore.stop(query)
             observerQueries.removeValue(forKey: identifier)
-            print("Stopped observer query for \(identifier)")
+            logger.info("Stopped observer query for \(identifier)")
         }
     }
 
@@ -89,15 +96,15 @@ final actor HKQueryManager: HKQueryManagerProtocol {
                     limit: 5000
                 ) { _, samples, _, newAnchor, error in
                     if let error = error as? HKError, error.code == .errorAuthorizationDenied {
-                        print("Authorization denied for \(identifier), stopping observer query.")
+                        self.logger.warning("Authorization denied for \(identifier), stopping observer query.")
                         Task {
                             await self.stopObserverQuery(for: type)
                         }
                     } else if let error = error {
-                        print("Anchored query failed for \(identifier): \(error)")
+                        self.logger.error("Anchored query failed for \(identifier): \(error)")
                     }
 
-                    print("Received \(samples?.count ?? 0) samples for \(identifier)")
+                    self.logger.info("Received \(samples?.count ?? 0) samples for \(identifier)")
                     continuation.resume(returning: (samples ?? [], newAnchor))
                 }
 
@@ -122,7 +129,7 @@ final actor HKQueryManager: HKQueryManagerProtocol {
                     self.anchorPersistence.saveAnchor(for: identifier, anchor: newAnchor)
                 }
             } catch {
-                print("Error processing data: \(error.localizedDescription)")
+                logger.error("Error processing data: \(error.localizedDescription)")
             }
         }
     }

@@ -5,8 +5,9 @@ struct DemographicProvider: ServiceProvider {
             return DemographicService(apiService: apiService)
         }
         await container.registerSingleton(DemographicManagerProtocol.self) { container in
+            let logger = try await container.resolve(LoggerProtocol.self)
             let demographicService = try await container.resolve(DemographicServiceProtocol.self)
-            return DemographicManager(demographicService: demographicService)
+            return DemographicManager(logger: logger, demographicService: demographicService)
         }
     }
 }

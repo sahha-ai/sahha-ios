@@ -1,13 +1,15 @@
 import HealthKit
 
 final actor HKManager: HKManagerProtocol {
+    private let logger: LoggerProtocol
     private let permissionManager: HKPermissionManagerProtocol
     private let queryManager: HKQueryManagerProtocol
 
-    init(permissionManager: HKPermissionManagerProtocol, queryManager: HKQueryManagerProtocol) {
-            self.permissionManager = permissionManager
-            self.queryManager = queryManager
-        }
+    init(logger: LoggerProtocol, permissionManager: HKPermissionManagerProtocol, queryManager: HKQueryManagerProtocol) {
+        self.logger = logger
+        self.permissionManager = permissionManager
+        self.queryManager = queryManager
+    }
 
     func enableSensors(_ sensors: Set<SahhaSensor>) async throws {
         let sampleTypes = sensors.compactMap { SensorMapper.objectType(for: $0) }
@@ -22,7 +24,7 @@ final actor HKManager: HKManagerProtocol {
                         try await self.queryManager.enableBackgroundDelivery(for: sampleType)
                     } catch {
                         let sensor = SensorMapper.sensor(for: sampleType)
-                        print("Failed to enable background delivery for \(sensor?.rawValue ?? "unknown sensor"): \(error)")
+                        self.logger.error("Failed to enable background delivery for \(sensor?.rawValue ?? "unknown sensor"): \(error)")
                     }
                     await self.queryManager.startObserverQuery(for: sampleType)
                 }
@@ -42,7 +44,7 @@ final actor HKManager: HKManagerProtocol {
                         try await self.queryManager.disableBackgroundDelivery(for: sampleType)
                     } catch {
                         let sensor = SensorMapper.sensor(for: sampleType)
-                        print("Failed to disable background delivery for \(sensor?.rawValue ?? "unknown"): \(error)")
+                        self.logger.error("Failed to disable background delivery for \(sensor?.rawValue ?? "unknown"): \(error)")
                     }
                     await self.queryManager.stopObserverQuery(for: sampleType)
                 }

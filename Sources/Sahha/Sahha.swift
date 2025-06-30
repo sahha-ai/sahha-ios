@@ -3,10 +3,12 @@ import UIKit
 /*:
  TODO:
 
- - Inject logging
+ - Get sensor status
  - Get stats / get samples
  - Stub DataLogAggregator and inject into DataLogProcessor
-
+ - DataLog additional properties
+ - HKNormaliser for each data type.
+ 
  */
 
 public final class Sahha {
@@ -24,11 +26,12 @@ public final class Sahha {
 
                 if let tokenManager = try? await container.getTokenManager(),
                     let token = try? await tokenManager.ensureValidProfileToken(),
-                    !token.isEmpty {
+                    !token.isEmpty
+                {
                     try await container.startAuthenticatedServices()
                 }
             } catch {
-                print("Failed to configure Sahha: \(error.localizedDescription)")
+                logError("Failed to configure Sahha", error: error)
             }
             callback?()
         }
@@ -63,7 +66,7 @@ public final class Sahha {
                 try await container.startAuthenticatedServices()
                 callback(nil, true)
             } catch {
-                print("Failed to authenticate: \(error.localizedDescription)")
+                logError("Failed to authenticate", error: error)
                 callback(error.localizedDescription, false)
             }
         }
@@ -78,7 +81,7 @@ public final class Sahha {
                 try await container.startAuthenticatedServices()
                 callback(nil, true)
             } catch {
-                print("Failed to authenticate: \(error.localizedDescription)")
+                logError("Failed to authenticate", error: error)
                 callback(error.localizedDescription, false)
             }
         }
@@ -90,7 +93,7 @@ public final class Sahha {
                 try await container.resetContainer()
                 callback(nil, true)
             } catch {
-                print("Failed to deauthenticate: \(error.localizedDescription)")
+                logError("Failed to deauthenticate", error: error)
                 callback(error.localizedDescription, false)
             }
         }
@@ -105,7 +108,7 @@ public final class Sahha {
                 let demographic = try await demographicManager.getDemographic()
                 callback(nil, demographic)
             } catch {
-                print("Failed to get demographic: \(error.localizedDescription)")
+                logError("Failed to get demographic", error: error)
                 callback(error.localizedDescription, nil)
             }
         }
@@ -118,7 +121,7 @@ public final class Sahha {
                 try await demographicService.updateDemographic(demographic)
                 callback(nil, true)
             } catch {
-                print("Failed to get demographic: \(error.localizedDescription)")
+                logError("Failed to post demographic", error: error)
                 callback(error.localizedDescription, false)
             }
         }
@@ -133,7 +136,7 @@ public final class Sahha {
                 try await sensorsManager.enableSensors(sensors)
                 callback(nil, .pending)
             } catch {
-                print("Error enabling sensors: \(error.localizedDescription)")
+                logError("Error enabling sensors", error: error)
                 callback(error.localizedDescription, .disabled)
             }
         }
@@ -172,7 +175,7 @@ public final class Sahha {
                 let scoreJson = try scores.toDataWrappedJSON()
                 callback(nil, scoreJson)
             } catch {
-                print("Error getting scores: \(error.localizedDescription)")
+                logError("Error getting scores", error: error)
                 callback(error.localizedDescription, nil)
             }
         }
@@ -199,7 +202,7 @@ public final class Sahha {
                 let biomarkerJson = try biomarkers.toDataWrappedJSON()
                 callback(nil, biomarkerJson)
             } catch {
-                print("Error getting scores: \(error.localizedDescription)")
+                logError("Error getting scores", error: error)
                 callback(error.localizedDescription, nil)
             }
         }
@@ -212,11 +215,28 @@ public final class Sahha {
             guard let settingsURL = URL(string: UIApplication.openSettingsURLString),
                 UIApplication.shared.canOpenURL(settingsURL)
             else {
-                print("Invalid or unsupported settings URL.")
+                logError("Failed to open app settings: Invalid or unsupported settings URL.")
                 return
             }
 
             await UIApplication.shared.open(settingsURL)
         }
     }
+
+    // MARK: Errors
+
+    private static func logError(_ message: String, error: Error? = nil) {
+        Task {
+            do {
+                let logger = try await container.getLogger()
+                let fullMessage = error != nil ? "\(message): \(error!.localizedDescription)" : message
+                logger.error(fullMessage)
+            } catch {
+                #if DEBUG
+                    print("Failed to log error: \(message)")
+                #endif
+            }
+        }
+    }
+
 }

@@ -11,13 +11,6 @@ final class AuthenticationInterceptor: APIInterceptor {
             modifiedRequest.addHeader(name: "Authorization", value: "Profile \(token)")
         }
 
-        let response = try await next(modifiedRequest)
-
-        if response.response.statusCode == 401 {
-            // Optionally refresh token and retry
-            print("Token expired, could refresh here and retry")
-        }
-
-        return response
+        return try await next(modifiedRequest)
     }
 }

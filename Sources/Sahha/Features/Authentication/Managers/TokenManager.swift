@@ -1,6 +1,7 @@
 import Foundation
 
 final actor TokenManager: TokenManagerProtocol {
+    private let logger: LoggerProtocol
     private let authService: AuthenticationServiceProtocol
     private let storage: any KeychainProtocol<TokenResponse>
     private let refreshOffset: TimeInterval
@@ -10,11 +11,13 @@ final actor TokenManager: TokenManagerProtocol {
     private var refreshTask: Task<TokenResponse, Error>?
 
     init(
+        logger: LoggerProtocol,
         authService: AuthenticationServiceProtocol,
         storage: any KeychainProtocol<TokenResponse> = KeychainStorage(key: Constants.Keychain.tokenAccount),
         refreshOffset: TimeInterval = 600  // 10 Minutes
 
     ) async {
+        self.logger = logger
         self.authService = authService
         self.storage = storage
         self.refreshOffset = refreshOffset
@@ -23,22 +26,38 @@ final actor TokenManager: TokenManagerProtocol {
     }
 
     func saveToken(_ token: TokenResponse) async throws {
-        // Save the token to storage
-        try await storage.save(token)
-        cachedResponse = token
-        await updateSahhaWithToken()
+        do {
+            try await storage.save(token)
+            cachedResponse = token
+            await updateSahhaWithToken()
+            logger.info("Token saved successfully")
+        } catch {
+            logger.error("Failed to save token: \(error.localizedDescription)")
+            throw error
+        }
     }
 
     // Helper function to update Sahha with token and expiry
     private func updateSahhaWithToken() async {
-        guard let response = cachedResponse else { return }
+        guard let response = cachedResponse else {
+            logger.warning("No token response available")
+            return
+        }
         let token = response.profileToken
 
-        if !token.isEmpty, let exp = JWTDecoder.decodeExp(jwt: token) {
+        if token.isEmpty {
+            logger.warning("Token is empty")
+            cachedExpiry = nil
+            await Sahha.updateToken(token: nil, expiry: nil)
+            return
+        }
+
+        if let exp = JWTDecoder.decodeExp(jwt: token) {
             let expiry = Date(timeIntervalSince1970: exp)
             cachedExpiry = expiry
             await Sahha.updateToken(token: token, expiry: expiry)
         } else {
+            logger.warning("Failed to decode token expiry")
             cachedExpiry = nil
             await Sahha.updateToken(token: nil, expiry: nil)
         }
@@ -46,14 +65,24 @@ final actor TokenManager: TokenManagerProtocol {
 
     func getProfileToken() async -> String? {
         if cachedResponse == nil {
-            cachedResponse = try? await storage.retrieve()
+            do {
+                cachedResponse = try await storage.retrieve()
+            } catch {
+                logger.error("Failed to retrieve token from storage: \(error.localizedDescription)")
+                return nil
+            }
         }
         return cachedResponse?.profileToken
     }
 
     func getRefreshToken() async -> String? {
         if cachedResponse == nil {
-            cachedResponse = try? await storage.retrieve()
+            do {
+                cachedResponse = try await storage.retrieve()
+            } catch {
+                logger.error("Failed to retrieve token from storage: \(error.localizedDescription)")
+                return nil
+            }
         }
         return cachedResponse?.refreshToken
     }
@@ -61,36 +90,57 @@ final actor TokenManager: TokenManagerProtocol {
     func dispose() async throws {
         refreshTask?.cancel()
         refreshTask = nil
-        try await removeTokens()
+        do {
+            try await removeTokens()
+        } catch {
+            logger.error("Failed to remove tokens: \(error.localizedDescription)")
+            throw error
+        }
     }
 
     func removeTokens() async throws {
-        try await storage.delete()
-        cachedResponse = nil
-        cachedExpiry = nil
-        refreshTask = nil
-        await Sahha.updateToken(token: nil, expiry: nil)
+        do {
+            try await storage.delete()
+            cachedResponse = nil
+            cachedExpiry = nil
+            refreshTask = nil
+            await Sahha.updateToken(token: nil, expiry: nil)
+        } catch {
+            logger.error("Failed to delete tokens from storage: \(error.localizedDescription)")
+            throw error
+        }
     }
 
     func ensureValidProfileToken() async throws -> String? {
         guard let token = await getProfileToken() else {
+            logger.warning("No profile token available")
             return nil
         }
         guard await isTokenExpired() else {
             return token
         }
-        return try await refreshToken().profileToken
+        do {
+            let refreshedToken = try await refreshToken().profileToken
+            return refreshedToken
+        } catch {
+            logger.error("Failed to refresh token: \(error.localizedDescription)")
+            throw error
+        }
     }
 
     private func isTokenExpired() async -> Bool {
         guard let expiry = cachedExpiry else {
-            guard let token = await getProfileToken(), !token.isEmpty,
-                let exp = JWTDecoder.decodeExp(jwt: token)
-            else {
+            guard let token = await getProfileToken(), !token.isEmpty else {
+                logger.warning("Token is empty")
                 return true
             }
-            cachedExpiry = Date(timeIntervalSince1970: exp)
-            return Date().addingTimeInterval(refreshOffset) >= cachedExpiry!
+            if let exp = JWTDecoder.decodeExp(jwt: token) {
+                cachedExpiry = Date(timeIntervalSince1970: exp)
+                return Date().addingTimeInterval(refreshOffset) >= cachedExpiry!
+            } else {
+                logger.warning("Failed to decode token expiry")
+                return true
+            }
         }
         return Date().addingTimeInterval(refreshOffset) >= expiry
     }
@@ -102,6 +152,7 @@ final actor TokenManager: TokenManagerProtocol {
         let task = Task {
             defer { refreshTask = nil }
             guard let token = await getRefreshToken(), !token.isEmpty else {
+                logger.error("No refresh token available")
                 throw TokenError.noRefreshToken
             }
             let response = try await authService.refreshToken(refreshToken: token)
