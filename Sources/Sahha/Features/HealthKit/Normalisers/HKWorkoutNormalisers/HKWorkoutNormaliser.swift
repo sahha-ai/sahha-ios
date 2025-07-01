@@ -6,24 +6,40 @@ struct HKWorkoutNormaliser: HKNormaliser {
         guard let workoutSample = sample as? HKWorkout else {
             return nil
         }
+        
+        let workoutLog = DataLog(
+            parentId: nil,
+            logType: workoutSample.logType,
+            dataType: "exercise_session_\(workoutSample.workoutActivityType.name)",
+            value: 1.0,
+            unit: "minute",  // TODO: Double check this
+            source: workoutSample.sourceId,
+            recordingMethod: workoutSample.recordingMethod,
+            deviceType: workoutSample.deviceType,
+            startDate: workoutSample.startDate,
+            endDate: workoutSample.endDate,
+            additionalProperties: nil
+        )
+        
+        var additionalProperties: [String: String] = [:]
+        
+        if let distance = workoutSample.totalDistance {
+            let value = distance.doubleValue(for: .meter())
+            additionalProperties["total_distance"] = "\(value)"
+        }
+        
+        if let energy = workoutSample.totalEnergyBurned {
+            let value = energy.doubleValue(for: .largeCalorie())
+            additionalProperties["total_energy_burned"] = "\(value)"
+        }
+        
+        if !additionalProperties.isEmpty {
+            workoutLog.additionalProperties = additionalProperties
+        }
 
-        var logs: [DataLog] = [
-            .init(
-                parentId: nil,
-                logType: workoutSample.logType,
-                dataType: "exercise_session_\(workoutSample.workoutActivityType.name)",
-                value: 1.0,
-                unit: "minute",  // TODO: Double check this
-                source: workoutSample.sourceId,
-                recordingMethod: workoutSample.recordingMethod,
-                deviceType: workoutSample.deviceType,
-                startDate: workoutSample.startDate,
-                endDate: workoutSample.endDate,
-                additionalProperties: nil  // TODO
-            )
-        ]
+        var logs: [DataLog] = [workoutLog]
 
-        let parentId = logs[0].id
+        let parentId = workoutLog.id
 
         if let workoutEvents = workoutSample.workoutEvents, !workoutEvents.isEmpty {
             logs.append(

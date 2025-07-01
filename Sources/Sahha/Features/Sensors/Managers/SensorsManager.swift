@@ -33,8 +33,8 @@ final actor SensorsManager: SensorsManagerProtocol {
         enabledSensorsCache
     }
 
-    func getSensorStatus(_ sensor: Set<SahhaSensor>) async throws -> SahhaSensorStatus {
-        return .pending  // TODO: Implementation
+    func getSensorStatus(_ sensors: Set<SahhaSensor>) async throws -> SahhaSensorStatus {
+        try await hkManager.getSensorStatus(sensors)
     }
 
     func dispose() async {

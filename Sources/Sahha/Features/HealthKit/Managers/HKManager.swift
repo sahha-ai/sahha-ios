@@ -52,6 +52,20 @@ final actor HKManager: HKManagerProtocol {
             for try await _ in group {}
         }
     }
+    
+    func getSensorStatus(_ sensors: Set<SahhaSensor>) async throws -> SahhaSensorStatus {
+        let sampleTypes = sensors.compactMap { SensorMapper.objectType(for: $0) }
+        let sampleTypeSet = Set(sampleTypes)
+        
+        let status = try await permissionManager.getPermissionStatus(for: sampleTypeSet)
+        
+        switch status {
+        case .unnecessary:
+            return .enabled
+        default:
+            return .pending
+        }
+    }
 
     func dispose() async throws {
         try await queryManager.stopAllAndClear()

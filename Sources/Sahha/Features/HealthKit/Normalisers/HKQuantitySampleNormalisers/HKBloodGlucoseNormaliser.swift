@@ -1,20 +1,16 @@
 import Foundation
 import HealthKit
 
-struct HKHeartRateNormaliser: HKNormaliser {
+struct HKBloodGlucoseNormaliser: HKNormaliser {
     static let metadataMappings: MetadataMapping = [
-        HKMetadataKeyHeartRateSensorLocation: (
-            propertyName: "measurement_location",
-            mapper: enumMapper(for: HKHeartRateSensorLocation.self)
-        ),
-        HKMetadataKeyHeartRateMotionContext: (
-            propertyName: "motion_context",
-            mapper: enumMapper(for: HKHeartRateMotionContext.self)
+        HKMetadataKeyBloodGlucoseMealTime: (
+            propertyName: "relation_to_meal",
+            mapper: enumMapper(for: HKBloodGlucoseMealTime.self)
         )
     ]
 
     func normalise(sample: HKSample) -> [DataLog]? {
-        let type = HKQuantityType.quantityType(forIdentifier: .heartRate)
+        let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose)
 
         guard let quantitySample = sample as? HKQuantitySample, quantitySample.quantityType == type else {
             return nil
@@ -27,7 +23,7 @@ struct HKHeartRateNormaliser: HKNormaliser {
             logType: quantitySample.logType,
             dataType: quantitySample.dataType,
             value: value,
-            unit: "bpm",
+            unit: "mg/dL",
             source: quantitySample.sourceId,
             recordingMethod: quantitySample.recordingMethod,
             deviceType: quantitySample.deviceType,
@@ -40,27 +36,11 @@ struct HKHeartRateNormaliser: HKNormaliser {
     }
 }
 
-extension HKHeartRateSensorLocation: StringRepresentable {
+extension HKBloodGlucoseMealTime: StringRepresentable {
     var stringValue: String {
         switch self {
-        case .chest: return "chest"
-        case .earLobe: return "ear_lobe"
-        case .finger: return "finger"
-        case .foot: return "foot"
-        case .hand: return "hand"
-        case .wrist: return "wrist"
-        case .other: return "other"
-        @unknown default: return "unknown"
-        }
-    }
-}
-
-extension HKHeartRateMotionContext: StringRepresentable {
-    var stringValue: String {
-        switch self {
-        case .notSet: return "not_set"
-        case .sedentary: return "sedentary"
-        case .active: return "active"
+        case .preprandial: return "before_meal"
+        case .postprandial: return "after_meal"
         @unknown default: return "unknown"
         }
     }

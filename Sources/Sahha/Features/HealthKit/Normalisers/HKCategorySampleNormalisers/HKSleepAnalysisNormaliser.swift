@@ -8,26 +8,26 @@ struct HKSleepAnalysisNormaliser: HKNormaliser {
         guard let categorySample = sample as? HKCategorySample, categorySample.categoryType == type else {
             return nil
         }
-        
+
         let sleepStage = HKCategoryValueSleepAnalysis(rawValue: categorySample.value)?.name ?? "unknown"
         let duration = Calendar.current.dateComponents([.minute], from: categorySample.startDate, to: categorySample.endDate).minute ?? 0
         let value = Double(duration).rounded(toPlaces: 4)
 
-        return [
-            .init(
-                parentId: nil,
-                logType: categorySample.logType,
-                dataType: "sleep_stage_\(sleepStage)",
-                value: value,
-                unit: "minute",
-                source: categorySample.sourceId,
-                recordingMethod: categorySample.recordingMethod,
-                deviceType: categorySample.deviceType,
-                startDate: categorySample.startDate,
-                endDate: categorySample.endDate,
-                additionalProperties: nil
-            )
-        ]
+        let log = DataLog(
+            parentId: nil,
+            logType: categorySample.logType,
+            dataType: "sleep_stage_\(sleepStage)",
+            value: value,
+            unit: "minute",
+            source: categorySample.sourceId,
+            recordingMethod: categorySample.recordingMethod,
+            deviceType: categorySample.deviceType,
+            startDate: categorySample.startDate,
+            endDate: categorySample.endDate,
+            additionalProperties: nil
+        )
+
+        return [log]
     }
 }
 

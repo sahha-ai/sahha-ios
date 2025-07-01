@@ -1,3 +1,3 @@
-public enum SahhaSensorStatus: String {
+public enum SahhaSensorStatus: String, Sendable {
     case pending, unavailable, disabled, enabled
 }

@@ -14,9 +14,9 @@ open class DataLog: Codable, @unchecked Sendable {
     var deviceType: String
     var startDate: Date
     var endDate: Date
-    var additionalProperties: String?
+    var additionalProperties: [String: String]?
     
-    init(parentId: String?, logType: LogType, dataType: String, value: Double, unit: String, source: String, recordingMethod: RecordingMethod, deviceType: String, startDate: Date, endDate: Date, additionalProperties: String?) {
+    init(parentId: String?, logType: LogType, dataType: String, value: Double, unit: String, source: String, recordingMethod: RecordingMethod, deviceType: String, startDate: Date, endDate: Date, additionalProperties: [String: String]?) {
         self.parentId = parentId
         self.logType = logType
         self.dataType = dataType
@@ -46,7 +46,7 @@ open class DataLog: Codable, @unchecked Sendable {
         deviceType = try container.decode(String.self, forKey: .deviceType)
         startDate = try container.decode(Date.self, forKey: .startDate)
         endDate = try container.decode(Date.self, forKey: .endDate)
-        additionalProperties = try container.decodeIfPresent(String.self, forKey: .additionalProperties)
+        additionalProperties = try container.decodeIfPresent([String: String].self, forKey: .additionalProperties)
     }
     
     public func encode(to encoder: Encoder) throws {

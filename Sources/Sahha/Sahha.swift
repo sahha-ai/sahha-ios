@@ -134,10 +134,24 @@ public final class Sahha {
             do {
                 let sensorsManager = try await container.getSensorsManager()
                 try await sensorsManager.enableSensors(sensors)
-                callback(nil, .pending)
+                let status = try await sensorsManager.getSensorStatus(sensors)
+                callback(nil, status)
             } catch {
                 logError("Error enabling sensors", error: error)
-                callback(error.localizedDescription, .disabled)
+                callback(error.localizedDescription, .pending)
+            }
+        }
+    }
+    
+    public static func getSensorStatus(_ sensors: Set<SahhaSensor>, callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void) {
+        Task {
+            do {
+                let sensorsManager = try await container.getSensorsManager()
+                let status = try await sensorsManager.getSensorStatus(sensors)
+                callback(nil, status)
+            } catch {
+                logError("Error getting sensor status", error: error)
+                callback(error.localizedDescription, .pending)
             }
         }
     }
