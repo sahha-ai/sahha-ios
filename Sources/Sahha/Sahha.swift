@@ -3,11 +3,8 @@ import UIKit
 /*:
  TODO:
 
- - Get sensor status
  - Get stats / get samples
  - Stub DataLogAggregator and inject into DataLogProcessor
- - DataLog additional properties
- - HKNormaliser for each data type.
  
  */
 

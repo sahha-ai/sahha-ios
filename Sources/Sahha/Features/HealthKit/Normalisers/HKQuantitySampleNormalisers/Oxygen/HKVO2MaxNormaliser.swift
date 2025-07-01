@@ -1,29 +1,28 @@
-import Foundation
 import HealthKit
 
-struct HKBloodGlucoseNormaliser: HKNormaliser {
+struct HKVO2MaxNormaliser: HKNormaliser {
     static let metadataMappings: MetadataMapping = [
-        HKMetadataKeyBloodGlucoseMealTime: (
-            propertyName: "relation_to_meal",
-            mapper: enumMapper(for: HKBloodGlucoseMealTime.self)
+        HKMetadataKeyHeartRateSensorLocation: (
+            propertyName: "measurement_method",
+            mapper: enumMapper(for: HKVO2MaxTestType.self)
         )
     ]
 
     func normalise(sample: HKSample) -> [DataLog]? {
-        let type = HKQuantityType.quantityType(forIdentifier: .bloodGlucose)
+        let type = HKQuantityType.quantityType(forIdentifier: .vo2Max)
 
         guard let quantitySample = sample as? HKQuantitySample, quantitySample.quantityType == type else {
             return nil
         }
 
-        let value = quantitySample.quantity.doubleValue(for: HKUnit(from: "count/min")).rounded(toPlaces: 4)
+        let value = quantitySample.quantity.doubleValue(for: HKUnit(from: "ml/kg*min")).rounded(toPlaces: 4)
 
         let log = DataLog(
             parentId: nil,
             logType: quantitySample.logType,
             dataType: quantitySample.dataType,
             value: value,
-            unit: "mg/dL",
+            unit: "ml/kg/min",
             source: quantitySample.sourceId,
             recordingMethod: quantitySample.recordingMethod,
             deviceType: quantitySample.deviceType,
@@ -36,11 +35,12 @@ struct HKBloodGlucoseNormaliser: HKNormaliser {
     }
 }
 
-extension HKBloodGlucoseMealTime: StringRepresentable {
+extension HKVO2MaxTestType: StringRepresentable {
     var stringValue: String {
         switch self {
-        case .preprandial: return "before_meal"
-        case .postprandial: return "after_meal"
+        case .maxExercise: return "max_exercise"
+        case .predictionNonExercise: return "prediction_non_exercise"
+        case .predictionSubMaxExercise: return "prediction_sub_max_exercise"
         @unknown default: return "unknown"
         }
     }

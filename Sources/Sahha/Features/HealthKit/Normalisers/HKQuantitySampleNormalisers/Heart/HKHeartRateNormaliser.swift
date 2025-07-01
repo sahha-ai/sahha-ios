@@ -1,4 +1,3 @@
-import Foundation
 import HealthKit
 
 struct HKHeartRateNormaliser: HKNormaliser {
@@ -20,7 +19,7 @@ struct HKHeartRateNormaliser: HKNormaliser {
             return nil
         }
 
-        let value = quantitySample.quantity.doubleValue(for: HKUnit(from: "count/min")).rounded(toPlaces: 4)
+        let value = quantitySample.quantity.doubleValue(for: .count().unitDivided(by: .minute())).rounded(toPlaces: 4)
 
         let log = DataLog(
             parentId: nil,
