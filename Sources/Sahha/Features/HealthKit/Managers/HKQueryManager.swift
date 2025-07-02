@@ -81,6 +81,45 @@ final actor HKQueryManager: HKQueryManagerProtocol {
         isDisposed = true
     }
 
+    func querySamples(for type: HKSampleType, startDateTime: Date, endDateTime: Date) async throws -> [HKSample] {
+        let identifier = type.identifier
+
+        let samples: [HKSample] = try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: startDateTime, end: endDateTime)
+            let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+            let query = HKSampleQuery(
+                sampleType: type,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sortDescriptor]
+            ) { _, samples, error in
+                if let error = error as? HKError {
+                    self.logger.error("Sample query error for \(identifier): \(error.localizedDescription)")
+                    switch error.code {
+                    case .errorAuthorizationDenied:
+                        continuation.resume(throwing: HealthKitError.permissionDenied)
+                    default:
+                        continuation.resume(throwing: HealthKitError.queryFailed(sensor: identifier))
+                    }
+                } else if let error = error {
+                    self.logger.error("Sample query failed for \(identifier): \(error.localizedDescription)")
+                    continuation.resume(throwing: HealthKitError.queryFailed(sensor: identifier))
+                } else {
+                    continuation.resume(returning: samples ?? [])
+                }
+            }
+
+            healthStore.execute(query)
+        }
+
+        return samples
+    }
+
+    func queryStats(for type: HKObjectType, startDateTime: Date, endDateTime: Date) async -> [HKStatistics] {
+        fatalError("Not implemented")
+    }
+
     private func runAnchorQuery(for type: HKSampleType) async {
         guard !isDisposed else { return }
 
@@ -101,7 +140,7 @@ final actor HKQueryManager: HKQueryManagerProtocol {
                             await self.stopObserverQuery(for: type)
                         }
                     } else if let error = error {
-                        self.logger.error("Anchored query failed for \(identifier): \(error)")
+                        self.logger.error("Anchored query failed for \(identifier): \(error.localizedDescription)")
                     }
 
                     self.logger.info("Received \(samples?.count ?? 0) samples for \(identifier)")

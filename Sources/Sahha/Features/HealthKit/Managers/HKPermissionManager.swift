@@ -8,11 +8,19 @@ final class HKPermissionManager: HKPermissionManagerProtocol {
     }
     
     func requestPermissions(for types: Set<HKObjectType>) async throws {
+        guard !types.isEmpty else {
+            throw HealthKitError.emptyRequest
+        }
+        
         try await healthStore.requestAuthorization(toShare: [], read: types)
     }
     
     func getPermissionStatus(for types: Set<HKObjectType>) async throws -> HKAuthorizationRequestStatus {
-        try await healthStore.statusForAuthorizationRequest(toShare: [], read: types)
+        guard !types.isEmpty else {
+            throw HealthKitError.emptyRequest
+        }
+        
+        return try await healthStore.statusForAuthorizationRequest(toShare: [], read: types)
     }
     
     func getPermissionStatus(for type: HKObjectType) -> HKAuthorizationStatus {

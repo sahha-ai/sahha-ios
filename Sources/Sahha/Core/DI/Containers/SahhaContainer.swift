@@ -58,7 +58,7 @@ final actor SahhaContainer {
             DeviceInformationServiceProtocol.self,
             DeviceInformationManagerProtocol.self,
             DemographicManagerProtocol.self,
-            SensorsManagerProtocol.self,
+            HKManagerProtocol.self,
             AppEventManagerProtocol.self,
         ]
         return protectedTypes.contains { $0 == type }
@@ -130,5 +130,9 @@ final actor SahhaContainer {
 
     func getAppEventManager() async throws -> AppEventManagerProtocol {
         return try await resolve(AppEventManagerProtocol.self)
+    }
+    
+    func getHKManager() async throws -> HKManagerProtocol {
+        return try await resolve(HKManagerProtocol.self)
     }
 }

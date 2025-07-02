@@ -16,13 +16,16 @@ final actor SensorsManager: SensorsManagerProtocol {
         let rawSensors = userDefaults.array(forKey: enabledSensorsKey) as? [String] ?? []
         self.enabledSensorsCache = Set(rawSensors.compactMap { SahhaSensor(rawValue: $0) })
     }
-    
+
     func resumeSensors() async throws {
         logger.info("Resuming sensors")
         try await hkManager.enableSensors(enabledSensorsCache)
     }
 
     func enableSensors(_ sensors: Set<SahhaSensor>) async throws {
+        guard !sensors.isEmpty else {
+            throw ValidationError.emptyCollection(collection: "Sensors")
+        }
         let rawSensors = sensors.map { $0.rawValue }
         userDefaults.set(rawSensors, forKey: enabledSensorsKey)
         self.enabledSensorsCache = sensors
@@ -34,7 +37,10 @@ final actor SensorsManager: SensorsManagerProtocol {
     }
 
     func getSensorStatus(_ sensors: Set<SahhaSensor>) async throws -> SahhaSensorStatus {
-        try await hkManager.getSensorStatus(sensors)
+        guard !sensors.isEmpty else {
+            throw ValidationError.emptyCollection(collection: "Sensors")
+        }
+        return try await hkManager.getSensorStatus(sensors)
     }
 
     func dispose() async {

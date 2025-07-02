@@ -11,7 +11,7 @@ struct HKWorkoutNormaliser: HKNormaliser {
             logType: workoutSample.logType,
             dataType: "exercise_session_\(workoutSample.workoutActivityType.name)",
             value: 1.0,
-            unit: "minute",  // TODO: Double check this
+            unit: "minute",
             source: workoutSample.sourceId,
             recordingMethod: workoutSample.recordingMethod,
             deviceType: workoutSample.deviceType,
@@ -23,12 +23,12 @@ struct HKWorkoutNormaliser: HKNormaliser {
         var additionalProperties: [String: String] = [:]
         
         if let distance = workoutSample.totalDistance {
-            let value = distance.doubleValue(for: .meter())
+            let value = distance.doubleValue(for: .meter()).rounded(toPlaces: 4)
             additionalProperties["total_distance"] = "\(value)"
         }
         
         if let energy = workoutSample.totalEnergyBurned {
-            let value = energy.doubleValue(for: .largeCalorie())
+            let value = energy.doubleValue(for: .largeCalorie()).rounded(toPlaces: 4)
             additionalProperties["total_energy_burned"] = "\(value)"
         }
         
@@ -48,7 +48,7 @@ struct HKWorkoutNormaliser: HKNormaliser {
                         logType: workoutSample.logType,
                         dataType: "exercise_event_\(event.type.name)",
                         value: 1.0,
-                        unit: "minute",  // TODO: Double check this
+                        unit: "minute",
                         source: workoutSample.sourceId,
                         recordingMethod: workoutSample.recordingMethod,
                         deviceType: workoutSample.deviceType,
@@ -69,7 +69,7 @@ struct HKWorkoutNormaliser: HKNormaliser {
                         logType: workoutSample.logType,
                         dataType: "exercise_segment_\(activity.workoutConfiguration.activityType.name)",
                         value: 1.0,
-                        unit: "minute",  // TODO: Double check this
+                        unit: "minute",
                         source: workoutSample.sourceId,
                         recordingMethod: workoutSample.recordingMethod,
                         deviceType: workoutSample.deviceType,

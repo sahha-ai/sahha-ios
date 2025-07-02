@@ -12,10 +12,14 @@ final actor HKManager: HKManagerProtocol {
     }
 
     func enableSensors(_ sensors: Set<SahhaSensor>) async throws {
-        let sampleTypes = sensors.compactMap { SensorMapper.objectType(for: $0) }
+        guard !sensors.isEmpty else {
+            throw ValidationError.emptyCollection(collection: "Sensors")
+        }
+        let sampleTypes = sensors.compactMap { HKSensorMapper.objectType(for: $0) }
+        guard !sampleTypes.isEmpty else {
+            throw HealthKitError.noMappedSensors
+        }
         let sampleTypeSet = Set(sampleTypes)
-
-        try await permissionManager.requestPermissions(for: sampleTypeSet)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             for sampleType in sampleTypeSet {
@@ -23,7 +27,7 @@ final actor HKManager: HKManagerProtocol {
                     do {
                         try await self.queryManager.enableBackgroundDelivery(for: sampleType)
                     } catch {
-                        let sensor = SensorMapper.sensor(for: sampleType)
+                        let sensor = HKSensorMapper.sahhaSensor(for: sampleType)
                         self.logger.error("Failed to enable background delivery for \(sensor?.rawValue ?? "unknown sensor"): \(error)")
                     }
                     await self.queryManager.startObserverQuery(for: sampleType)
@@ -34,7 +38,7 @@ final actor HKManager: HKManagerProtocol {
     }
 
     func disableSensors(_ sensors: Set<SahhaSensor>) async throws {
-        let sampleTypes = sensors.compactMap { SensorMapper.objectType(for: $0) }
+        let sampleTypes = sensors.compactMap { HKSensorMapper.objectType(for: $0) }
         let sampleTypeSet = Set(sampleTypes)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -43,7 +47,7 @@ final actor HKManager: HKManagerProtocol {
                     do {
                         try await self.queryManager.disableBackgroundDelivery(for: sampleType)
                     } catch {
-                        let sensor = SensorMapper.sensor(for: sampleType)
+                        let sensor = HKSensorMapper.sahhaSensor(for: sampleType)
                         self.logger.error("Failed to disable background delivery for \(sensor?.rawValue ?? "unknown"): \(error)")
                     }
                     await self.queryManager.stopObserverQuery(for: sampleType)
@@ -52,18 +56,54 @@ final actor HKManager: HKManagerProtocol {
             for try await _ in group {}
         }
     }
-    
+
     func getSensorStatus(_ sensors: Set<SahhaSensor>) async throws -> SahhaSensorStatus {
-        let sampleTypes = sensors.compactMap { SensorMapper.objectType(for: $0) }
+        guard !sensors.isEmpty else {
+            throw ValidationError.emptyCollection(collection: "Sensors")
+        }
+        let sampleTypes = sensors.compactMap { HKSensorMapper.objectType(for: $0) }
+        guard !sampleTypes.isEmpty else {
+            throw HealthKitError.noMappedSensors
+        }
         let sampleTypeSet = Set(sampleTypes)
-        
+
         let status = try await permissionManager.getPermissionStatus(for: sampleTypeSet)
-        
+
         switch status {
         case .unnecessary:
             return .enabled
         default:
             return .pending
+        }
+    }
+
+    func getSamples(for sensor: SahhaSensor, startDateTime: Date, endDateTime: Date) async throws -> [HKSample] {
+        guard let sampleType = HKSensorMapper.objectType(for: sensor) as? HKSampleType else {
+            throw HealthKitError.unknownType
+        }
+
+        let status = permissionManager.getPermissionStatus(for: sampleType)
+
+        switch status {
+        case .sharingAuthorized:
+            return try await queryManager.querySamples(for: sampleType, startDateTime: startDateTime, endDateTime: endDateTime)
+        default:
+            throw HealthKitError.permissionDenied
+        }
+    }
+
+    func getStats(for sensor: SahhaSensor, startDateTime: Date, endDateTime: Date) async throws -> [HKStatistics] {
+        guard let sampleType = HKSensorMapper.objectType(for: sensor) else {
+            throw HealthKitError.unknownType
+        }
+
+        let status = permissionManager.getPermissionStatus(for: sampleType)
+
+        switch status {
+        case .sharingAuthorized:
+            return try await queryManager.queryStats(for: sampleType, startDateTime: startDateTime, endDateTime: endDateTime)
+        default:
+            throw HealthKitError.permissionDenied
         }
     }
 

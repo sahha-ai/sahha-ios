@@ -1,8 +1,8 @@
 import HealthKit
 
 extension HKSample {
-    private static let objectTypeToLogType: [String: LogType] = {
-        var mappings: [String: LogType] = [
+    private static let objectTypeToBiomarkerCategory: [String: SahhaBiomarkerCategory] = {
+        var mappings: [String: SahhaBiomarkerCategory] = [
             // Sleep
             HKCategoryTypeIdentifier.sleepAnalysis.rawValue: .sleep,
             // Activity
@@ -19,10 +19,21 @@ extension HKSample {
             HKQuantityTypeIdentifier.appleStandTime.rawValue: .activity,
             HKQuantityTypeIdentifier.appleMoveTime.rawValue: .activity,
             HKQuantityTypeIdentifier.appleExerciseTime.rawValue: .activity,
-            // Blood
-            HKQuantityTypeIdentifier.bloodGlucose.rawValue: .blood,
-            HKQuantityTypeIdentifier.bloodPressureDiastolic.rawValue: .blood,
-            HKQuantityTypeIdentifier.bloodPressureSystolic.rawValue: .blood,
+            HKQuantityTypeIdentifier.activeEnergyBurned.rawValue: .activity,
+            HKQuantityTypeIdentifier.basalEnergyBurned.rawValue: .activity,
+            // Vitals
+            HKQuantityTypeIdentifier.bloodGlucose.rawValue: .vitals,
+            HKQuantityTypeIdentifier.bloodPressureDiastolic.rawValue: .vitals,
+            HKQuantityTypeIdentifier.bloodPressureSystolic.rawValue: .vitals,
+            HKQuantityTypeIdentifier.oxygenSaturation.rawValue: .vitals,
+            HKQuantityTypeIdentifier.respiratoryRate.rawValue: .vitals,
+            HKQuantityTypeIdentifier.vo2Max.rawValue: .vitals,
+            HKQuantityTypeIdentifier.heartRate.rawValue: .vitals,
+            HKQuantityTypeIdentifier.heartRateVariabilitySDNN.rawValue: .vitals,
+            HKQuantityTypeIdentifier.restingHeartRate.rawValue: .vitals,
+            HKQuantityTypeIdentifier.walkingHeartRateAverage.rawValue: .vitals,
+            HKQuantityTypeIdentifier.basalBodyTemperature.rawValue: .vitals,
+            HKQuantityTypeIdentifier.bodyTemperature.rawValue: .vitals,
             // Body
             HKQuantityTypeIdentifier.bodyFatPercentage.rawValue: .body,
             HKQuantityTypeIdentifier.bodyMassIndex.rawValue: .body,
@@ -30,45 +41,30 @@ extension HKSample {
             HKQuantityTypeIdentifier.height.rawValue: .body,
             HKQuantityTypeIdentifier.leanBodyMass.rawValue: .body,
             HKQuantityTypeIdentifier.waistCircumference.rawValue: .body,
-            // Energy
-            HKQuantityTypeIdentifier.activeEnergyBurned.rawValue: .energy,
-            HKQuantityTypeIdentifier.basalEnergyBurned.rawValue: .energy,
-            // Heart
-            HKQuantityTypeIdentifier.heartRate.rawValue: .heart,
-            HKQuantityTypeIdentifier.heartRateVariabilitySDNN.rawValue: .heart,
-            HKQuantityTypeIdentifier.restingHeartRate.rawValue: .heart,
-            HKQuantityTypeIdentifier.walkingHeartRateAverage.rawValue: .heart,
             // Nutrition
             HKQuantityTypeIdentifier.dietaryEnergyConsumed.rawValue: .nutrition,
-            // Oxygen
-            HKQuantityTypeIdentifier.oxygenSaturation.rawValue:.oxygen,
-            HKQuantityTypeIdentifier.respiratoryRate.rawValue:.oxygen,
-            HKQuantityTypeIdentifier.vo2Max.rawValue: .oxygen,
-            // Temperature
-            HKQuantityTypeIdentifier.basalBodyTemperature.rawValue: .temperature,
-            HKQuantityTypeIdentifier.bodyTemperature.rawValue: .temperature,
             // Exercise
             HKWorkoutTypeIdentifier: .exercise,
         ]
 
         if #available(iOS 16.0, *) {
-            let iOS16Mappings: [String: LogType] = [
+            let iOS16Mappings: [String: SahhaBiomarkerCategory] = [
                 // Activity
                 HKQuantityTypeIdentifier.runningStrideLength.rawValue: .activity,
                 HKQuantityTypeIdentifier.runningGroundContactTime.rawValue: .activity,
                 HKQuantityTypeIdentifier.runningVerticalOscillation.rawValue: .activity,
                 HKQuantityTypeIdentifier.runningPower.rawValue: .activity,
                 HKQuantityTypeIdentifier.runningSpeed.rawValue:  .activity,
-                // Temperature
-                HKQuantityTypeIdentifier.appleSleepingWristTemperature.rawValue: .temperature,
+                // Vitals
+                HKQuantityTypeIdentifier.appleSleepingWristTemperature.rawValue: .vitals,
             ]
             mappings.merge(iOS16Mappings) { (_, new) in new }
         }
 
         if #available(iOS 17.0, *) {
-            let iOS17Mappings: [String: LogType] = [
-                // Energy
-                HKQuantityTypeIdentifier.timeInDaylight.rawValue: .energy
+            let iOS17Mappings: [String: SahhaBiomarkerCategory] = [
+                // Activity
+                HKQuantityTypeIdentifier.timeInDaylight.rawValue: .activity
             ]
             mappings.merge(iOS17Mappings) { (_, new) in new }
         }
@@ -76,7 +72,7 @@ extension HKSample {
         return mappings
     }()
     
-    var logType: LogType {
-        return Self.objectTypeToLogType[self.sampleType.identifier] ?? .unknown
-    }
+//    var biomarkerCategory: SahhaBiomarkerCategory {
+//        return Self.objectTypeToBiomarkerCategory[self.sampleType.identifier]
+//    }
 }

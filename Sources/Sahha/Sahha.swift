@@ -4,8 +4,9 @@ import UIKit
  TODO:
 
  - Get stats / get samples
- - Stub DataLogAggregator and inject into DataLogProcessor
- 
+ - DataLog -> DataLogRequest
+ - HealthKit errors
+
  */
 
 public final class Sahha {
@@ -72,6 +73,12 @@ public final class Sahha {
     public static func authenticate(profileToken: String, refreshToken: String, callback: @escaping @Sendable (String?, Bool) -> Void) {
         Task {
             do {
+                guard !profileToken.isEmpty else {
+                    throw ValidationError.emptyString(field: "profileToken")
+                }
+                guard !refreshToken.isEmpty else {
+                    throw ValidationError.emptyString(field: "refreshToken")
+                }
                 let tokenManager = try await container.getTokenManager()
                 let tokenResponse = TokenResponse(profileToken: profileToken, refreshToken: refreshToken)
                 try await tokenManager.saveToken(tokenResponse)
@@ -129,6 +136,9 @@ public final class Sahha {
     public static func enableSensors(_ sensors: Set<SahhaSensor>, callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void) {
         Task {
             do {
+                guard !sensors.isEmpty else {
+                    throw ValidationError.emptyCollection(collection: "sensors")
+                }
                 let sensorsManager = try await container.getSensorsManager()
                 try await sensorsManager.enableSensors(sensors)
                 let status = try await sensorsManager.getSensorStatus(sensors)
@@ -139,10 +149,13 @@ public final class Sahha {
             }
         }
     }
-    
+
     public static func getSensorStatus(_ sensors: Set<SahhaSensor>, callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void) {
         Task {
             do {
+                guard !sensors.isEmpty else {
+                    throw ValidationError.emptyCollection(collection: "sensors")
+                }
                 let sensorsManager = try await container.getSensorsManager()
                 let status = try await sensorsManager.getSensorStatus(sensors)
                 callback(nil, status)
@@ -156,18 +169,50 @@ public final class Sahha {
     // MARK: Samples
 
     // TODO: Create SahhaSample struct and get samples directly from hkManager
-    public static func getSamples(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [String]) -> Void) {
+    public static func getSamples(
+        sensor: SahhaSensor,
+        startDateTime: Date,
+        endDateTime: Date,
+        callback: @escaping @Sendable (String?, [String]) -> Void
+    ) {
         Task {
-            fatalError("Not implemented")
+            do {
+                guard startDateTime <= endDateTime else {
+                    throw ValidationError.invalidDateRange
+                }
+                let hkManager = try await container.getHKManager()
+                let samples = try await hkManager.getSamples(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
+                let sampleStrings = samples.map { $0.description }  // Customize based on your needs
+                callback(nil, sampleStrings)
+            } catch {
+                logError("Error getting samples", error: error)
+                callback(error.localizedDescription, [])
+            }
         }
     }
 
     // MARK: Stats
 
     // TODO: Create SahhaStat struct and get stats directly from hkManager
-    public static func getStats(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [String]) -> Void) {
+    public static func getStats(
+        sensor: SahhaSensor,
+        startDateTime: Date,
+        endDateTime: Date,
+        callback: @escaping @Sendable (String?, [String]) -> Void
+    ) {
         Task {
-            fatalError("Not implemented")
+            do {
+                guard startDateTime <= endDateTime else {
+                    throw ValidationError.invalidDateRange
+                }
+                let hkManager = try await container.getHKManager()
+                let stats = try await hkManager.getStats(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
+                let statStrings = stats.map { $0.description }  // Customize based on your needs
+                callback(nil, statStrings)
+            } catch {
+                logError("Error getting stats", error: error)
+                callback(error.localizedDescription, [])
+            }
         }
     }
 
@@ -181,6 +226,12 @@ public final class Sahha {
     ) {
         Task {
             do {
+                guard startDateTime <= endDateTime else {
+                    throw ValidationError.invalidDateRange
+                }
+                guard !types.isEmpty else {
+                    throw ValidationError.emptyCollection(collection: "types")
+                }
                 let scoreService = try await container.getScoreService()
                 let scores = try await scoreService.getScores(types: types, startDateTime: startDateTime, endDateTime: endDateTime)
                 let scoreJson = try scores.toDataWrappedJSON()
@@ -203,6 +254,16 @@ public final class Sahha {
     ) {
         Task {
             do {
+                guard startDateTime <= endDateTime else {
+                    throw ValidationError.invalidDateRange
+                }
+                guard !categories.isEmpty else {
+                    throw ValidationError.emptyCollection(collection: "categories")
+                }
+                guard !types.isEmpty else {
+                    throw ValidationError.emptyCollection(collection: "types")
+                }
+                
                 let biomarkerService = try await container.getBiomarkerService()
                 let biomarkers = try await biomarkerService.getBiomarkers(
                     categories: categories,
@@ -238,13 +299,15 @@ public final class Sahha {
 
     private static func logError(_ message: String, error: Error? = nil) {
         Task {
+            let errorInfo = error.map { "\($0) (\(type(of: $0)))" } ?? "No error details"
+            let fullMessage = "\(message): \(errorInfo)"
+
             do {
                 let logger = try await container.getLogger()
-                let fullMessage = error != nil ? "\(message): \(error!.localizedDescription)" : message
                 logger.error(fullMessage)
             } catch {
                 #if DEBUG
-                    print("Failed to log error: \(message)")
+                    print("Failed to log error: \(message), error: \(errorInfo)")
                 #endif
             }
         }

@@ -6,18 +6,18 @@ struct HKRunningPowerNormaliser: HKNormaliser {
         
         let type = HKQuantityType.quantityType(forIdentifier: .runningPower)
         
-        guard let quantitySample = sample as? HKQuantitySample, quantitySample.quantityType == type else {
+        guard let quantitySample = sample as? HKQuantitySample, quantitySample.quantityType == type, let unit = quantitySample.unit else {
             return nil
         }
-        
-        let value = quantitySample.quantity.doubleValue(for: .watt()).rounded(toPlaces: 4)
-        
+
+        let value = quantitySample.quantity.doubleValue(for: unit).rounded(toPlaces: 4)
+
         let log = DataLog(
             parentId: nil,
             logType: quantitySample.logType,
             dataType: quantitySample.dataType,
             value: value,
-            unit: "watt",
+            unit: quantitySample.unitString,
             source: quantitySample.sourceId,
             recordingMethod: quantitySample.recordingMethod,
             deviceType: quantitySample.deviceType,
@@ -25,7 +25,7 @@ struct HKRunningPowerNormaliser: HKNormaliser {
             endDate: quantitySample.endDate,
             additionalProperties: nil
         )
-        
+
         return [log]
     }
 }

@@ -9,7 +9,7 @@ final class ScoreService: ScoreServiceProtocol{
     
     func getScores(types: Set<SahhaScoreType>, startDateTime: Date, endDateTime: Date) async throws -> [SahhaScore] {
         guard !types.isEmpty else {
-            throw ValidationError.emptyCollection(collection: "Types")
+            throw ValidationError.emptyCollection(collection: "types")
         }
         guard startDateTime <= endDateTime else {
             throw ValidationError.invalidDateRange
