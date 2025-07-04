@@ -1,7 +1,7 @@
 enum RecordingMethod: Int, Codable, Sendable {
-    case unknown = 0
-    case manual = 1
-    case automatic = 2
+    case unknown
+    case manual
+    case automatic
     
     var stringValue: String {
         switch self {

@@ -34,6 +34,7 @@ final actor BatchManager<T: Codable> {
             buffer.removeFirst(batchSize)
             if let fileURL = fileManager.saveBatch(batch) {
                 pendingBatches.append((batch, fileURL))
+                print("Created batch with \(batch.count) items")
             }
         }
     }

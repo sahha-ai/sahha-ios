@@ -1,9 +1,10 @@
 import Foundation
 
 // Future Mixed Types: Add a type property to DataLog and implement custom decoding if batches will contain multiple subclass types:
-// Decoding would then use a factory based on type, but this can be added when the need arises.
+// Decoding would then use a factory based on type, but this can be added when the need arises. use dataType for this?
 
 open class DataLog: Codable, @unchecked Sendable {
+    var id: String
     var parentId: String?
     var logType: LogType
     var dataType: String
@@ -28,14 +29,17 @@ open class DataLog: Codable, @unchecked Sendable {
         self.startDate = startDate
         self.endDate = endDate
         self.additionalProperties = additionalProperties
+        let components = [dataType, source, deviceType, startDate.isoDateTime, endDate.isoDateTime]
+        self.id = UUIDFactory.v5(from: components).uuidString
     }
     
     private enum CodingKeys: String, CodingKey {
-        case parentId, logType, dataType, value, unit, source, recordingMethod, deviceType, startDate, endDate, additionalProperties
+        case id, parentId, logType, dataType, value, unit, source, recordingMethod, deviceType, startDate, endDate, additionalProperties
     }
     
     required public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
         parentId = try container.decodeIfPresent(String.self, forKey: .parentId)
         logType = try container.decode(LogType.self, forKey: .logType)
         dataType = try container.decode(String.self, forKey: .dataType)
@@ -51,6 +55,7 @@ open class DataLog: Codable, @unchecked Sendable {
     
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
         try container.encodeIfPresent(parentId, forKey: .parentId)
         try container.encode(logType, forKey: .logType)
         try container.encode(dataType, forKey: .dataType)
@@ -62,10 +67,5 @@ open class DataLog: Codable, @unchecked Sendable {
         try container.encode(startDate, forKey: .startDate)
         try container.encode(endDate, forKey: .endDate)
         try container.encodeIfPresent(additionalProperties, forKey: .additionalProperties)
-    }
-    
-    var id: String {
-        let components = [dataType, source, deviceType, startDate.isoDateTime, endDate.isoDateTime]
-        return UUIDFactory.v5(from: components).uuidString
     }
 }

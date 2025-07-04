@@ -1,6 +1,6 @@
 import Foundation
 
-public struct SahhaSample: Comparable, Codable {
+public struct SahhaSample: Comparable, Codable, Sendable {
     public var id: String
     public var category: String
     public var type: String

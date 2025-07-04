@@ -1,5 +1,10 @@
 import Foundation
 
+protocol BiomarkerServiceProtocol: Sendable {
+    func getBiomarkers(categories: Set<SahhaBiomarkerCategory>, types: Set<SahhaBiomarkerType>, startDateTime: Date, endDateTime: Date) async throws
+        -> [SahhaBiomarker]
+}
+
 final class BiomarkerService: BiomarkerServiceProtocol {
     private let apiService: APIServiceProtocol
     
@@ -8,16 +13,6 @@ final class BiomarkerService: BiomarkerServiceProtocol {
     }
     
     func getBiomarkers(categories: Set<SahhaBiomarkerCategory>, types: Set<SahhaBiomarkerType>, startDateTime: Date, endDateTime: Date) async throws -> [SahhaBiomarker] {
-        guard startDateTime <= endDateTime else {
-            throw ValidationError.invalidDateRange
-        }
-        guard !categories.isEmpty else {
-            throw ValidationError.emptyCollection(collection: "categories")
-        }
-        guard !types.isEmpty else {
-            throw ValidationError.emptyCollection(collection: "types")
-        }
-       
         var queryParameters = [URLQueryItem]()
         categories.forEach { category in queryParameters.append(URLQueryItem(name: "categories", value: category.rawValue)) }
         types.forEach { type in queryParameters.append(URLQueryItem(name: "types", value: type.rawValue)) }

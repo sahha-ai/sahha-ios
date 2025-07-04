@@ -2,13 +2,13 @@ import HealthKit
 
 struct HKWorkoutNormaliser: HKNormaliser {
     func normalise(sample: HKSample) -> [DataLog]? {
-        guard let workoutSample = sample as? HKWorkout else {
+        guard let workoutSample = sample as? HKWorkout, let sensor = SahhaSensor.sensor(for: workoutSample.sampleType) else {
             return nil
         }
         
         let workoutLog = DataLog(
             parentId: nil,
-            logType: workoutSample.logType,
+            logType: sensor.logType,
             dataType: "exercise_session_\(workoutSample.workoutActivityType.name)",
             value: 1.0,
             unit: "minute",
@@ -45,7 +45,7 @@ struct HKWorkoutNormaliser: HKNormaliser {
                 contentsOf: workoutEvents.compactMap { event in
                     .init(
                         parentId: parentId,
-                        logType: workoutSample.logType,
+                        logType: sensor.logType,
                         dataType: "exercise_event_\(event.type.name)",
                         value: 1.0,
                         unit: "minute",
@@ -66,7 +66,7 @@ struct HKWorkoutNormaliser: HKNormaliser {
                 contentsOf: workoutActivities.compactMap { activity in
                     .init(
                         parentId: parentId,
-                        logType: workoutSample.logType,
+                        logType: sensor.logType,
                         dataType: "exercise_segment_\(activity.workoutConfiguration.activityType.name)",
                         value: 1.0,
                         unit: "minute",

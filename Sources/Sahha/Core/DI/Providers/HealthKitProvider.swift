@@ -2,18 +2,28 @@ import HealthKit
 
 struct HealthKitProvider: ServiceProvider {
     func registerServices(in container: DIContainer) async {
-        await container.registerSingleton(HKManagerProtocol.self) { container in
+        await container.registerSingleton(HealthKitManagerProtocol.self) { container in
             let logger = try await container.resolve(LoggerProtocol.self)
-            let permissionManager = HKPermissionManager()
-            let processor = try await container.resolve((any DataLogProcessorProtocol).self)
+
+            let processor = try await container.resolve(DataLogProcessorProtocol.self)
             let normalisers = createNormalisers()
-            let queryManager = HKQueryManager(logger: logger, normalisers: normalisers, processor: processor)
-            return HKManager(logger: logger, permissionManager: permissionManager, queryManager: queryManager)
+            let anchorQueryHandler = AnchorQueryHandler(logger: logger, normalisers: normalisers, processor: processor)
+
+            let observerQueryHandler = ObserverQueryHandler(logger: logger, anchorQueryHandler: anchorQueryHandler)
+            let sampleQueryHandler = SampleQueryHandler(logger: logger)
+            let statisticsQueryHandler = StatisticsQueryHandler(logger: logger)
+
+            return HealthKitManager(
+                logger: logger,
+                observerQueryHandler: observerQueryHandler,
+                sampleQueryHandler: sampleQueryHandler,
+                statisticsQueryHandler: statisticsQueryHandler
+            )
         }
     }
-    
+
     private func createNormalisers() -> [String: any HKNormaliser] {
-           var normalisers: [String: any HKNormaliser] = [
+        var normalisers: [String: any HKNormaliser] = [
             // Activity
             HKQuantityTypeIdentifier.appleWalkingSteadiness.rawValue: HKAppleWalkingSteadinessNormaliser(),
             HKQuantityTypeIdentifier.flightsClimbed.rawValue: HKFlightsClimbedNormaliser(),
@@ -59,31 +69,31 @@ struct HealthKitProvider: ServiceProvider {
             // Sleep
             HKCategoryTypeIdentifier.sleepAnalysis.rawValue: HKSleepAnalysisNormaliser(),
             // Workout
-            HKWorkoutTypeIdentifier: HKWorkoutNormaliser()
-           ]
-           
-           if #available(iOS 16.0, *) {
-               let iOS16Normalisers: [String: any HKNormaliser] = [
-                    // Activity
-                   HKQuantityTypeIdentifier.runningStrideLength.rawValue: HKRunningStrideLengthNormaliser(),
-                   HKQuantityTypeIdentifier.runningGroundContactTime.rawValue: HKRunningGroundContactTimeNormaliser(),
-                   HKQuantityTypeIdentifier.runningVerticalOscillation.rawValue: HKRunningVerticalOscillationNormaliser(),
-                   HKQuantityTypeIdentifier.runningPower.rawValue: HKRunningPowerNormaliser(),
-                   HKQuantityTypeIdentifier.runningSpeed.rawValue: HKRunningSpeedNormaliser(),
-                   // Temperature
-                   HKQuantityTypeIdentifier.appleSleepingWristTemperature.rawValue: HKAppleSleepingWristTemperatureNormaliser(),
-               ]
-               normalisers.merge(iOS16Normalisers) { (_, new) in new }
-           }
-           
-           if #available(iOS 17.0, *) {
-               let iOS17Normalisers: [String: any HKNormaliser] = [
+            HKWorkoutTypeIdentifier: HKWorkoutNormaliser(),
+        ]
+
+        if #available(iOS 16.0, *) {
+            let iOS16Normalisers: [String: any HKNormaliser] = [
+                // Activity
+                HKQuantityTypeIdentifier.runningStrideLength.rawValue: HKRunningStrideLengthNormaliser(),
+                HKQuantityTypeIdentifier.runningGroundContactTime.rawValue: HKRunningGroundContactTimeNormaliser(),
+                HKQuantityTypeIdentifier.runningVerticalOscillation.rawValue: HKRunningVerticalOscillationNormaliser(),
+                HKQuantityTypeIdentifier.runningPower.rawValue: HKRunningPowerNormaliser(),
+                HKQuantityTypeIdentifier.runningSpeed.rawValue: HKRunningSpeedNormaliser(),
+                // Temperature
+                HKQuantityTypeIdentifier.appleSleepingWristTemperature.rawValue: HKAppleSleepingWristTemperatureNormaliser(),
+            ]
+            normalisers.merge(iOS16Normalisers) { (_, new) in new }
+        }
+
+        if #available(iOS 17.0, *) {
+            let iOS17Normalisers: [String: any HKNormaliser] = [
                 // Energy
                 HKQuantityTypeIdentifier.timeInDaylight.rawValue: HKTimeInDaylightNormaliser()
-               ]
-               normalisers.merge(iOS17Normalisers) { (_, new) in new }
-           }
-           
-           return normalisers
-       }
+            ]
+            normalisers.merge(iOS17Normalisers) { (_, new) in new }
+        }
+
+        return normalisers
+    }
 }

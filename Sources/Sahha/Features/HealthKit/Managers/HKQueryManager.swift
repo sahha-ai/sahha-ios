@@ -5,7 +5,7 @@ final actor HKQueryManager: HKQueryManagerProtocol {
     private let healthStore: HKHealthStore
     private let anchorPersistence = AnchorPersistence()
     private let normalisers: [String: any HKNormaliser]
-    private let processor: any DataLogProcessorProtocol
+    private let processor: DataLogProcessorProtocol
 
     private var anchors: [String: HKQueryAnchor]
     private var observerQueries: [String: HKObserverQuery] = [:]
@@ -15,7 +15,7 @@ final actor HKQueryManager: HKQueryManagerProtocol {
         logger: LoggerProtocol,
         healthStore: HKHealthStore = HKHealthStore(),
         normalisers: [String: any HKNormaliser],
-        processor: any DataLogProcessorProtocol
+        processor: DataLogProcessorProtocol
     ) {
         self.logger = logger
         self.healthStore = healthStore
@@ -48,7 +48,7 @@ final actor HKQueryManager: HKQueryManagerProtocol {
                     await self.stopObserverQuery(for: sampleType)
                 }
             } else if let error = error {
-                self.logger.error("Observer query failed for \(identifier): \(error.localizedDescription)")
+                self.logger.error("Observer query failed for \(identifier): \(error.localizedDescription)", file: #file, function: #function)
             } else {
                 Task {
                     await self.runAnchorQuery(for: sampleType)
@@ -87,7 +87,7 @@ final actor HKQueryManager: HKQueryManagerProtocol {
         let samples: [HKSample] = try await withCheckedThrowingContinuation { continuation in
             let predicate = HKQuery.predicateForSamples(withStart: startDateTime, end: endDateTime)
             let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
-
+            
             let query = HKSampleQuery(
                 sampleType: type,
                 predicate: predicate,
@@ -95,7 +95,7 @@ final actor HKQueryManager: HKQueryManagerProtocol {
                 sortDescriptors: [sortDescriptor]
             ) { _, samples, error in
                 if let error = error as? HKError {
-                    self.logger.error("Sample query error for \(identifier): \(error.localizedDescription)")
+                    self.logger.error("Sample query error for \(identifier): \(error.localizedDescription)", file: #file, function: #function)
                     switch error.code {
                     case .errorAuthorizationDenied:
                         continuation.resume(throwing: HealthKitError.permissionDenied)
@@ -103,7 +103,7 @@ final actor HKQueryManager: HKQueryManagerProtocol {
                         continuation.resume(throwing: HealthKitError.queryFailed(sensor: identifier))
                     }
                 } else if let error = error {
-                    self.logger.error("Sample query failed for \(identifier): \(error.localizedDescription)")
+                    self.logger.error("Sample query failed for \(identifier): \(error.localizedDescription)", file: #file, function: #function)
                     continuation.resume(throwing: HealthKitError.queryFailed(sensor: identifier))
                 } else {
                     continuation.resume(returning: samples ?? [])
@@ -140,7 +140,7 @@ final actor HKQueryManager: HKQueryManagerProtocol {
                             await self.stopObserverQuery(for: type)
                         }
                     } else if let error = error {
-                        self.logger.error("Anchored query failed for \(identifier): \(error.localizedDescription)")
+                        self.logger.error("Anchored query failed for \(identifier): \(error.localizedDescription)", file: #file, function: #function)
                     }
 
                     self.logger.info("Received \(samples?.count ?? 0) samples for \(identifier)")
@@ -160,15 +160,14 @@ final actor HKQueryManager: HKQueryManagerProtocol {
                 }
                 return nil
             }
-
-            do {
-                try await processor.process(normalisedSamples)
+            
+            if !normalisedSamples.isEmpty {
+                await processor.process(normalisedSamples)
+                
                 if let newAnchor {
                     self.anchors[identifier] = newAnchor
                     self.anchorPersistence.saveAnchor(for: identifier, anchor: newAnchor)
                 }
-            } catch {
-                logger.error("Error processing data: \(error.localizedDescription)")
             }
         }
     }

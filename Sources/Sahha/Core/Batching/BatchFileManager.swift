@@ -23,7 +23,7 @@ final class BatchFileManager {
             return fileURL
         } catch {
             logger.error(
-                "Failed to save batch to \(fileURL): \(error)",
+                "Failed to save batch to \(fileURL): \(error)", file: #file, function: #function
             )
             return nil
         }
@@ -54,16 +54,19 @@ final class BatchFileManager {
             let batch = try JSONDecoder().decode([T].self, from: data)
             return (batch, fileURL)
         } catch {
-            logger.error("Failed to load batch from \(fileURL): \(error)")
+            logger.error("Failed to load batch from \(fileURL): \(error)", file: #file, function: #function)
             return nil
         }
     }
 
     private func listBatchFiles() -> [URL] {
         let fileManager = FileManager.default
-        guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles) else {
+        do {
+            let files = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
+            return files.filter { $0.pathExtension == "json" }
+        } catch {
+            logger.error("Failed to list batch files: \(error.localizedDescription)", file: #file, function: #function)
             return []
         }
-        return files.filter { $0.pathExtension == "json" }
     }
 }

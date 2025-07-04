@@ -5,7 +5,9 @@ struct HKSleepAnalysisNormaliser: HKNormaliser {
     func normalise(sample: HKSample) -> [DataLog]? {
         let type = HKQuantityType.categoryType(forIdentifier: .sleepAnalysis)
 
-        guard let categorySample = sample as? HKCategorySample, categorySample.categoryType == type else {
+        guard let categorySample = sample as? HKCategorySample,
+              categorySample.categoryType == type,
+              let sensor = SahhaSensor.sensor(for: categorySample.categoryType) else {
             return nil
         }
 
@@ -15,7 +17,7 @@ struct HKSleepAnalysisNormaliser: HKNormaliser {
 
         let log = DataLog(
             parentId: nil,
-            logType: categorySample.logType,
+            logType: sensor.logType,
             dataType: "sleep_stage_\(sleepStage)",
             value: value,
             unit: "minute",

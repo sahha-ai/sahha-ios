@@ -1,6 +1,6 @@
 import Foundation
 
-public struct SahhaStat: Comparable, Codable {
+public struct SahhaStat: Comparable, Codable, Sendable {
     public var id: String
     public var category: String
     public var type: String

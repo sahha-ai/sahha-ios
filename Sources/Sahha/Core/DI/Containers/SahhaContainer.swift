@@ -11,19 +11,22 @@ final actor SahhaContainer {
         guard container == nil else { return }
         
         container = DIContainer(sahhaSettings: settings)
+        
+        await container?.registerSingleton(DeviceInformation.self) { container in
+            await DeviceInformationProvider().getDeviceInformation(settings: settings)
+        }
 
         configurationTask = Task {
             // Register all providers sequentially
             try await container?.registerProvider(APIProvider())
             try await container?.registerProvider(LoggingProvider())
+            try await container?.registerProvider(DataLogProvider())
             try await container?.registerProvider(LifecycleProvider())
-            try await container?.registerProvider(DeviceInformationProvider())
             try await container?.registerProvider(AuthenticationProvider())
             try await container?.registerProvider(DemographicProvider())
-            try await container?.registerProvider(DataLogProvider())
             try await container?.registerProvider(HealthKitProvider())
             try await container?.registerProvider(SensorsProvider())
-            try await container?.registerProvider(AppEventProvider())
+            try await container?.registerProvider(DeviceProvider())
             try await container?.registerProvider(BiomarkerProvider())
             try await container?.registerProvider(ScoreProvider())
         }
@@ -34,10 +37,9 @@ final actor SahhaContainer {
     }
 
     func startAuthenticatedServices() async throws {
-        let deviceInfoManager = try await getDeviceInformationManager()
-        await deviceInfoManager.start()
-        let appEventManager = try await getAppEventManager()
-        await appEventManager.start()
+        let deviceManager = try await getDeviceManager()
+        await deviceManager.syncDeviceInformation()
+        await deviceManager.trackLifecycleEvents()
         let sensorsManager = try await getSensorsManager()
         try await sensorsManager.resumeSensors()
     }
@@ -53,17 +55,6 @@ final actor SahhaContainer {
         try await configure(with: settings)
     }
 
-    private func requiresAuthentication<T: Sendable>(_ type: T.Type) -> Bool {
-        let protectedTypes: [any Sendable.Type] = [
-            DeviceInformationServiceProtocol.self,
-            DeviceInformationManagerProtocol.self,
-            DemographicManagerProtocol.self,
-            HKManagerProtocol.self,
-            AppEventManagerProtocol.self,
-        ]
-        return protectedTypes.contains { $0 == type }
-    }
-
     private func resolve<T: Sendable>(_ type: T.Type) async throws -> T {
         // If configuration is in progress, wait for it to complete
         if let task = configurationTask {
@@ -71,11 +62,6 @@ final actor SahhaContainer {
         }
         guard let container else {
             throw SahhaError.notConfigured
-        }
-        if requiresAuthentication(type) {
-            guard await Sahha.isAuthenticated else {
-                throw SahhaError.unauthorized
-            }
         }
         return try await container.resolve(type)
     }
@@ -88,10 +74,6 @@ final actor SahhaContainer {
 
     func getAuthenticationService() async throws -> AuthenticationServiceProtocol {
         return try await resolve(AuthenticationServiceProtocol.self)
-    }
-
-    func getDeviceInformationService() async throws -> DeviceInformationServiceProtocol {
-        return try await resolve(DeviceInformationServiceProtocol.self)
     }
 
     func getDemographicService() async throws -> DemographicServiceProtocol {
@@ -116,8 +98,8 @@ final actor SahhaContainer {
         return try await resolve(TokenManagerProtocol.self)
     }
 
-    func getDeviceInformationManager() async throws -> DeviceInformationManagerProtocol {
-        return try await resolve(DeviceInformationManagerProtocol.self)
+    func getDeviceManager() async throws -> DeviceManagerProtocol {
+        return try await resolve(DeviceManagerProtocol.self)
     }
 
     func getDemographicManager() async throws -> DemographicManagerProtocol {
@@ -127,12 +109,8 @@ final actor SahhaContainer {
     func getSensorsManager() async throws -> SensorsManagerProtocol {
         return try await resolve(SensorsManagerProtocol.self)
     }
-
-    func getAppEventManager() async throws -> AppEventManagerProtocol {
-        return try await resolve(AppEventManagerProtocol.self)
-    }
     
-    func getHKManager() async throws -> HKManagerProtocol {
-        return try await resolve(HKManagerProtocol.self)
+    func getHealthKitManager() async throws -> HealthKitManagerProtocol {
+        return try await resolve(HealthKitManagerProtocol.self)
     }
 }

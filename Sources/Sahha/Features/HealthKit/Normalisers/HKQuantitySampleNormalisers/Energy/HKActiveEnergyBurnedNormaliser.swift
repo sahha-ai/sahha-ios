@@ -4,7 +4,11 @@ struct HKActiveEnergyBurnedNormaliser: HKNormaliser {
     func normalise(sample: HKSample) -> [DataLog]? {
         let type = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)
         
-        guard let quantitySample = sample as? HKQuantitySample, quantitySample.quantityType == type, let unit = quantitySample.unit else {
+        guard let quantitySample = sample as? HKQuantitySample,
+            quantitySample.quantityType == type,
+            let sensor = SahhaSensor.sensor(for: quantitySample.quantityType),
+            let unit = sensor.hkUnit
+        else {
             return nil
         }
 
@@ -12,10 +16,10 @@ struct HKActiveEnergyBurnedNormaliser: HKNormaliser {
 
         let log = DataLog(
             parentId: nil,
-            logType: quantitySample.logType,
-            dataType: quantitySample.dataType,
+            logType: sensor.logType,
+            dataType: sensor.rawValue,
             value: value,
-            unit: quantitySample.unitString,
+            unit: sensor.unitString,
             source: quantitySample.sourceId,
             recordingMethod: quantitySample.recordingMethod,
             deviceType: quantitySample.deviceType,

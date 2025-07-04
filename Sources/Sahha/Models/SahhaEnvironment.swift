@@ -1,5 +1,7 @@
 public enum SahhaEnvironment: String, Sendable {
-    case development, sandbox, production
+    case development
+    case sandbox
+    case production
 }
 
 extension SahhaEnvironment {

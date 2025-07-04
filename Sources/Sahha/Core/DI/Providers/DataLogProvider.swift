@@ -6,13 +6,22 @@ struct DataLogProvider: ServiceProvider {
             let apiService = try await container.resolve(APIServiceProtocol.self)
             return DataLogService(apiService: apiService)
         }
-        await container.registerSingleton((any DataLogProcessorProtocol).self) { container in
+        await container.registerSingleton(DataLogProcessorProtocol.self) { container in
             let logger = try await container.resolve(LoggerProtocol.self)
+            
             let batchDirectory = Constants.Directories.baseDirectory.appendingPathComponent("data-logs").appendingPathComponent("batches")
             let fileManager = try BatchFileManager(directory: batchDirectory, logger: logger)
-            let batchManager = BatchManager<DataLog>(batchSize: 100, maxPendingBatches: 50, fileManager: fileManager)
+            let batchManager = BatchManager<DataLogRequest>(batchSize: 100, maxPendingBatches: 500, fileManager: fileManager)
+            
             let dataLogService = try await container.resolve(DataLogServiceProtocol.self)
-            return DataLogProcessor(logger: logger, batchManager: batchManager, dataLogService: dataLogService)
+            let deviceInformation = try await container.resolve(DeviceInformation.self)
+            
+            return DataLogProcessor(
+                logger: logger,
+                batchManager: batchManager,
+                dataLogService: dataLogService,
+                deviceInformation: deviceInformation
+            )
         }
     }
 }

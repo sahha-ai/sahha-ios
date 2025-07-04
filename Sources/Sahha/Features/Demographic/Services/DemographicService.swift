@@ -1,3 +1,8 @@
+protocol DemographicServiceProtocol: Sendable {
+    func getDemographic() async throws -> SahhaDemographic
+    func updateDemographic(_ demographic: SahhaDemographic) async throws
+}
+
 final class DemographicService: DemographicServiceProtocol {
     private let apiService: APIServiceProtocol
 

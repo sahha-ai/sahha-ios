@@ -1,3 +1,4 @@
 enum ErrorSource: String, Codable {
-    case api, sdk
+    case api
+    case sdk
 }

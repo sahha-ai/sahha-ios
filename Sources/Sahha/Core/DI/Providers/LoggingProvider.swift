@@ -7,8 +7,8 @@ struct LoggingProvider: ServiceProvider {
         await container.registerSingleton(LoggerProtocol.self) { container in
             let apiService = try await container.resolve(APIServiceProtocol.self)
             let loggingService = try await container.resolve(LoggingServiceProtocol.self)
-            let deviceInfoManager = try await container.resolve(DeviceInformationManagerProtocol.self)
-            let logger = Logger(loggingService: loggingService, deviceInfoManager: deviceInfoManager)
+            let deviceInformation = try await container.resolve(DeviceInformation.self)
+            let logger = Logger(loggingService: loggingService, deviceInformation: deviceInformation)
             let errorLoggingInterceptor = ErrorLoggingInterceptor(logger: logger)
             await apiService.registerInterceptor(errorLoggingInterceptor)
             return logger

@@ -1,5 +1,13 @@
 import Foundation
 
+protocol TokenManagerProtocol: Actor, DisposableAsync {
+    func saveToken(_ token: TokenResponse) async throws
+    func getProfileToken() async -> String?
+    func getRefreshToken() async -> String?
+    func removeTokens() async throws
+    func ensureValidProfileToken() async throws -> String?
+}
+
 final actor TokenManager: TokenManagerProtocol {
     private let logger: LoggerProtocol
     private let authService: AuthenticationServiceProtocol
@@ -32,7 +40,7 @@ final actor TokenManager: TokenManagerProtocol {
             await updateSahhaWithToken()
             logger.info("Token saved successfully")
         } catch {
-            logger.error("Failed to save token: \(error.localizedDescription)")
+            logger.error("Failed to save token: \(error.localizedDescription)", file: #file, function: #function)
             throw error
         }
     }
@@ -40,7 +48,6 @@ final actor TokenManager: TokenManagerProtocol {
     // Helper function to update Sahha with token and expiry
     private func updateSahhaWithToken() async {
         guard let response = cachedResponse else {
-            logger.warning("No token response available")
             return
         }
         let token = response.profileToken
@@ -68,7 +75,7 @@ final actor TokenManager: TokenManagerProtocol {
             do {
                 cachedResponse = try await storage.retrieve()
             } catch {
-                logger.error("Failed to retrieve token from storage: \(error.localizedDescription)")
+                logger.error("Failed to retrieve token from storage: \(error.localizedDescription)", file: #file, function: #function)
                 return nil
             }
         }
@@ -80,7 +87,7 @@ final actor TokenManager: TokenManagerProtocol {
             do {
                 cachedResponse = try await storage.retrieve()
             } catch {
-                logger.error("Failed to retrieve token from storage: \(error.localizedDescription)")
+                logger.error("Failed to retrieve token from storage: \(error.localizedDescription)", file: #file, function: #function)
                 return nil
             }
         }
@@ -93,7 +100,7 @@ final actor TokenManager: TokenManagerProtocol {
         do {
             try await removeTokens()
         } catch {
-            logger.error("Failed to remove tokens: \(error.localizedDescription)")
+            logger.error("Failed to remove tokens: \(error.localizedDescription)", file: #file, function: #function)
             throw error
         }
     }
@@ -106,14 +113,13 @@ final actor TokenManager: TokenManagerProtocol {
             refreshTask = nil
             await Sahha.updateToken(token: nil, expiry: nil)
         } catch {
-            logger.error("Failed to delete tokens from storage: \(error.localizedDescription)")
+            logger.error("Failed to delete tokens from storage: \(error.localizedDescription)", file: #file, function: #function)
             throw error
         }
     }
 
     func ensureValidProfileToken() async throws -> String? {
         guard let token = await getProfileToken() else {
-            logger.warning("No profile token available")
             return nil
         }
         guard await isTokenExpired() else {
@@ -123,7 +129,7 @@ final actor TokenManager: TokenManagerProtocol {
             let refreshedToken = try await refreshToken().profileToken
             return refreshedToken
         } catch {
-            logger.error("Failed to refresh token: \(error.localizedDescription)")
+            logger.error("Failed to refresh token: \(error.localizedDescription)", file: #file, function: #function)
             throw error
         }
     }
@@ -152,7 +158,7 @@ final actor TokenManager: TokenManagerProtocol {
         let task = Task {
             defer { refreshTask = nil }
             guard let token = await getRefreshToken(), !token.isEmpty else {
-                logger.error("No refresh token available")
+                logger.error("No refresh token available", file: #file, function: #function)
                 throw TokenError.noRefreshToken
             }
             let response = try await authService.refreshToken(refreshToken: token)

@@ -12,8 +12,7 @@ struct Constants {
         static let demographicHash = "sahha_demographic_hash"
         
         // Device information
-        static let deviceInfoLastSync = "sahha_device_info_last_sync"
-        static let deviceInfoDeviceId = "sahha_device_id"
+        static let deviceId = "sahha_device_id"
         static let deviceInfoHash = "sahha_device_info_hash"
         
         // HealthKit

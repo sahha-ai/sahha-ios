@@ -1,5 +1,10 @@
 import Foundation
 
+protocol DemographicManagerProtocol: Actor, DisposableAsync {
+    func getDemographic() async throws -> SahhaDemographic
+    func updateDemographic(_ demographic: SahhaDemographic) async throws
+}
+
 final actor DemographicManager: DemographicManagerProtocol {
     private let logger: LoggerProtocol
     private let userDefaults: UserDefaults
@@ -41,7 +46,7 @@ final actor DemographicManager: DemographicManagerProtocol {
             let hash = try demographic.sha256Hash()
             return hash != cachedHash
         } catch {
-            logger.error("Failed to hash demographic: \(error.localizedDescription)")
+            logger.error("Failed to hash demographic: \(error.localizedDescription)", file: #file, function: #function)
             return true
         }
     }
@@ -76,7 +81,7 @@ final actor DemographicManager: DemographicManagerProtocol {
             cachedHash = try demographic.sha256Hash()
             userDefaults.set(cachedHash, forKey: hashKey)
         } catch {
-            logger.error("Failed to hash demographic: \(error.localizedDescription)")
+            logger.error("Failed to hash demographic: \(error.localizedDescription)", file: #file, function: #function)
         }
         lastFetchTimestamp = Date()
         userDefaults.set(lastFetchTimestamp, forKey: lastFetchKey)

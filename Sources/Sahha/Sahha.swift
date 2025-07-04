@@ -4,8 +4,7 @@ import UIKit
  TODO:
 
  - Get stats / get samples
- - DataLog -> DataLogRequest
- - HealthKit errors
+ - Clear anchors on deauthenticate via dispose
 
  */
 
@@ -168,22 +167,20 @@ public final class Sahha {
 
     // MARK: Samples
 
-    // TODO: Create SahhaSample struct and get samples directly from hkManager
     public static func getSamples(
         sensor: SahhaSensor,
         startDateTime: Date,
         endDateTime: Date,
-        callback: @escaping @Sendable (String?, [String]) -> Void
+        callback: @escaping @Sendable (String?, [SahhaSample]) -> Void
     ) {
         Task {
             do {
                 guard startDateTime <= endDateTime else {
                     throw ValidationError.invalidDateRange
                 }
-                let hkManager = try await container.getHKManager()
+                let hkManager = try await container.getHealthKitManager()
                 let samples = try await hkManager.getSamples(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
-                let sampleStrings = samples.map { $0.description }  // Customize based on your needs
-                callback(nil, sampleStrings)
+                callback(nil, samples)
             } catch {
                 logError("Error getting samples", error: error)
                 callback(error.localizedDescription, [])
@@ -193,22 +190,20 @@ public final class Sahha {
 
     // MARK: Stats
 
-    // TODO: Create SahhaStat struct and get stats directly from hkManager
     public static func getStats(
         sensor: SahhaSensor,
         startDateTime: Date,
         endDateTime: Date,
-        callback: @escaping @Sendable (String?, [String]) -> Void
+        callback: @escaping @Sendable (String?, [SahhaStat]) -> Void
     ) {
         Task {
             do {
                 guard startDateTime <= endDateTime else {
                     throw ValidationError.invalidDateRange
                 }
-                let hkManager = try await container.getHKManager()
+                let hkManager = try await container.getHealthKitManager()
                 let stats = try await hkManager.getStats(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
-                let statStrings = stats.map { $0.description }  // Customize based on your needs
-                callback(nil, statStrings)
+                callback(nil, stats)
             } catch {
                 logError("Error getting stats", error: error)
                 callback(error.localizedDescription, [])
@@ -263,7 +258,6 @@ public final class Sahha {
                 guard !types.isEmpty else {
                     throw ValidationError.emptyCollection(collection: "types")
                 }
-                
                 let biomarkerService = try await container.getBiomarkerService()
                 let biomarkers = try await biomarkerService.getBiomarkers(
                     categories: categories,
@@ -297,18 +291,16 @@ public final class Sahha {
 
     // MARK: Errors
 
-    private static func logError(_ message: String, error: Error? = nil) {
+    private static func logError(_ message: String, function: String = #function, error: Error? = nil) {
         Task {
             let errorInfo = error.map { "\($0) (\(type(of: $0)))" } ?? "No error details"
             let fullMessage = "\(message): \(errorInfo)"
 
             do {
                 let logger = try await container.getLogger()
-                logger.error(fullMessage)
+                logger.error(fullMessage, file: #file, function: function)
             } catch {
-                #if DEBUG
-                    print("Failed to log error: \(message), error: \(errorInfo)")
-                #endif
+                print("Failed to log error: \(message), error: \(errorInfo)")
             }
         }
     }

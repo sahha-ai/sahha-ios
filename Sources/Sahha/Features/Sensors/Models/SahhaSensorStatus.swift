@@ -1,3 +1,6 @@
 public enum SahhaSensorStatus: String, Sendable {
-    case pending, unavailable, disabled, enabled
+    case pending
+    case unavailable
+    case disabled
+    case enabled
 }

@@ -1,5 +1,9 @@
 import Foundation
 
+protocol ScoreServiceProtocol: Sendable {
+    func getScores(types: Set<SahhaScoreType>, startDateTime: Date, endDateTime: Date) async throws -> [SahhaScore]
+}
+
 final class ScoreService: ScoreServiceProtocol{
     private let apiService: APIServiceProtocol
     
@@ -8,13 +12,6 @@ final class ScoreService: ScoreServiceProtocol{
     }
     
     func getScores(types: Set<SahhaScoreType>, startDateTime: Date, endDateTime: Date) async throws -> [SahhaScore] {
-        guard !types.isEmpty else {
-            throw ValidationError.emptyCollection(collection: "types")
-        }
-        guard startDateTime <= endDateTime else {
-            throw ValidationError.invalidDateRange
-        }
-        
         var queryParameters = [URLQueryItem]()
         types.forEach { type in queryParameters.append(URLQueryItem(name: "types", value: type.rawValue)) }
         queryParameters.append(URLQueryItem(name: "startDateTime", value: startDateTime.isoDate))

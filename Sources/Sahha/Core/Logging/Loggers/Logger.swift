@@ -1,10 +1,17 @@
+protocol LoggerProtocol: Sendable {
+    func info(_ message: String)
+    func warning(_ message: String)
+    func error(_ message: String, file: String, function: String)
+    func error(_ message: String, errorSource: ErrorSource, errorCode: Int, errorLocation: String, errorBody: String?)
+}
+
 final class Logger: LoggerProtocol {
     private let loggingService: LoggingServiceProtocol
-    private let deviceInfoManager: DeviceInformationManagerProtocol
+    private let deviceInformation: DeviceInformation
 
-    init(loggingService: LoggingServiceProtocol, deviceInfoManager: DeviceInformationManagerProtocol) {
+    init(loggingService: LoggingServiceProtocol, deviceInformation: DeviceInformation) {
         self.loggingService = loggingService
-        self.deviceInfoManager = deviceInfoManager
+        self.deviceInformation = deviceInformation
     }
 
     func info(_ message: String) {
@@ -15,12 +22,12 @@ final class Logger: LoggerProtocol {
         log(message, file: #file, function: #function, logLevel: .warning)
     }
 
-    func error(_ message: String) {
-        error(message, errorCode: nil, errorSource: .sdk, errorLocation: nil, errorBody: nil, codeBody: nil)
+    func error(_ message: String, file: String = #file, function: String = #function) {
+        error(message, errorCode: nil, errorSource: .sdk, errorLocation: nil, errorBody: nil, codeBody: nil, file: file, function: function)
     }
 
     func error(_ message: String, errorSource: ErrorSource = .api, errorCode: Int, errorLocation: String, errorBody: String? = nil) {
-        error(message, errorCode: errorCode, errorSource: errorSource, errorLocation: errorLocation, errorBody: errorBody)
+        error(message, errorCode: errorCode, errorSource: errorSource, errorLocation: errorLocation, errorBody: errorBody, file: #file, function: #function)
     }
 
     private func error(
@@ -30,44 +37,37 @@ final class Logger: LoggerProtocol {
         errorLocation: String? = nil,
         errorBody: String? = nil,
         codeBody: String? = nil,
-        file: String = #file,
-        function: String = #function
+        file: String,
+        function: String
     ) {
         log(message, file: file, function: function, logLevel: .error)
 
+        let request = ErrorRequest(
+            sdkId: deviceInformation.sdkId,
+            sdkVersion: deviceInformation.sdkVersion,
+            appId: deviceInformation.appId,
+            appVersion: deviceInformation.appVersion,
+            deviceId: deviceInformation.deviceId,
+            deviceType: deviceInformation.deviceType,
+            deviceModel: deviceInformation.deviceModel,
+            system: deviceInformation.system,
+            systemVersion: deviceInformation.systemVersion,
+            errorSource: errorSource.rawValue,
+            errorCode: errorCode,
+            errorLocation: errorLocation,
+            errorMessage: message,
+            errorBody: errorBody,
+            codePath: file,
+            codeMethod: function,
+            codeBody: codeBody
+        )
+
         Task {
-            let deviceInfo = await deviceInfoManager.getDeviceInformation()
-            let request = ErrorRequest(
-                sdkId: deviceInfo.sdkId,
-                sdkVersion: deviceInfo.sdkVersion,
-                appId: deviceInfo.appId,
-                appVersion: deviceInfo.appVersion,
-                deviceId: deviceInfo.deviceId,
-                deviceType: deviceInfo.deviceType,
-                deviceModel: deviceInfo.deviceModel,
-                system: deviceInfo.system,
-                systemVersion: deviceInfo.systemVersion,
-                errorSource: errorSource.rawValue,
-                errorCode: errorCode,
-                errorLocation: errorLocation,
-                errorMessage: message,
-                errorBody: errorBody,
-                codePath: file,
-                codeMethod: function,
-                codeBody: codeBody
-            )
             await loggingService.postError(request)
         }
     }
 
-    private func log(_ message: String, file: String? = #file, function: String? = #function, logLevel: LogLevel) {
-        #if DEBUG
-            var logString = "\(logLevel.title)"
-            if let file = file, let function = function {
-                logString += " [\(file):\(function)]"
-            }
-            logString += ": \(message)"
-            print(logString)
-        #endif
+    private func log(_ message: String, file: String, function: String, logLevel: LogLevel) {
+        print("\(logLevel.title) [\(file):\(function)] \(message)")
     }
 }
