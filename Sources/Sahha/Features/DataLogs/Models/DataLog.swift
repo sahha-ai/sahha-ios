@@ -1,10 +1,6 @@
 import Foundation
 
-// Future Mixed Types: Add a type property to DataLog and implement custom decoding if batches will contain multiple subclass types:
-// Decoding would then use a factory based on type, but this can be added when the need arises. use dataType for this?
-
 open class DataLog: Codable, @unchecked Sendable {
-    var id: String
     var parentId: String?
     var logType: LogType
     var dataType: String
@@ -16,8 +12,20 @@ open class DataLog: Codable, @unchecked Sendable {
     var startDate: Date
     var endDate: Date
     var additionalProperties: [String: String]?
-    
-    init(parentId: String?, logType: LogType, dataType: String, value: Double, unit: String, source: String, recordingMethod: RecordingMethod, deviceType: String, startDate: Date, endDate: Date, additionalProperties: [String: String]?) {
+
+    init(
+        parentId: String? = nil,
+        logType: LogType,
+        dataType: String,
+        value: Double,
+        unit: String,
+        source: String,
+        recordingMethod: RecordingMethod,
+        deviceType: String,
+        startDate: Date,
+        endDate: Date,
+        additionalProperties: [String: String]? = nil
+    ) {
         self.parentId = parentId
         self.logType = logType
         self.dataType = dataType
@@ -29,43 +37,52 @@ open class DataLog: Codable, @unchecked Sendable {
         self.startDate = startDate
         self.endDate = endDate
         self.additionalProperties = additionalProperties
-        let components = [dataType, source, deviceType, startDate.isoDateTime, endDate.isoDateTime]
-        self.id = UUIDFactory.v5(from: components).uuidString
     }
     
+    var id: String {
+        let components = [
+            dataType, source, deviceType,
+            startDate.isoDateTime, endDate.isoDateTime,
+        ]
+        return UUIDFactory.v5(from: components).uuidString
+    }
+
     private enum CodingKeys: String, CodingKey {
-        case id, parentId, logType, dataType, value, unit, source, recordingMethod, deviceType, startDate, endDate, additionalProperties
+        case parentId, logType, dataType, value, unit, source,
+            recordingMethod, deviceType, startDate, endDate,
+            additionalProperties
     }
-    
+
     required public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        parentId = try container.decodeIfPresent(String.self, forKey: .parentId)
-        logType = try container.decode(LogType.self, forKey: .logType)
-        dataType = try container.decode(String.self, forKey: .dataType)
-        value = try container.decode(Double.self, forKey: .value)
-        unit = try container.decode(String.self, forKey: .unit)
-        source = try container.decode(String.self, forKey: .source)
-        recordingMethod = try container.decode(RecordingMethod.self, forKey: .recordingMethod)
-        deviceType = try container.decode(String.self, forKey: .deviceType)
-        startDate = try container.decode(Date.self, forKey: .startDate)
-        endDate = try container.decode(Date.self, forKey: .endDate)
-        additionalProperties = try container.decodeIfPresent([String: String].self, forKey: .additionalProperties)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        parentId = try c.decodeIfPresent(String.self, forKey: .parentId)
+        logType = try c.decode(LogType.self, forKey: .logType)
+        dataType = try c.decode(String.self, forKey: .dataType)
+        value = try c.decode(Double.self, forKey: .value)
+        unit = try c.decode(String.self, forKey: .unit)
+        source = try c.decode(String.self, forKey: .source)
+        recordingMethod = try c.decode(RecordingMethod.self, forKey: .recordingMethod)
+        deviceType = try c.decode(String.self, forKey: .deviceType)
+        startDate = try c.decode(Date.self, forKey: .startDate)
+        endDate = try c.decode(Date.self, forKey: .endDate)
+        additionalProperties = try c.decodeIfPresent(
+            [String: String].self,
+            forKey: .additionalProperties
+        )
     }
-    
+
     public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encodeIfPresent(parentId, forKey: .parentId)
-        try container.encode(logType, forKey: .logType)
-        try container.encode(dataType, forKey: .dataType)
-        try container.encode(value, forKey: .value)
-        try container.encode(unit, forKey: .unit)
-        try container.encode(source, forKey: .source)
-        try container.encode(recordingMethod, forKey: .recordingMethod)
-        try container.encode(deviceType, forKey: .deviceType)
-        try container.encode(startDate, forKey: .startDate)
-        try container.encode(endDate, forKey: .endDate)
-        try container.encodeIfPresent(additionalProperties, forKey: .additionalProperties)
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(parentId, forKey: .parentId)
+        try c.encode(logType, forKey: .logType)
+        try c.encode(dataType, forKey: .dataType)
+        try c.encode(value, forKey: .value)
+        try c.encode(unit, forKey: .unit)
+        try c.encode(source, forKey: .source)
+        try c.encode(recordingMethod, forKey: .recordingMethod)
+        try c.encode(deviceType, forKey: .deviceType)
+        try c.encode(startDate, forKey: .startDate)
+        try c.encode(endDate, forKey: .endDate)
+        try c.encodeIfPresent(additionalProperties, forKey: .additionalProperties)
     }
 }

@@ -1,35 +1,34 @@
-actor AsyncSemaphore {
-    private var count: Int
-    private let maxCount: Int
+final actor AsyncSemaphore {
+    private var value: Int
+    private let maxValue: Int
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
     init(value: Int) {
-        self.count = max(0, value)
-        self.maxCount = max(0, value)
+        self.value = max(0, value)
+        self.maxValue = max(0, value)
     }
 
     func wait() async {
-        if count > 0 {
-            count -= 1
-            return
-        }
-
-        await withCheckedContinuation { continuation in
-            waiters.append(continuation)
+        if value > 0 {
+            value -= 1
+        } else {
+            await withCheckedContinuation { continuation in
+                waiters.append(continuation)
+            }
         }
     }
 
     func signal() {
-        if !waiters.isEmpty {
-            let continuation = waiters.removeFirst()
-            continuation.resume()
+        if let waiter = waiters.first {
+            waiters.removeFirst()
+            waiter.resume()
         } else {
-            count += 1
+            value += 1
         }
     }
-
+    
     func waitForAll() async {
-        while !waiters.isEmpty || count < maxCount {
+        while !waiters.isEmpty || value < maxValue {
             await wait()
         }
     }

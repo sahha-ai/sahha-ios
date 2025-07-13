@@ -1,18 +1,18 @@
-protocol DemographicServiceProtocol: Sendable {
+protocol DemographicService: Sendable {
     func getDemographic() async throws -> SahhaDemographic
     func updateDemographic(_ demographic: SahhaDemographic) async throws
 }
 
-final class DemographicService: DemographicServiceProtocol {
-    private let apiService: APIServiceProtocol
+final class DemographicServiceImpl: DemographicService {
+    private let api: APIService
 
-    init(apiService: APIServiceProtocol) {
-        self.apiService = apiService
+    init(api: APIService) {
+        self.api = api
     }
 
     func getDemographic() async throws -> SahhaDemographic {
         let request = APIRequest(endpoint: Constants.Endpoints.demographic)
-        return try await apiService.send(request)
+        return try await api.send(request)
     }
 
     func updateDemographic(_ demographic: SahhaDemographic) async throws {
@@ -21,6 +21,6 @@ final class DemographicService: DemographicServiceProtocol {
             method: .PATCH,
             body: demographic
         )
-        try await apiService.send(request)
+        try await api.send(request)
     }
 }

@@ -1,24 +1,41 @@
 import Foundation
 
-enum JWTDecoder {
-    static func decodeExp(jwt: String) -> Double? {
-        let segments = jwt.split(separator: ".")
-        guard segments.count == 3 else { return nil }
-        
-        guard let payloadData = decodeBase64URL(String(segments[1])) else { return nil }
-        
-        guard let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
-              let exp = json["exp"] as? Double else { return nil }
-        
-        return exp
+struct JWTDecoder: Sendable {
+    private enum DecodeError: Error, LocalizedError {
+        case malformed
+        case badBase64
+        case badJSON
+
+        var errorDescription: String? {
+            switch self {
+            case .malformed: return "Malformed JWT"
+            case .badBase64: return "Invalid Base64 encoding"
+            case .badJSON: return "Invalid JSON payload"
+            }
+        }
     }
-    
-    private static func decodeBase64URL(_ string: String) -> Data? {
-        let padded = string + String(repeating: "=", count: (4 - string.count % 4) % 4)
-        let base64 = padded
+
+    func decodePayload(from jwt: String) throws -> [String: Any] {
+        let parts = jwt.split(separator: ".")
+        guard parts.count >= 2 else { throw DecodeError.malformed }
+
+        var base64 = String(parts[1])
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
-        
-        return Data(base64Encoded: base64)
+        base64.append(String(repeating: "=", count: (4 - base64.count % 4) % 4))
+
+        guard let data = Data(base64Encoded: base64) else { throw DecodeError.badBase64 }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { throw DecodeError.badJSON }
+
+        return json
+    }
+
+    func expiryDate(from jwt: String) -> Date? {
+        (try? decodePayload(from: jwt))?["exp"].flatMap {
+            if let ts = $0 as? Double { return Date(timeIntervalSince1970: ts) }
+            if let ts = $0 as? Int { return Date(timeIntervalSince1970: TimeInterval(ts)) }
+            return nil
+        }
     }
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 public struct SahhaStat: Comparable, Codable, Sendable {
-    public var id: String
+    public var id: String = UUID().uuidString
     public var category: String
     public var type: String
     public var aggregation: String

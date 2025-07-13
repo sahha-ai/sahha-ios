@@ -1,74 +1,91 @@
 import Foundation
 
-open class DataLogRequest: DataLog, @unchecked Sendable {
+open class DataLogRequest: Encodable, @unchecked Sendable {
+    var id: String
+    var parentId: String?
+    var logType: String
+    var dataType: String
+    var value: Double
+    var unit: String
+    var source: String
+    var recordingMethod: String
+    var deviceType: String
+    var startDate: Date
+    var endDate: Date
+    var additionalProperties: String?
     var postDateTime: String
     var deviceId: String
 
     init(
-        parentId: String?,
-        logType: LogType,
+        id: String,
+        parentId: String? = nil,
+        logType: String,
         dataType: String,
         value: Double,
         unit: String,
         source: String,
-        recordingMethod: RecordingMethod,
+        recordingMethod: String,
         deviceType: String,
         startDate: Date,
         endDate: Date,
-        additionalProperties: [String: String]?,
-        postDateTime: String,
+        additionalProperties: String? = nil,
         deviceId: String
     ) {
-        self.postDateTime = postDateTime
+        self.id = id
+        self.parentId = parentId
+        self.logType = logType
+        self.dataType = dataType
+        self.value = value
+        self.unit = unit
+        self.source = source
+        self.recordingMethod = recordingMethod
+        self.deviceType = deviceType
+        self.startDate = startDate
+        self.endDate = endDate
+        self.additionalProperties = additionalProperties
         self.deviceId = deviceId
-        super.init(
-            parentId: parentId,
-            logType: logType,
-            dataType: dataType,
-            value: value,
-            unit: unit,
-            source: source,
-            recordingMethod: recordingMethod,
-            deviceType: deviceType,
-            startDate: startDate,
-            endDate: endDate,
-            additionalProperties: additionalProperties
-        )
+        self.postDateTime = Date().isoDateTime
     }
 
     private enum CodingKeys: String, CodingKey {
-        case postDateTime, deviceId
+        case id, parentId, logType, dataType, value, unit, source,
+            recordingMethod, deviceType, startDate, endDate,
+            additionalProperties, deviceId, postDateTime
     }
 
     required public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        postDateTime = try container.decode(String.self, forKey: .postDateTime)
-        deviceId = try container.decode(String.self, forKey: .deviceId)
-        try super.init(from: decoder)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        parentId = try c.decodeIfPresent(String.self, forKey: .parentId)
+        logType = try c.decode(String.self, forKey: .logType)
+        dataType = try c.decode(String.self, forKey: .dataType)
+        value = try c.decode(Double.self, forKey: .value)
+        unit = try c.decode(String.self, forKey: .unit)
+        source = try c.decode(String.self, forKey: .source)
+        recordingMethod = try c.decode(String.self, forKey: .recordingMethod)
+        deviceType = try c.decode(String.self, forKey: .deviceType)
+        startDate = try c.decode(Date.self, forKey: .startDate)
+        endDate = try c.decode(Date.self, forKey: .endDate)
+        additionalProperties = try c.decodeIfPresent(String.self, forKey: .additionalProperties)
+        deviceId = try c.decode(String.self, forKey: .deviceId)
+        postDateTime = try c.decode(String.self, forKey: .postDateTime)
     }
 
-    public override func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(postDateTime, forKey: .postDateTime)
-        try container.encode(deviceId, forKey: .deviceId)
-        try super.encode(to: encoder)
-    }
-
-    static func create(from dataLog: DataLog, deviceInformation: DeviceInformation) -> DataLogRequest {
-        DataLogRequest(
-            parentId: dataLog.parentId,
-            logType: dataLog.logType,
-            dataType: dataLog.dataType,
-            value: dataLog.value,
-            unit: dataLog.unit,
-            source: dataLog.source,
-            recordingMethod: dataLog.recordingMethod,
-            deviceType: dataLog.deviceType,
-            startDate: dataLog.startDate,
-            endDate: dataLog.endDate,
-            additionalProperties: dataLog.additionalProperties,
-            postDateTime: Date().isoDateTime,
-            deviceId: deviceInformation.deviceId
-        )
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encodeIfPresent(parentId, forKey: .parentId)
+        try c.encode(logType, forKey: .logType)
+        try c.encode(dataType, forKey: .dataType)
+        try c.encode(value, forKey: .value)
+        try c.encode(unit, forKey: .unit)
+        try c.encode(source, forKey: .source)
+        try c.encode(recordingMethod, forKey: .recordingMethod)
+        try c.encode(deviceType, forKey: .deviceType)
+        try c.encode(startDate, forKey: .startDate)
+        try c.encode(endDate, forKey: .endDate)
+        try c.encodeIfPresent(additionalProperties, forKey: .additionalProperties)
+        try c.encode(postDateTime, forKey: .postDateTime)
+        try c.encode(deviceId, forKey: .deviceId)
     }
 }

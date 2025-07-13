@@ -1,34 +1,29 @@
 import UIKit
 
-/*:
- TODO:
+struct AuthSnapshot {
+    let profileToken: String?
+    let expiry: Date?
+}
 
- - Get stats / get samples
- - Clear anchors on deauthenticate via dispose
+// TODO:
 
- */
+// Normalise stats
+// Get stats/samples
+// Disposables
 
 public final class Sahha {
-    private static let container: SahhaContainer = .shared
+    private static let sahhaActor: SahhaActor = .shared
 
-    @MainActor private static var _profileToken: String?
-    @MainActor private static var _tokenExpiry: Date?
+    @MainActor private static var authSnapshot: AuthSnapshot?
 
     // MARK: Configuration
 
     public static func configure(_ settings: SahhaSettings, callback: (@Sendable () -> Void)? = nil) {
         Task {
             do {
-                try await container.configure(with: settings)
-
-                if let tokenManager = try? await container.getTokenManager(),
-                    let token = try? await tokenManager.ensureValidProfileToken(),
-                    !token.isEmpty
-                {
-                    try await container.startAuthenticatedServices()
-                }
+                try await sahhaActor.configure(with: settings)
             } catch {
-                logError("Failed to configure Sahha", error: error)
+                print("Failed to configure Sahha: \(error.localizedDescription)")
             }
             callback?()
         }
@@ -36,67 +31,82 @@ public final class Sahha {
 
     // MARK: Authentication
 
-    static func updateToken(token: String?, expiry: Date?) async {
-        await MainActor.run {
-            _profileToken = token
-            _tokenExpiry = expiry
-        }
-    }
-
     @MainActor
     public static var isAuthenticated: Bool {
-        _profileToken != nil && _profileToken?.isEmpty == false
+        guard let snapshot = authSnapshot else {
+            return false
+        }
+        let hasToken = snapshot.profileToken != nil && snapshot.profileToken?.isEmpty == false
+        let tokenIsValid = (snapshot.expiry ?? Date.distantPast) > Date()
+        return hasToken && tokenIsValid
     }
 
     @MainActor
     public static var profileToken: String? {
-        _profileToken
+        authSnapshot?.profileToken
     }
 
-    public static func authenticate(appId: String, appSecret: String, externalId: String, callback: @escaping @Sendable (String?, Bool) -> Void) {
+    static func setAuthSnapshot(_ snapshot: AuthSnapshot) async {
+        await MainActor.run {
+            authSnapshot = snapshot
+        }
+    }
+
+    public static func authenticate(
+        appId: String,
+        appSecret: String,
+        externalId: String,
+        callback: @escaping @Sendable (String?, Bool) -> Void
+    ) {
         Task {
             do {
-                let authService = try await container.getAuthenticationService()
-                let tokenManager = try await container.getTokenManager()
+                try await validate([
+                    { checkNotEmpty(appId, field: "appId") },
+                    { checkNotEmpty(appSecret, field: "appSecret") },
+                    { checkNotEmpty(externalId, field: "externalId") },
+                ])
+                let authService = try await sahhaActor.getAuthService()
                 let response = try await authService.registerProfile(appId: appId, appSecret: appSecret, externalId: externalId)
-                try await tokenManager.saveToken(response)
-                try await container.startAuthenticatedServices()
+                try await authenticate(response)
                 callback(nil, true)
             } catch {
-                logError("Failed to authenticate", error: error)
                 callback(error.localizedDescription, false)
             }
         }
     }
 
-    public static func authenticate(profileToken: String, refreshToken: String, callback: @escaping @Sendable (String?, Bool) -> Void) {
+    public static func authenticate(
+        profileToken: String,
+        refreshToken: String,
+        callback: @escaping @Sendable (String?, Bool) -> Void
+    ) {
         Task {
             do {
-                guard !profileToken.isEmpty else {
-                    throw ValidationError.emptyString(field: "profileToken")
-                }
-                guard !refreshToken.isEmpty else {
-                    throw ValidationError.emptyString(field: "refreshToken")
-                }
-                let tokenManager = try await container.getTokenManager()
-                let tokenResponse = TokenResponse(profileToken: profileToken, refreshToken: refreshToken)
-                try await tokenManager.saveToken(tokenResponse)
-                try await container.startAuthenticatedServices()
+                try await validate([
+                    { checkNotEmpty(profileToken, field: "profileToken") },
+                    { checkNotEmpty(refreshToken, field: "refreshToken") },
+                ])
+                let response = TokenResponse(profileToken: profileToken, refreshToken: refreshToken)
+                try await authenticate(response)
                 callback(nil, true)
             } catch {
-                logError("Failed to authenticate", error: error)
                 callback(error.localizedDescription, false)
             }
         }
+    }
+
+    private static func authenticate(_ response: TokenResponse) async throws {
+        let tokenManager = try await sahhaActor.getTokenManager()
+        try await tokenManager.saveTokenResponse(response)
+        let deviceInfoStore = try await sahhaActor.getDeviceInfoStore()
+        await deviceInfoStore.forceSync()
     }
 
     public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
         Task {
             do {
-                try await container.resetContainer()
-                callback(nil, true)
+                try await sahhaActor.reset()
             } catch {
-                logError("Failed to deauthenticate", error: error)
                 callback(error.localizedDescription, false)
             }
         }
@@ -107,11 +117,13 @@ public final class Sahha {
     public static func getDemographic(callback: @escaping @Sendable (String?, SahhaDemographic?) -> Void) {
         Task {
             do {
-                let demographicManager = try await container.getDemographicManager()
-                let demographic = try await demographicManager.getDemographic()
+                try await validate([
+                    { await checkAuthentication() }
+                ])
+                let demographicStore = try await sahhaActor.getDemographicStore()
+                let demographic = try await demographicStore.getDemographic()
                 callback(nil, demographic)
             } catch {
-                logError("Failed to get demographic", error: error)
                 callback(error.localizedDescription, nil)
             }
         }
@@ -120,11 +132,13 @@ public final class Sahha {
     public static func postDemographic(_ demographic: SahhaDemographic, callback: @escaping @Sendable (String?, Bool) -> Void) {
         Task {
             do {
-                let demographicService = try await container.getDemographicService()
-                try await demographicService.updateDemographic(demographic)
+                try await validate([
+                    { await checkAuthentication() }
+                ])
+                let demographicStore = try await sahhaActor.getDemographicStore()
+                try await demographicStore.updateDemographic(demographic)
                 callback(nil, true)
             } catch {
-                logError("Failed to post demographic", error: error)
                 callback(error.localizedDescription, false)
             }
         }
@@ -135,15 +149,15 @@ public final class Sahha {
     public static func enableSensors(_ sensors: Set<SahhaSensor>, callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void) {
         Task {
             do {
-                guard !sensors.isEmpty else {
-                    throw ValidationError.emptyCollection(collection: "sensors")
-                }
-                let sensorsManager = try await container.getSensorsManager()
-                try await sensorsManager.enableSensors(sensors)
-                let status = try await sensorsManager.getSensorStatus(sensors)
+                try await validate([
+                    { await checkAuthentication() },
+                    { checkNotEmptyCollection(sensors, name: "sensors") },
+                ])
+                let sensorManager = try await sahhaActor.getSensorManager()
+                try await sensorManager.enableSensors(sensors)
+                let status = try await sensorManager.getSensorStatus(sensors)
                 callback(nil, status)
             } catch {
-                logError("Error enabling sensors", error: error)
                 callback(error.localizedDescription, .pending)
             }
         }
@@ -152,14 +166,14 @@ public final class Sahha {
     public static func getSensorStatus(_ sensors: Set<SahhaSensor>, callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void) {
         Task {
             do {
-                guard !sensors.isEmpty else {
-                    throw ValidationError.emptyCollection(collection: "sensors")
-                }
-                let sensorsManager = try await container.getSensorsManager()
-                let status = try await sensorsManager.getSensorStatus(sensors)
+                try await validate([
+                    { await checkAuthentication() },
+                    { checkNotEmptyCollection(sensors, name: "sensors") },
+                ])
+                let sensorManager = try await sahhaActor.getSensorManager()
+                let status = try await sensorManager.getSensorStatus(sensors)
                 callback(nil, status)
             } catch {
-                logError("Error getting sensor status", error: error)
                 callback(error.localizedDescription, .pending)
             }
         }
@@ -175,14 +189,13 @@ public final class Sahha {
     ) {
         Task {
             do {
-                guard startDateTime <= endDateTime else {
-                    throw ValidationError.invalidDateRange
-                }
-                let hkManager = try await container.getHealthKitManager()
+                try await validate([
+                    { checkDateRange(start: startDateTime, end: endDateTime) },
+                ])
+                let hkManager = try await sahhaActor.getHkManager()
                 let samples = try await hkManager.getSamples(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
                 callback(nil, samples)
             } catch {
-                logError("Error getting samples", error: error)
                 callback(error.localizedDescription, [])
             }
         }
@@ -198,14 +211,13 @@ public final class Sahha {
     ) {
         Task {
             do {
-                guard startDateTime <= endDateTime else {
-                    throw ValidationError.invalidDateRange
-                }
-                let hkManager = try await container.getHealthKitManager()
+                try await validate([
+                    { checkDateRange(start: startDateTime, end: endDateTime) },
+                ])
+                let hkManager = try await sahhaActor.getHkManager()
                 let stats = try await hkManager.getStats(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
                 callback(nil, stats)
             } catch {
-                logError("Error getting stats", error: error)
                 callback(error.localizedDescription, [])
             }
         }
@@ -221,18 +233,16 @@ public final class Sahha {
     ) {
         Task {
             do {
-                guard startDateTime <= endDateTime else {
-                    throw ValidationError.invalidDateRange
-                }
-                guard !types.isEmpty else {
-                    throw ValidationError.emptyCollection(collection: "types")
-                }
-                let scoreService = try await container.getScoreService()
+                try await validate([
+                    { await checkAuthentication() },
+                    { checkNotEmptyCollection(types, name: "types") },
+                    { checkDateRange(start: startDateTime, end: endDateTime) },
+                ])
+                let scoreService = try await sahhaActor.getScoreService()
                 let scores = try await scoreService.getScores(types: types, startDateTime: startDateTime, endDateTime: endDateTime)
                 let scoreJson = try scores.toDataWrappedJSON()
                 callback(nil, scoreJson)
             } catch {
-                logError("Error getting scores", error: error)
                 callback(error.localizedDescription, nil)
             }
         }
@@ -249,16 +259,13 @@ public final class Sahha {
     ) {
         Task {
             do {
-                guard startDateTime <= endDateTime else {
-                    throw ValidationError.invalidDateRange
-                }
-                guard !categories.isEmpty else {
-                    throw ValidationError.emptyCollection(collection: "categories")
-                }
-                guard !types.isEmpty else {
-                    throw ValidationError.emptyCollection(collection: "types")
-                }
-                let biomarkerService = try await container.getBiomarkerService()
+                try await validate([
+                    { await checkAuthentication() },
+                    { checkNotEmptyCollection(categories, name: "categories") },
+                    { checkNotEmptyCollection(types, name: "types") },
+                    { checkDateRange(start: startDateTime, end: endDateTime) },
+                ])
+                let biomarkerService = try await sahhaActor.getBiomarkerService()
                 let biomarkers = try await biomarkerService.getBiomarkers(
                     categories: categories,
                     types: types,
@@ -268,7 +275,6 @@ public final class Sahha {
                 let biomarkerJson = try biomarkers.toDataWrappedJSON()
                 callback(nil, biomarkerJson)
             } catch {
-                logError("Error getting scores", error: error)
                 callback(error.localizedDescription, nil)
             }
         }
@@ -278,31 +284,47 @@ public final class Sahha {
 
     public static func openAppSettings() {
         Task { @MainActor in
-            guard let settingsURL = URL(string: UIApplication.openSettingsURLString),
+            if let settingsURL = URL(string: UIApplication.openSettingsURLString),
                 UIApplication.shared.canOpenURL(settingsURL)
-            else {
-                logError("Failed to open app settings: Invalid or unsupported settings URL.")
-                return
-            }
-
-            await UIApplication.shared.open(settingsURL)
-        }
-    }
-
-    // MARK: Errors
-
-    private static func logError(_ message: String, function: String = #function, error: Error? = nil) {
-        Task {
-            let errorInfo = error.map { "\($0) (\(type(of: $0)))" } ?? "No error details"
-            let fullMessage = "\(message): \(errorInfo)"
-
-            do {
-                let logger = try await container.getLogger()
-                logger.error(fullMessage, file: #file, function: function)
-            } catch {
-                print("Failed to log error: \(message), error: \(errorInfo)")
+            {
+                await UIApplication.shared.open(settingsURL)
+            } else {
+                print("Failed to open app settings: Invalid or unsupported settings URL.")
             }
         }
     }
 
+    // MARK: Validation Helpers
+
+    typealias AsyncValidationCheck = () async -> ValidationError?
+
+    static func validate(_ checks: [AsyncValidationCheck]) async throws {
+        var errors: [ValidationError] = []
+        for check in checks {
+            if let error = await check() {
+                errors.append(error)
+            }
+        }
+        if !errors.isEmpty {
+            throw ValidationError.validationFailed(errors)
+        }
+    }
+
+    static func checkAuthentication() async -> ValidationError? {
+        await MainActor.run {
+            !Sahha.isAuthenticated ? .authenticationRequired : nil
+        }
+    }
+
+    static func checkNotEmpty(_ str: String, field: String) -> ValidationError? {
+        str.isEmpty ? .emptyString(field: field) : nil
+    }
+
+    static func checkNotEmptyCollection<T>(_ collection: T, name: String) -> ValidationError? where T: Collection {
+        collection.isEmpty ? .emptyCollection(collection: name) : nil
+    }
+
+    static func checkDateRange(start: Date, end: Date) -> ValidationError? {
+        start > end ? .invalidDateRange : nil
+    }
 }

@@ -1,5 +1,5 @@
 public struct SahhaScore: Codable, Sendable {
-    struct ScoreFactor: Codable, Sendable {
+    public struct ScoreFactor: Codable, Sendable {
         let name: String
         let value: Double
         let goal: Double

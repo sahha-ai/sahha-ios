@@ -1,4 +1,4 @@
-struct ErrorRequest: Codable {
+struct ErrorRequest: Codable, Sendable {
     let sdkId: String?
     let sdkVersion: String?
     let appId: String?
