@@ -10,7 +10,7 @@ public struct SahhaSample: Comparable, Codable, Sendable {
     public var endDateTime: Date
     public var recordingMethod: String
     public var source: String
-    public var stats: [SahhaStat]
+    public var stats: [SahhaStat] = []
     
     public static func < (lhs: SahhaSample, rhs: SahhaSample) -> Bool {
         lhs.startDateTime < rhs.startDateTime

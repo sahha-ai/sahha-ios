@@ -5,12 +5,6 @@ struct AuthSnapshot {
     let expiry: Date?
 }
 
-// TODO:
-
-// Normalise stats
-// Get stats/samples
-// Disposables
-
 public final class Sahha {
     private static let sahhaActor: SahhaActor = .shared
 
@@ -106,6 +100,7 @@ public final class Sahha {
         Task {
             do {
                 try await sahhaActor.reset()
+                callback(nil, true)
             } catch {
                 callback(error.localizedDescription, false)
             }
@@ -153,9 +148,9 @@ public final class Sahha {
                     { await checkAuthentication() },
                     { checkNotEmptyCollection(sensors, name: "sensors") },
                 ])
-                let sensorManager = try await sahhaActor.getSensorManager()
-                try await sensorManager.enableSensors(sensors)
-                let status = try await sensorManager.getSensorStatus(sensors)
+                let hkManager = try await sahhaActor.getHkManager()
+                try await hkManager.enableSensors(sensors)
+                let status = try await hkManager.getSensorStatus(sensors)
                 callback(nil, status)
             } catch {
                 callback(error.localizedDescription, .pending)
@@ -170,8 +165,8 @@ public final class Sahha {
                     { await checkAuthentication() },
                     { checkNotEmptyCollection(sensors, name: "sensors") },
                 ])
-                let sensorManager = try await sahhaActor.getSensorManager()
-                let status = try await sensorManager.getSensorStatus(sensors)
+                let hkManager = try await sahhaActor.getHkManager()
+                let status = try await hkManager.getSensorStatus(sensors)
                 callback(nil, status)
             } catch {
                 callback(error.localizedDescription, .pending)

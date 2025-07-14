@@ -1,4 +1,5 @@
 import Foundation
+import HealthKit
 
 public struct SahhaStat: Comparable, Codable, Sendable {
     public var id: String = UUID().uuidString
@@ -16,3 +17,4 @@ public struct SahhaStat: Comparable, Codable, Sendable {
         lhs.value < rhs.value
     }
 }
+

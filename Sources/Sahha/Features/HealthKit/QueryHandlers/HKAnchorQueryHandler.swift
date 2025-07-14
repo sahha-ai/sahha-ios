@@ -1,80 +1,43 @@
 import HealthKit
 
-protocol HKAnchorQueryHandler: Actor {
-    func executeQuery(for sampleType: HKSampleType) async
+protocol HKAnchorQueryHandler: Sendable {
+    func fetchAnchoredUpdates(
+        for sampleType: HKSampleType,
+        predicate: NSPredicate?,
+        limit: Int
+    ) async throws -> (samples: [HKSample], newAnchor: HKQueryAnchor?)
 }
 
-final actor HKAnchorQueryHandlerImpl: HKAnchorQueryHandler {
-    private let batchLimit = 1000
+final class HKAnchorQueryHandlerImpl: HKAnchorQueryHandler {
     private let healthStore: HKHealthStore
     private let anchorStore: HKAnchorStore
-    private let logger: Logger
-    private let processor: DataLogProcessor
-    private let normaliser: NormalisingEngine<HKSample, DataLog>
-
-    private var activeAnchors: Set<String> = []
-
-    init(
-        healthStore: HKHealthStore = HKHealthStore(),
-        anchorStore: HKAnchorStore,
-        logger: Logger,
-        processor: DataLogProcessor,
-        normaliser: NormalisingEngine<HKSample, DataLog>
-    ) {
+    
+    init(healthStore: HKHealthStore = HKHealthStore(), anchorStore: HKAnchorStore) {
         self.healthStore = healthStore
         self.anchorStore = anchorStore
-        self.logger = logger
-        self.processor = processor
-        self.normaliser = normaliser
     }
-
-    func executeQuery(for sampleType: HKSampleType) async {
-        let id = sampleType.identifier
-        guard activeAnchors.insert(id).inserted else { return }
-        defer { activeAnchors.remove(id) }
-        
-        var anchor = await anchorStore.getAnchor(for: id)
-        
-        while true {
-            do {
-                let (samples, nextAnchor) = try await anchoredBatch(for: sampleType, anchor: anchor)
-                
-                guard !samples.isEmpty else {
-                    break
-                }
-                
-                let logs = samples.flatMap(normaliser.normalise)
-                await processor.enqueue(logs)
-                
-                if let nextAnchor = nextAnchor {
-                    anchor = nextAnchor
-                    await anchorStore.saveAnchor(for: id, anchor: nextAnchor)
-                }
-            } catch {
-                logger.error("\(id) anchor query failed: \(error.localizedDescription)")
-                break
-            }
-        }
-    }
-
-    private func anchoredBatch(
+    
+    func fetchAnchoredUpdates(
         for sampleType: HKSampleType,
-        anchor: HKQueryAnchor?
-    ) async throws -> ([HKSample], HKQueryAnchor?) {
-        try await withCheckedThrowingContinuation { continuation in
+        predicate: NSPredicate? = nil,
+        limit: Int = HKObjectQueryNoLimit
+    ) async throws -> (samples: [HKSample], newAnchor: HKQueryAnchor?) {
+        let anchor = await anchorStore.getAnchor(for: sampleType.identifier)
+        
+        return try await withCheckedThrowingContinuation { continuation in
             let query = HKAnchoredObjectQuery(
                 type: sampleType,
-                predicate: nil,
+                predicate: predicate,
                 anchor: anchor,
-                limit: batchLimit
-            ) { _, samples, _, nextAnchor, error in
-                if let error {
+                limit: limit
+            ) { _, samples, _, newAnchor, error in
+                if let error = error {
                     continuation.resume(throwing: error)
-                } else {
-                    let batch = samples ?? []
-                    continuation.resume(returning: (batch, nextAnchor))
+                    return
                 }
+                continuation.resume(returning: (samples ?? [], newAnchor))
             }
+            
             healthStore.execute(query)
         }
     }

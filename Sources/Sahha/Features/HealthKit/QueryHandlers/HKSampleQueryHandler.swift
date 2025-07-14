@@ -1,38 +1,42 @@
 import HealthKit
 
-protocol HKSampleQueryHandler: Actor {
-    func executeQuery(for sampleType: HKSampleType, startDateTime: Date, endDateTime: Date) async throws -> [HKSample]
+protocol HKSampleQueryHandler: Sendable {
+    func fetchSamples(
+        for sampleType: HKSampleType,
+        predicate: NSPredicate?,
+        limit: Int,
+        sortDescriptors: [NSSortDescriptor]?
+    ) async throws -> [HKSample]
 }
 
-final actor HKSampleQueryHandlerImpl: HKSampleQueryHandler {
+final class HKSampleQueryHandlerImpl: HKSampleQueryHandler {
     private let healthStore: HKHealthStore
-    private let logger: Logger
     
-    init(healthStore: HKHealthStore = HKHealthStore(), logger: Logger) {
+    init(healthStore: HKHealthStore = HKHealthStore()) {
         self.healthStore = healthStore
-        self.logger = logger
     }
     
-    func executeQuery(for sampleType: HKSampleType, startDateTime: Date, endDateTime: Date) async throws -> [HKSample] {
-        let predicate = HKQuery.predicateForSamples(withStart: startDateTime, end: endDateTime)
-        let startDateDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
-        
-        let samples: [HKSample] = try await withCheckedThrowingContinuation { continuation in
+    func fetchSamples(
+        for sampleType: HKSampleType,
+        predicate: NSPredicate? = nil,
+        limit: Int = HKObjectQueryNoLimit,
+        sortDescriptors: [NSSortDescriptor]? = nil
+    ) async throws -> [HKSample] {
+        try await withCheckedThrowingContinuation { continuation in
             let query = HKSampleQuery(
                 sampleType: sampleType,
                 predicate: predicate,
-                limit: HKObjectQueryNoLimit,
-                sortDescriptors: [startDateDescriptor]
-            ) { _, samples, error in
-                if let error {
+                limit: limit,
+                sortDescriptors: sortDescriptors
+            ) { _, results, error in
+                if let error = error {
                     continuation.resume(throwing: error)
-                } else {
-                    continuation.resume(returning: samples ?? [])
+                    return
                 }
+                continuation.resume(returning: results ?? [])
             }
+            
             healthStore.execute(query)
         }
-        
-        return samples
     }
 }

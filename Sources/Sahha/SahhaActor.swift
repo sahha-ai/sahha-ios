@@ -14,10 +14,14 @@ final actor SahhaActor {
         configurationTask = Task {
             await container.reset()
 
-            // MARK: Device Information Struct
+            // MARK: Device Information (Core)
 
-            await container.register(DeviceInformation.self) { c in
-                let provider = DeviceInformationProviderImpl(framework: settings.framework)
+            await container.register(DeviceInformation.self) { _ in
+                let deviceIdStore = DeviceIdStoreImpl()
+                let provider = DeviceInfoProviderImpl(
+                    framework: settings.framework,
+                    deviceIdStore: deviceIdStore
+                )
                 return await provider.getDeviceInformation()
             }
 
@@ -41,7 +45,7 @@ final actor SahhaActor {
                 return LoggerImpl(service: service, deviceInfo: deviceInfo)
             }
 
-            // MARK: Device Information
+            // MARK: Device Information (Feature)
 
             await container.register(DeviceInformationService.self) { c in
                 let api = try await c.resolve(APIService.self)
@@ -66,6 +70,12 @@ final actor SahhaActor {
                 return LifecycleObserverImpl(logger: logger)
             }
 
+            // MARK: Sensors
+
+            await container.register(SensorStore.self) { _ in
+                SensorStoreImpl()
+            }
+
             // MARK: Authentication
 
             await container.register(AuthService.self) { c in
@@ -78,9 +88,9 @@ final actor SahhaActor {
                 let storage = KeychainStorageImpl<TokenResponse>(account: Constants.Keychain.Token.account)
                 return await TokenManagerImpl(service: service, storage: storage)
             }
-            
+
             // MARK: Demographic
-            
+
             await container.register(DemographicService.self) { c in
                 let api = try await c.resolve(APIService.self)
                 return DemographicServiceImpl(api: api)
@@ -99,10 +109,14 @@ final actor SahhaActor {
                 return DataLogServiceImpl(api: api)
             }
 
+            await container.register(DataLogBatchStorage.self) { _ in
+                DataLogBatchStorageImpl(directory: Constants.Directories.dataLogBatches)
+            }
+
             await container.register(DataLogProcessor.self) { c in
                 let service = try await c.resolve(DataLogService.self)
                 let logger = try await c.resolve(Logger.self)
-                let storage = DataLogBatchStorageImpl(directory: Constants.Directories.dataLogBatches)
+                let storage = try await c.resolve(DataLogBatchStorage.self)
                 let deviceInfo = try await c.resolve(DeviceInformation.self)
                 let deviceId = deviceInfo.deviceId
                 let uploader = DataLogUploaderImpl(service: service, deviceId: deviceId, storage: storage)
@@ -110,48 +124,78 @@ final actor SahhaActor {
             }
 
             // MARK: HealthKit
-            
-            await container.register(HKAnchorStore.self) {c in
+
+            await container.register(HKAnchorStore.self) { _ in
                 HKAnchorStoreImpl()
             }
 
-            await container.register(HKManager.self) { c in
+            await container.register(HKObserverQueryHandler.self) { c in
                 let logger = try await c.resolve(Logger.self)
-                
-                let processor = try await c.resolve(DataLogProcessor.self)
                 let anchorStore = try await c.resolve(HKAnchorStore.self)
-                let anchorQueryHandler = HKAnchorQueryHandlerImpl(
+                let dataLogProcessor = try await c.resolve(DataLogProcessor.self)
+                let anchorQueryHandler = HKAnchorQueryHandlerImpl(anchorStore: anchorStore)
+
+                let eventHandler = HKObserverEventHandlerImpl(
+                    anchorQueryHandler: anchorQueryHandler,
                     anchorStore: anchorStore,
-                    logger: logger,
-                    processor: processor,
-                    normaliser: HKSampleToDataLogRegistry.normaliser
+                    normaliser: DataLogNormaliserRegistry.normaliser,
+                    dataLogProcessor: dataLogProcessor,
+                    logger: logger
                 )
-                
-                let observerQueryHandler = HKObserverQueryHandlerImpl(logger: logger, anchorQueryHandler: anchorQueryHandler)
-                let permissionHandler = HKPermissionHandlerImpl()
-                
-                let sampleQueryHandler = HKSampleQueryHandlerImpl(logger: logger)
-                let statsQueryHandler = HKStatisticsQueryHandlerImpl(logger: logger)
-                
-                return HKManagerImpl(
-                    permissionHandler: permissionHandler,
-                    observerQueryHandler: observerQueryHandler,
+
+                return HKObserverQueryHandlerImpl(logger: logger, eventHandler: eventHandler)
+            }
+
+            await container.register(SampleProvider.self) { c in
+                let authorizationManager = HKAuthorizationManagerImpl()
+                let sampleQueryHandler = HKSampleQueryHandlerImpl()
+
+                return SampleProviderImpl(
+                    authorizationManager: authorizationManager,
                     sampleQueryHandler: sampleQueryHandler,
-                    statsQueryHandler: statsQueryHandler
+                    sampleNormaliser: SahhaSampleNormaliserRegistry.normaliser
                 )
             }
 
-            // MARK: Sensors
+            await container.register(StatsProvider.self) { c in
+                let authorizationManager = HKAuthorizationManagerImpl()
+                let sampleQueryHandler = HKSampleQueryHandlerImpl()
+                let statsQueryHandler = HKStatisticsQueryHandlerImpl()
 
-            await container.register(SensorStore.self) { c in
-                SensorStoreImpl()
+                let sleepStatsProvider = SleepStatsProviderImpl(
+                    authorizationManager: authorizationManager,
+                    sampleQueryHandler: sampleQueryHandler
+                )
+                let exerciseStatsProvider = ExerciseStatsProviderImpl(
+                    authorizationManager: authorizationManager,
+                    sampleQueryHandler: sampleQueryHandler
+                )
+                let quantityStatsProvider = QuantityStatsProviderImpl(
+                    authorizationManager: authorizationManager,
+                    statisticsQueryHandler: statsQueryHandler
+                )
+
+                return StatsProviderImpl(
+                    sleepStatsProvider: sleepStatsProvider,
+                    exerciseStatsProvider: exerciseStatsProvider,
+                    quantityStatsProvider: quantityStatsProvider
+                )
             }
 
-            await container.register(SensorManager.self) { c in
-                let store = try await c.resolve(SensorStore.self)
-                let hkManager = try await c.resolve(HKManager.self)
-                let logger = try await c.resolve(Logger.self)
-                return SensorManagerImpl(store: store, hkManager: hkManager, logger: logger)
+            await container.register(HKManager.self) { c in
+                let authorizationManager = HKAuthorizationManagerImpl()
+                let sensorStore = try await c.resolve(SensorStore.self)
+                let observerQueryHandler = try await c.resolve(HKObserverQueryHandler.self)
+                let sampleProvider = try await c.resolve(SampleProvider.self)
+                let statsProvider = try await c.resolve(StatsProvider.self)
+
+                return HKManagerImpl(
+                    authorizationManager: authorizationManager,
+                    observerQueryHandler: observerQueryHandler,
+                    sensorStore: sensorStore,
+                    sampleProvider: sampleProvider,
+                    statsProvider: statsProvider
+                )
             }
 
             // MARK: API Interceptors
@@ -168,21 +212,41 @@ final actor SahhaActor {
 
             // MARK: Lifecycle Handlers
 
-            let lifecycleObserver = try await container.resolve(LifecycleObserver.self)
-            let deviceInfoStore = try await container.resolve(DeviceInformationStore.self)
-            let deviceInfo = try await container.resolve(DeviceInformation.self)
-            let sensorManager = try await container.resolve(SensorManager.self)
-            let sensorStore = try await container.resolve(SensorStore.self)
-            let dataLogProcessor = try await container.resolve(DataLogProcessor.self)
+            await container.register(DeviceInformationSyncHandler.self) { c in
+                let store = try await c.resolve(DeviceInformationStore.self)
+                let tokenManager = try await c.resolve(TokenManager.self)
+                return DeviceInformationSyncHandler(
+                    store: store,
+                    tokenManager: tokenManager
+                )
+            }
 
-            let deviceSyncHandler = DeviceInformationSyncHandler(store: deviceInfoStore, tokenManager: tokenManager)
-            let resumeSensorsHandler = ResumeSensorsHandler(sensorManager: sensorManager, tokenManager: tokenManager)
-            let deviceLogHandler = DeviceLogHandler(
-                sensorStore: sensorStore,
-                deviceInfo: deviceInfo,
-                processor: dataLogProcessor,
-                tokenManager: tokenManager
-            )
+            await container.register(ResumeSensorsHandler.self) { c in
+                let hkManager = try await c.resolve(HKManager.self)
+                let tokenManager = try await c.resolve(TokenManager.self)
+                return ResumeSensorsHandler(
+                    hkManager: hkManager,
+                    tokenManager: tokenManager
+                )
+            }
+
+            await container.register(DeviceLogHandler.self) { c in
+                let sensorStore = try await c.resolve(SensorStore.self)
+                let deviceInfo = try await c.resolve(DeviceInformation.self)
+                let processor = try await c.resolve(DataLogProcessor.self)
+                let tokenManager = try await c.resolve(TokenManager.self)
+                return DeviceLogHandler(
+                    sensorStore: sensorStore,
+                    deviceInfo: deviceInfo,
+                    processor: processor,
+                    tokenManager: tokenManager
+                )
+            }
+
+            let lifecycleObserver = try await container.resolve(LifecycleObserver.self)
+            let deviceSyncHandler = try await container.resolve(DeviceInformationSyncHandler.self)
+            let resumeSensorsHandler = try await container.resolve(ResumeSensorsHandler.self)
+            let deviceLogHandler = try await container.resolve(DeviceLogHandler.self)
 
             await lifecycleObserver.addHandler(deviceSyncHandler, for: [.didBecomeActive])
             await lifecycleObserver.addHandler(resumeSensorsHandler, for: [.didBecomeActive])
@@ -209,17 +273,13 @@ final actor SahhaActor {
     }
 
     // MARK: Resolvers
-    
+
     func getAuthService() async throws -> AuthService {
         return try await resolve(AuthService.self)
     }
 
     func getTokenManager() async throws -> TokenManager {
         return try await resolve(TokenManager.self)
-    }
-
-    func getSensorManager() async throws -> SensorManager {
-        return try await resolve(SensorManager.self)
     }
 
     func getDeviceInfoStore() async throws -> DeviceInformationStore {
@@ -229,15 +289,15 @@ final actor SahhaActor {
     func getDemographicStore() async throws -> DemographicStore {
         return try await resolve(DemographicStore.self)
     }
-    
+
     func getHkManager() async throws -> HKManager {
         return try await resolve(HKManager.self)
     }
-    
+
     func getScoreService() async throws -> ScoreService {
         return try await resolve(ScoreService.self)
     }
-    
+
     func getBiomarkerService() async throws -> BiomarkerService {
         return try await resolve(BiomarkerService.self)
     }

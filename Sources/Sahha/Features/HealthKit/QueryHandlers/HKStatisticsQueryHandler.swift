@@ -1,37 +1,47 @@
 import HealthKit
 
-protocol HKStatisticsQueryHandler: Actor {
-    func executeQuery(for quantityType: HKQuantityType, startDateTime: Date, endDateTime: Date) async throws -> [HKStatistics]
+protocol HKStatisticsQueryHandler: Sendable {
+    func fetchStatisticsCollection(
+        for quantityType: HKQuantityType,
+        quantitySamplePredicate: NSPredicate?,
+        options: HKStatisticsOptions,
+        anchorDate: Date,
+        intervalComponents: DateComponents
+    ) async throws -> HKStatisticsCollection?
 }
 
-final actor HKStatisticsQueryHandlerImpl: HKStatisticsQueryHandler {
+final class HKStatisticsQueryHandlerImpl: HKStatisticsQueryHandler {
     private let healthStore: HKHealthStore
-    private let logger: Logger
-
-    init(healthStore: HKHealthStore = HKHealthStore(), logger: Logger) {
+    
+    init(healthStore: HKHealthStore = HKHealthStore()) {
         self.healthStore = healthStore
-        self.logger = logger
     }
-
-    func executeQuery(for quantityType: HKQuantityType, startDateTime: Date, endDateTime: Date) async throws -> [HKStatistics] {
-        let stats: [HKStatistics] = try await withCheckedThrowingContinuation { continuation in
+    
+    func fetchStatisticsCollection(
+        for quantityType: HKQuantityType,
+        quantitySamplePredicate: NSPredicate? = nil,
+        options: HKStatisticsOptions = [],
+        anchorDate: Date,
+        intervalComponents: DateComponents
+    ) async throws -> HKStatisticsCollection? {
+        try await withCheckedThrowingContinuation { continuation in
             let query = HKStatisticsCollectionQuery(
                 quantityType: quantityType,
-                quantitySamplePredicate: nil,
-                options: .cumulativeSum,
-                anchorDate: Date(),
-                intervalComponents: DateComponents()
+                quantitySamplePredicate: quantitySamplePredicate,
+                options: options,
+                anchorDate: anchorDate,
+                intervalComponents: intervalComponents
             )
-            query.initialResultsHandler = { _, results, error in
+            
+            query.initialResultsHandler = { _, collection, error in
                 if let error = error {
                     continuation.resume(throwing: error)
-                } else {
-                    continuation.resume(returning: results?.statistics() ?? [])
+                    return
                 }
+                continuation.resume(returning: collection)
             }
+            
             healthStore.execute(query)
         }
-        
-        return stats
     }
 }

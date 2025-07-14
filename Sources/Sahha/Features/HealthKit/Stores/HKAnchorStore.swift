@@ -1,9 +1,8 @@
-import Foundation
 import HealthKit
 
 protocol HKAnchorStore: Actor, Disposable {
     func getAnchor(for identifier: String) -> HKQueryAnchor?
-    func saveAnchor(for identifier: String, anchor: HKQueryAnchor)
+    func saveAnchor(_ anchor: HKQueryAnchor, for identifier: String)
 }
 
 final actor HKAnchorStoreImpl: HKAnchorStore {
@@ -26,7 +25,7 @@ final actor HKAnchorStoreImpl: HKAnchorStore {
         anchors[identifier]
     }
 
-    func saveAnchor(for identifier: String, anchor: HKQueryAnchor) {
+    func saveAnchor(_ anchor: HKQueryAnchor, for identifier: String) {
         anchors[identifier] = anchor
         var anchorDataDict = (userDefaults.dictionary(forKey: key) as? [String: Data]) ?? [:]
         if let data = try? NSKeyedArchiver.archivedData(withRootObject: anchor, requiringSecureCoding: true) {
@@ -36,7 +35,7 @@ final actor HKAnchorStoreImpl: HKAnchorStore {
     }
 
     func dispose() async {
-        anchors = [:]
+        anchors.removeAll()
         userDefaults.removeObject(forKey: key)
     }
 }
