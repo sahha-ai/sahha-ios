@@ -1,18 +1,15 @@
 import Foundation
 
 enum AuthError: LocalizedError {
-    case missingToken
-    case invalidToken
-    case unauthorized
+    case noProfileToken
+    case noRefreshToken
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
-        case .missingToken:
-            return "No authentication token was found."
-        case .invalidToken:
-            return "The authentication token is invalid or corrupted."
-        case .unauthorized:
-            return "Authentication failed: credentials are no longer valid."
+        case .noProfileToken:
+            return "Profile token is missing or expired."
+        case .noRefreshToken:
+            return "Refresh token is missing or expired."
         }
     }
 }

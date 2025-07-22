@@ -1,9 +1,31 @@
-import Foundation
-
-protocol SensorManager: Sendable {
-    func enableSensors(_ sensors: Set<SahhaSensor>) async throws
-    func resumeSensors() async throws
-    func getSensorStatus(_ sensors: Set<SahhaSensor>) async throws -> SahhaSensorStatus
-    func getSamples(for sensor: SahhaSensor, startDateTime: Date, endDateTime: Date) async throws -> [SahhaSample]
-    func getStats(for sensor: SahhaSensor, startDateTime: Date, endDateTime: Date) async throws -> [SahhaStat]
+final class SensorManager: SensorManaging {
+    private let sensorStore: SensorStoring
+    private let healthKitService: HealthKitProviding
+    
+    init(sensorStore: SensorStoring, healthKitService: HealthKitProviding) {
+        self.sensorStore = sensorStore
+        self.healthKitService = healthKitService
+    }
+    
+    func enableSensors(_ sensors: Set<SahhaSensor>) async throws {
+        let previouslyEnabled = await sensorStore.loadSensors()
+        
+        await sensorStore.saveSensors(sensors)
+        
+        try await healthKitService.enableSensors(sensors)
+        
+        let toDisable = previouslyEnabled.subtracting(sensors)
+        if !toDisable.isEmpty {
+            try await healthKitService.disableSensors(toDisable)
+        }
+    }
+    
+    func resumeSensors() async throws {
+        let enabledSensors = await sensorStore.loadSensors()
+        try await healthKitService.resumeSensors(enabledSensors)
+    }
+    
+    func getSensorStatus(_ sensors: Set<SahhaSensor>) async throws -> SahhaSensorStatus {
+        try await healthKitService.getSensorStatus(sensors)
+    }
 }

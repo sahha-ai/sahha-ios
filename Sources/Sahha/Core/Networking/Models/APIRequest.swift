@@ -23,9 +23,7 @@ struct APIRequest {
         self.body = body != nil ? try? JSONEncoder().encode(body!) : nil
         self.requiresAuth = requiresAuth
     }
-}
-
-extension APIRequest {
+    
     mutating func addQueryParameter(name: String, value: String) {
         var existingParameters = self.queryParameters ?? []
         existingParameters.append(URLQueryItem(name: name, value: value))

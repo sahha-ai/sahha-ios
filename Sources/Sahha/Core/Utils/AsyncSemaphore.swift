@@ -22,7 +22,7 @@ final actor AsyncSemaphore {
         if let waiter = waiters.first {
             waiters.removeFirst()
             waiter.resume()
-        } else {
+        } else if value < maxValue {
             value += 1
         }
     }

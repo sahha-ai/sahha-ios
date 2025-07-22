@@ -3,32 +3,33 @@ import UIKit
 
 public final class Sahha {
     private static let actor: SahhaActor = .shared
-    
+    static let authSnapshot = AuthSnapshot()
+
     // MARK: Configuration
-    public static func configure(_ settings: SahhaSettings, callback: (@Sendable () -> Void)? = nil) {
+
+    public static func configure(
+        _ settings: SahhaSettings,
+        callback: (@Sendable () -> Void)? = nil
+    ) {
         Task {
             do {
-                try await actor.configure(settings)
-                callback?()
+                try await actor.configure(with: settings)
+                try await actor.startAuthenticatedServicesIfTokenPresent()
             } catch {
-                print("Error while configuring Sahha: \(error)")
+                print("An error occurred while configuring Sahha: \(error)")
+            }
+            if let callback = callback {
+                await MainActor.run { callback() }
             }
         }
     }
-    
+
     // MARK: Authentication
-    
-    // Auth snapshot to keep isAuthenticated and profileToken vars sync.
-    static let authSnapshot = AuthSnapshot()
-    
-    public static var isAuthenticated: Bool {
-        return authSnapshot.isAuthenticated
-    }
-    
-    public static var profileToken: String? {
-        return authSnapshot.profileToken
-    }
-    
+
+    public static var profileToken: String? { authSnapshot.profileToken }
+
+    public static var isAuthenticated: Bool { authSnapshot.isAuthenticated }
+
     public static func authenticate(
         appId: String,
         appSecret: String,
@@ -37,16 +38,17 @@ public final class Sahha {
     ) {
         Task {
             do {
-                let authManager = try await actor.getAuthManager()
-                try await authManager.authorize(appId: appId, appSecret: appSecret, externalId: externalId)
-                try await actor.onAuthenticated()
-                callback(nil, true)
+                try await SahhaValidator.validateAuthenticate(appId: appId, appSecret: appSecret, externalId: externalId)
+                let authService = try await actor.getAuthService()
+                try await authService.authenticate(appId: appId, appSecret: appSecret, externalId: externalId)
+                try await actor.startAuthenticatedServices()
+                await MainActor.run { callback(nil, true) }
             } catch {
-                callback(error.localizedDescription, false)
+                await MainActor.run { callback(error.localizedDescription, false) }
             }
         }
     }
-    
+
     public static func authenticate(
         profileToken: String,
         refreshToken: String,
@@ -54,79 +56,96 @@ public final class Sahha {
     ) {
         Task {
             do {
-                let authManager = try await actor.getAuthManager()
-                try await authManager.authorize(profileToken: profileToken, refreshToken: refreshToken)
-                try await actor.onAuthenticated()
-                callback(nil, true)
+                try await SahhaValidator.validateAuthenticate(profileToken: profileToken, refreshToken: refreshToken)
+                let authService = try await actor.getAuthService()
+                try await authService.authenticate(profileToken: profileToken, refreshToken: refreshToken)
+                try await actor.startAuthenticatedServices()
+                await MainActor.run { callback(nil, true) }
             } catch {
-                callback(error.localizedDescription, false)
+                await MainActor.run { callback(error.localizedDescription, false) }
             }
         }
     }
-    
+
     public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
         Task {
             do {
                 try await actor.resetContainer()
-                callback(nil, true)
+                await MainActor.run { callback(nil, true) }
             } catch {
-                callback(error.localizedDescription, false)
+                await MainActor.run { callback(error.localizedDescription, false) }
             }
         }
     }
-    
+
     // MARK: Demographic
+
     public static func getDemographic(callback: @escaping @Sendable (String?, SahhaDemographic?) -> Void) {
         Task {
             do {
-                let demographicManager = try await actor.getDemographicManager()
-                let demographic = try await demographicManager.getDemographic()
-                callback(nil, demographic)
+                try await SahhaValidator.validateGetDemographic()
+                let demographicService = try await actor.getDemographicService()
+                let demographic = try await demographicService.getDemographic()
+                await MainActor.run { callback(nil, demographic) }
             } catch {
-                callback(error.localizedDescription, nil)
+                await MainActor.run { callback(error.localizedDescription, nil) }
             }
         }
     }
-    
-    public static func postDemographic(_ demographic: SahhaDemographic, callback: @escaping @Sendable (String?, Bool) -> Void) {
+
+    public static func postDemographic(
+        _ demographic: SahhaDemographic,
+        callback: @escaping @Sendable (String?, Bool) -> Void
+    ) {
         Task {
             do {
-                let demographicManager = try await actor.getDemographicManager()
-                try await demographicManager.updateDemographic(demographic)
+                try await SahhaValidator.validatePostDemographic()
+                let demographicService = try await actor.getDemographicService()
+                try await demographicService.updateDemographic(demographic)
                 callback(nil, true)
             } catch {
-                callback(error.localizedDescription, false)
+                await MainActor.run { callback(error.localizedDescription, false) }
             }
         }
     }
-    
+
     // MARK: Sensors
-    public static func enableSensors(_ sensors: Set<SahhaSensor>, callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void) {
+
+    public static func enableSensors(
+        _ sensors: Set<SahhaSensor>,
+        callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void
+    ) {
         Task {
             do {
+                try await SahhaValidator.validateEnableSensors(sensors: sensors)
                 let sensorManager = try await actor.getSensorManager()
                 try await sensorManager.enableSensors(sensors)
                 let status = try await sensorManager.getSensorStatus(sensors)
-                callback(nil, status)
+                await MainActor.run { callback(nil, status) }
             } catch {
-                callback(error.localizedDescription, .unavailable)
+                await MainActor.run { callback(error.localizedDescription, .unavailable) }
             }
         }
     }
-    
-    public static func getSensorStatus(_ sensors: Set<SahhaSensor>, callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void) {
+
+    public static func getSensorStatus(
+        _ sensors: Set<SahhaSensor>,
+        callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void
+    ) {
         Task {
             do {
+                try await SahhaValidator.validateGetSensorStatus(sensors: sensors)
                 let sensorManager = try await actor.getSensorManager()
                 let status = try await sensorManager.getSensorStatus(sensors)
-                callback(nil, status)
+                await MainActor.run { callback(nil, status) }
             } catch {
-                callback(error.localizedDescription, .unavailable)
+                await MainActor.run { callback(error.localizedDescription, .unavailable) }
             }
         }
     }
-    
+
     // MARK: Samples
+
     public static func getSamples(
         sensor: SahhaSensor,
         startDateTime: Date,
@@ -135,16 +154,18 @@ public final class Sahha {
     ) {
         Task {
             do {
-                let sensorManager = try await actor.getSensorManager()
-                let samples = try await sensorManager.getSamples(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
-                callback(nil, samples)
+                try await SahhaValidator.validateGetSamples(startDate: startDateTime, endDate: endDateTime)
+                let healthKitService = try await actor.getHealthKitService()
+                let samples = try await healthKitService.getSamples(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
+                await MainActor.run { callback(nil, samples) }
             } catch {
-                callback(error.localizedDescription, [])
+                await MainActor.run { callback(error.localizedDescription, []) }
             }
         }
     }
-    
+
     // MARK: Stats
+
     public static func getStats(
         sensor: SahhaSensor,
         startDateTime: Date,
@@ -153,16 +174,18 @@ public final class Sahha {
     ) {
         Task {
             do {
-                let sensorManager = try await actor.getSensorManager()
-                let stats = try await sensorManager.getStats(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
-                callback(nil, stats)
+                try await SahhaValidator.validateGetStats(startDate: startDateTime, endDate: endDateTime)
+                let healthKitService = try await actor.getHealthKitService()
+                let stats = try await healthKitService.getStats(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
+                await MainActor.run { callback(nil, stats) }
             } catch {
-                callback(error.localizedDescription, [])
+                await MainActor.run { callback(error.localizedDescription, []) }
             }
         }
     }
-    
+
     // MARK: Scores
+
     public static func getScores(
         types: Set<SahhaScoreType>,
         startDateTime: Date,
@@ -171,20 +194,19 @@ public final class Sahha {
     ) {
         Task {
             do {
+                try await SahhaValidator.validateGetScores(types: types, startDate: startDateTime, endDate: endDateTime)
                 let scoreService = try await actor.getScoreService()
-                let scores = try await scoreService.getScores(
-                    types: types,
-                    startDateTime: startDateTime,
-                    endDateTime: endDateTime
-                )
-                callback(nil, "") // TODO
+                let scores = try await scoreService.fetchScores(types: types, startDateTime: startDateTime, endDateTime: endDateTime)
+                let jsonString = try scores.asDataJsonString()
+                await MainActor.run { callback(nil, jsonString) }
             } catch {
-                callback(error.localizedDescription, nil)
+                await MainActor.run { callback(error.localizedDescription, nil) }
             }
         }
     }
-    
+
     // MARK: Biomarkers
+
     public static func getBiomarkers(
         categories: Set<SahhaBiomarkerCategory>,
         types: Set<SahhaBiomarkerType>,
@@ -194,21 +216,24 @@ public final class Sahha {
     ) {
         Task {
             do {
+                try await SahhaValidator.validateGetBiomarkers(categories: categories, types: types, startDate: startDateTime, endDate: endDateTime)
                 let biomarkerService = try await actor.getBiomarkerService()
-                let biomarkers = try await biomarkerService.getBiomarkers(
+                let biomarkers = try await biomarkerService.fetchBiomarkers(
                     categories: categories,
                     types: types,
                     startDateTime: startDateTime,
                     endDateTime: endDateTime
                 )
-                callback(nil, "") // TODO
+                let jsonString = try biomarkers.asDataJsonString()
+                await MainActor.run { callback(nil, jsonString) }
             } catch {
-                callback(error.localizedDescription, nil)
+                await MainActor.run { callback(error.localizedDescription, nil) }
             }
         }
     }
-    
+
     // MARK: Settings
+
     public static func openAppSettings() {
         Task { @MainActor in
             if let settingsURL = URL(string: UIApplication.openSettingsURLString),
@@ -219,5 +244,23 @@ public final class Sahha {
                 print("Failed to open app settings: Invalid or unsupported settings URL.")
             }
         }
+    }
+}
+
+// TEMPORARY: Legacy JSON bridge for old API compatibility.
+// This extension is a stop-gap. It wraps an array in a "data" JSON structure and returns it as a string.
+// NOTE: Remove this extension and return properly typed arrays from the public API in a future SDK release.
+extension Array where Element: Encodable {
+    fileprivate func asDataJsonString() throws -> String {
+        let wrapper = ["data": self]
+        let jsonData = try JSONEncoder().encode(wrapper)
+        guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+            throw NSError(
+                domain: "Sahha.JSONEncoding",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to encode JSON data to UTF-8 string."]
+            )
+        }
+        return jsonString
     }
 }

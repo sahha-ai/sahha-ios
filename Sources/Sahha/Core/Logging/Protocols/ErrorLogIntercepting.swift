@@ -1,0 +1,1 @@
+protocol ErrorLogIntercepting: Intercepting {}

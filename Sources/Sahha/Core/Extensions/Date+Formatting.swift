@@ -1,23 +1,18 @@
 import Foundation
 
 extension Date {
+    /// e.g. “2025-07-18”
     var isoDate: String {
         DateFormatter.isoDate.string(from: self)
     }
     
+    /// e.g. “2025-07-18T14:23:45.123+12:00”
     var isoDateTime: String {
-        DateFormatter.isoDateTimeWithOffset.string(from: self)
+        DateFormatter.isoDateTime.string(from: self)
     }
     
+    /// e.g. “+12:00”
     var utcOffset: String {
-        DateFormatter.utcOffsetOnly.string(from: self)
-    }
-    
-    var timestamp: String {
-        DateFormatter.timestamp.string(from: self)
-    }
-    
-    var timestampMillis: String {
-        DateFormatter.timestampMillis.string(from: self)
+        DateFormatter.utcOffset.string(from: self)
     }
 }

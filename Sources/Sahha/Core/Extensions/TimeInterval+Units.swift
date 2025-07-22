@@ -8,4 +8,8 @@ extension TimeInterval {
     static func minutes(_ value: Double) -> TimeInterval {
         return value * 60
     }
+    
+    static func seconds(_ value: Double) -> TimeInterval {
+        value
+    }
 }

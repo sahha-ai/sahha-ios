@@ -1,17 +1,24 @@
+//
+//  StorageKeys.swift
+//  Sahha
+//
+//  Created by Connor Cain on 21/07/2025.
+//
+
 enum StorageKeys {
-    private static let prefix = SDKConfig.prefix
-
-    static let authToken = "\(prefix).AuthToken"
-
-    static let enabledSensors = "\(prefix).EnabledSensors"
+    enum UserDefaults {
+        private static let prefix = "ai.sahha."
+        
+        static let deviceInfoStateKey = prefix + "deviceInfoState"
+        static let demographicStateKey = prefix + "demographicState"
+        static let enabledSensorsKey = prefix + "enabledSensors"
+        static let hkAnchorPrefix = prefix + "hkAnchor."
+    }
     
-    static let hkAnchorPrefix = "\(prefix).HKAnchor."
-    
-    static let demographicCacheHash = "\(prefix).DemographicCacheHash"
-    static let demographicCacheTimestamp = "\(prefix).DemographicCacheTimestamp"
-    
-    static let deviceInfoCacheHash = "\(prefix).DeviceInfoCacheHash"
-    static let deviceInfoCacheTimestamp = "\(prefix).DeviceInfoCacheTimestamp"
-    
-    static let deviceId = "\(prefix).DeviceId"
+    enum Keychain {
+        static let service = "ai.sahha.sdk"
+        
+        static let deviceIdKey = "deviceId"
+        static let tokenResponseKey = "tokenResponse"
+    }
 }

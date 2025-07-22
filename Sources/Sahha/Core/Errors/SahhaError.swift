@@ -6,7 +6,7 @@ enum SahhaError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notConfigured:
-            return "Sahha is not configured. Please call `Sahha.configure(...)` before calling this function."
+            return "Sahha has not been configured. Please call Sahha.configure(...) first."
         }
     }
 }
