@@ -1,38 +1,21 @@
 extension Logger {
-    func info(
-        _ msg: @autoclosure @escaping @Sendable () -> String,
-        file: StaticString = #fileID,
-        line: UInt = #line,
-        fn: StaticString = #function
-    ) {
-        log(.info, msg(), context: .sdk(file: file, line: line, function: fn))
+    func debug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        log(level: .debug, message: message, file: file, function: function, line: line, source: "SDK", code: nil, location: nil, body: nil)
+    }
+
+    func info(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        log(level: .info, message: message, file: file, function: function, line: line, source: "SDK", code: nil, location: nil, body: nil)
+    }
+
+    func warning(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        log(level: .warning, message: message, file: file, function: function, line: line, source: "SDK", code: nil, location: nil, body: nil)
+    }
+
+    func error(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        log(level: .error, message: message, file: file, function: function, line: line, source: "SDK", code: nil, location: nil, body: nil)
     }
     
-    func warning(
-        _ msg: @autoclosure @escaping @Sendable () -> String,
-        file: StaticString = #fileID,
-        line: UInt = #line,
-        fn: StaticString = #function
-    ) {
-        log(.warning, msg(), context: .sdk(file: file, line: line, function: fn))
-    }
-    
-    func error(
-        _ msg: @autoclosure @escaping @Sendable () -> String,
-        file: StaticString = #fileID,
-        line: UInt = #line,
-        fn: StaticString = #function,
-        codeBody: String? = nil
-    ) {
-        log(.error, msg(), context: .sdk(file: file, line: line, function: fn, codeBody: codeBody))
-    }
-    
-    func apiError(
-        _ msg: @autoclosure @escaping @Sendable () -> String,
-        code: Int? = nil,
-        location: String? = nil,
-        body: String? = nil
-    ) {
-        log(.error, msg(), context: .api(code: code, location: location, body: body))
+    func apiError(_ message: String,code: Int, location: String, body: String) {
+        log(level: .error, message: message, file: "", function: "", line: 0, source: "API", code: code, location: location, body: body)
     }
 }

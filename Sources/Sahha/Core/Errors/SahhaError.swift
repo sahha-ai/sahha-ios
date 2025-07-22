@@ -1,6 +1,6 @@
 import Foundation
 
-enum SahhaError: Error, LocalizedError {
+enum SahhaError: LocalizedError {
     case notConfigured
     
     var errorDescription: String? {

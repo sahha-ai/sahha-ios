@@ -1,304 +1,256 @@
-import HealthKit
-
 final actor SahhaActor {
     static let shared = SahhaActor()
-    private let container = DIContainer()
+
     private var settings: SahhaSettings?
-    private var configurationTask: Task<Void, Error>?
+    private var container: DIContainer
 
-    private init() {}
-
-    func configure(with settings: SahhaSettings) async throws {
-        self.settings = settings
-
-        configurationTask = Task {
-            await container.reset()
-
-            // MARK: Device Information (Core)
-
-            await container.register(DeviceInformation.self) { _ in
-                let deviceIdStore = DeviceIdStoreImpl()
-                let provider = DeviceInfoProviderImpl(
-                    framework: settings.framework,
-                    deviceIdStore: deviceIdStore
-                )
-                return await provider.getDeviceInformation()
-            }
-
-            // MARK: API
-
-            await container.register(APIService.self) { _ in
-                let environment = settings.environment
-                return try APISerivceImpl(environment: environment)
-            }
-
-            // MARK: Logging
-
-            await container.register(LoggingService.self) { c in
-                let api = try await c.resolve(APIService.self)
-                return LoggingServiceImpl(api: api)
-            }
-
-            await container.register(Logger.self) { c in
-                let service = try await c.resolve(LoggingService.self)
-                let deviceInfo = try await c.resolve(DeviceInformation.self)
-                return LoggerImpl(service: service, deviceInfo: deviceInfo)
-            }
-
-            // MARK: Device Information (Feature)
-
-            await container.register(DeviceInformationService.self) { c in
-                let api = try await c.resolve(APIService.self)
-                return DeviceInformationServiceImpl(api: api)
-            }
-
-            await container.register(DeviceInformationStore.self) { c in
-                let logger = try await c.resolve(Logger.self)
-                let deviceInfo = try await c.resolve(DeviceInformation.self)
-                let service = try await c.resolve(DeviceInformationService.self)
-                return DeviceInformationStoreImpl(
-                    logger: logger,
-                    deviceInfo: deviceInfo,
-                    service: service
-                )
-            }
-
-            // MARK: Lifecycle
-
-            await container.register(LifecycleObserver.self) { c in
-                let logger = try await c.resolve(Logger.self)
-                return LifecycleObserverImpl(logger: logger)
-            }
-
-            // MARK: Sensors
-
-            await container.register(SensorStore.self) { _ in
-                SensorStoreImpl()
-            }
-
-            // MARK: Authentication
-
-            await container.register(AuthService.self) { c in
-                let api = try await c.resolve(APIService.self)
-                return AuthServiceImpl(api: api)
-            }
-
-            await container.register(TokenManager.self) { c in
-                let service = try await c.resolve(AuthService.self)
-                let storage = KeychainStorageImpl<TokenResponse>(account: Constants.Keychain.Token.account)
-                return await TokenManagerImpl(service: service, storage: storage)
-            }
-
-            // MARK: Demographic
-
-            await container.register(DemographicService.self) { c in
-                let api = try await c.resolve(APIService.self)
-                return DemographicServiceImpl(api: api)
-            }
-
-            await container.register(DemographicStore.self) { c in
-                let logger = try await c.resolve(Logger.self)
-                let service = try await c.resolve(DemographicService.self)
-                return DemographicStoreImpl(logger: logger, service: service)
-            }
-
-            // MARK: DataLogs
-
-            await container.register(DataLogService.self) { c in
-                let api = try await c.resolve(APIService.self)
-                return DataLogServiceImpl(api: api)
-            }
-
-            await container.register(DataLogBatchStorage.self) { _ in
-                DataLogBatchStorageImpl(directory: Constants.Directories.dataLogBatches)
-            }
-
-            await container.register(DataLogProcessor.self) { c in
-                let service = try await c.resolve(DataLogService.self)
-                let logger = try await c.resolve(Logger.self)
-                let storage = try await c.resolve(DataLogBatchStorage.self)
-                let deviceInfo = try await c.resolve(DeviceInformation.self)
-                let deviceId = deviceInfo.deviceId
-                let uploader = DataLogUploaderImpl(service: service, deviceId: deviceId, storage: storage)
-                return DataLogProcessorImpl(logger: logger, storage: storage, uploader: uploader)
-            }
-
-            // MARK: HealthKit
-
-            await container.register(HKAnchorStore.self) { _ in
-                HKAnchorStoreImpl()
-            }
-
-            await container.register(HKObserverQueryHandler.self) { c in
-                let logger = try await c.resolve(Logger.self)
-                let anchorStore = try await c.resolve(HKAnchorStore.self)
-                let dataLogProcessor = try await c.resolve(DataLogProcessor.self)
-                let anchorQueryHandler = HKAnchorQueryHandlerImpl(anchorStore: anchorStore)
-
-                let eventHandler = HKObserverEventHandlerImpl(
-                    anchorQueryHandler: anchorQueryHandler,
-                    anchorStore: anchorStore,
-                    normaliser: DataLogNormaliserRegistry.normaliser,
-                    dataLogProcessor: dataLogProcessor,
-                    logger: logger
-                )
-
-                return HKObserverQueryHandlerImpl(logger: logger, eventHandler: eventHandler)
-            }
-
-            await container.register(SampleProvider.self) { c in
-                let authorizationManager = HKAuthorizationManagerImpl()
-                let sampleQueryHandler = HKSampleQueryHandlerImpl()
-
-                return SampleProviderImpl(
-                    authorizationManager: authorizationManager,
-                    sampleQueryHandler: sampleQueryHandler,
-                    sampleNormaliser: SahhaSampleNormaliserRegistry.normaliser
-                )
-            }
-
-            await container.register(StatsProvider.self) { c in
-                let authorizationManager = HKAuthorizationManagerImpl()
-                let sampleQueryHandler = HKSampleQueryHandlerImpl()
-                let statsQueryHandler = HKStatisticsQueryHandlerImpl()
-
-                let sleepStatsProvider = SleepStatsProviderImpl(
-                    authorizationManager: authorizationManager,
-                    sampleQueryHandler: sampleQueryHandler
-                )
-                let exerciseStatsProvider = ExerciseStatsProviderImpl(
-                    authorizationManager: authorizationManager,
-                    sampleQueryHandler: sampleQueryHandler
-                )
-                let quantityStatsProvider = QuantityStatsProviderImpl(
-                    authorizationManager: authorizationManager,
-                    statisticsQueryHandler: statsQueryHandler
-                )
-
-                return StatsProviderImpl(
-                    sleepStatsProvider: sleepStatsProvider,
-                    exerciseStatsProvider: exerciseStatsProvider,
-                    quantityStatsProvider: quantityStatsProvider
-                )
-            }
-
-            await container.register(HKManager.self) { c in
-                let authorizationManager = HKAuthorizationManagerImpl()
-                let sensorStore = try await c.resolve(SensorStore.self)
-                let observerQueryHandler = try await c.resolve(HKObserverQueryHandler.self)
-                let sampleProvider = try await c.resolve(SampleProvider.self)
-                let statsProvider = try await c.resolve(StatsProvider.self)
-
-                return HKManagerImpl(
-                    authorizationManager: authorizationManager,
-                    observerQueryHandler: observerQueryHandler,
-                    sensorStore: sensorStore,
-                    sampleProvider: sampleProvider,
-                    statsProvider: statsProvider
-                )
-            }
-
-            // MARK: API Interceptors
-
-            let apiService = try await container.resolve(APIService.self)
-            let tokenManager = try await container.resolve(TokenManager.self)
-            let logger = try await container.resolve(Logger.self)
-
-            let authInterceptor = AuthInterceptor(tokenManager: tokenManager)
-            let errorInterceptor = ErrorInterceptor(logger: logger)
-
-            await apiService.registerInterceptor(authInterceptor)
-            await apiService.registerInterceptor(errorInterceptor)
-
-            // MARK: Lifecycle Handlers
-
-            await container.register(DeviceInformationSyncHandler.self) { c in
-                let store = try await c.resolve(DeviceInformationStore.self)
-                let tokenManager = try await c.resolve(TokenManager.self)
-                return DeviceInformationSyncHandler(
-                    store: store,
-                    tokenManager: tokenManager
-                )
-            }
-
-            await container.register(ResumeSensorsHandler.self) { c in
-                let hkManager = try await c.resolve(HKManager.self)
-                let tokenManager = try await c.resolve(TokenManager.self)
-                return ResumeSensorsHandler(
-                    hkManager: hkManager,
-                    tokenManager: tokenManager
-                )
-            }
-
-            await container.register(DeviceLogHandler.self) { c in
-                let sensorStore = try await c.resolve(SensorStore.self)
-                let deviceInfo = try await c.resolve(DeviceInformation.self)
-                let processor = try await c.resolve(DataLogProcessor.self)
-                let tokenManager = try await c.resolve(TokenManager.self)
-                return DeviceLogHandler(
-                    sensorStore: sensorStore,
-                    deviceInfo: deviceInfo,
-                    processor: processor,
-                    tokenManager: tokenManager
-                )
-            }
-
-            let lifecycleObserver = try await container.resolve(LifecycleObserver.self)
-            let deviceSyncHandler = try await container.resolve(DeviceInformationSyncHandler.self)
-            let resumeSensorsHandler = try await container.resolve(ResumeSensorsHandler.self)
-            let deviceLogHandler = try await container.resolve(DeviceLogHandler.self)
-
-            await lifecycleObserver.addHandler(deviceSyncHandler, for: [.didBecomeActive])
-            await lifecycleObserver.addHandler(resumeSensorsHandler, for: [.didBecomeActive])
-            await lifecycleObserver.addHandler(deviceLogHandler, for: Set(LifecycleEvent.allCases))
-        }
-
-        try await configurationTask?.value
-        configurationTask = nil
+    private init() {
+        container = DIContainer()
     }
 
-    func reset() async throws {
+    func configure(_ settings: SahhaSettings) async throws {
+
+        self.settings = settings
+
+        // MARK: Device Info
+        await container.register(DeviceIdStore.self) { _ in
+            DefaultDeviceIdStore()
+        }
+        await container.register(DeviceInfoCollector.self) { c in
+            DefaultDeviceInfoCollector(
+                framework: settings.framework,
+                deviceIdStore: try await c.resolve(DeviceIdStore.self)
+            )
+        }
+
+        // MARK: Lifecycle
+        await container.register(LifecycleObserver.self) { _ in
+            DefaultLifecycleObserver()
+        }
+
+        // MARK: API
+        await container.register(APIClient.self) { _ in
+            try DefaultAPIClient(baseURL: settings.environment.baseURL)
+        }
+
+        // MARK: Logging
+        await container.register(Logger.self) { c in
+            DefaultLogger(
+                api: try await c.resolve(APIClient.self),
+                deviceInfo: try await c.resolve(DeviceInfoCollector.self).collect()
+            )
+        }
+        await container.register(LoggingInterceptor.self) { c in
+            LoggingInterceptor(logger: try await c.resolve(Logger.self))
+        }
+
+        // MARK: Auth
+        await container.register(AuthService.self) { c in
+            DefaultAuthService(api: try await c.resolve(APIClient.self))
+        }
+        await container.register(TokenStore.self) { _ in
+            DefaultTokenStore()
+        }
+        await container.register(TokenProvider.self) { c in
+            DefaultTokenManager(
+                authService: try await c.resolve(AuthService.self),
+                tokenStore: try await c.resolve(TokenStore.self)
+            )
+        }
+        await container.register(AuthManager.self) { c in
+            DefaultAuthManager(
+                authService: try await c.resolve(AuthService.self),
+                tokenProvider: try await c.resolve(TokenProvider.self)
+            )
+        }
+        await container.register(AuthInterceptor.self) { c in
+            AuthInterceptor(tokenProvider: try await c.resolve(TokenProvider.self))
+        }
+
+        // MARK: Device
+        await container.register(DeviceInfoService.self) { c in
+            DefaultDeviceInfoService(api: try await c.resolve(APIClient.self))
+        }
+        await container.register(DeviceInfoManager.self) { c in
+            DefaultDeviceInfoManager(
+                deviceInfoService: try await c.resolve(DeviceInfoService.self),
+                collector: try await c.resolve(DeviceInfoCollector.self)
+            )
+        }
+
+        // MARK: DataLog Pipeline
+        await container.register(DataLogRequestFactory.self) { c in
+            DefaultDataLogRequestFactory(deviceIdStore: try await c.resolve(DeviceIdStore.self))
+        }
+        await container.register(DataLogBatchStorage.self) { c in
+            DataLogBatchStorage(
+                directory: Directories.dataLogBatchDirectory,
+                logger: try await c.resolve(Logger.self)
+            )
+        }
+        await container.register(DataLogUploader.self) { c in
+            DataLogUploader(
+                api: try await c.resolve(APIClient.self),
+                requestFactory: try await c.resolve(DataLogRequestFactory.self),
+                storage: try await c.resolve(DataLogBatchStorage.self),
+                logger: try await c.resolve(Logger.self)
+            )
+        }
+        await container.register(DataLogProcessor.self) { c in
+            DataLogProcessor(
+                storage: try await c.resolve(DataLogBatchStorage.self),
+                uploader: try await c.resolve(DataLogUploader.self),
+                logger: try await c.resolve(Logger.self)
+            )
+        }
+
+        // MARK: HealthKit
+        await container.register(HKPermissionManager.self) { _ in
+            DefaultHKPermissionManager()
+        }
+        await container.register(HKObserverManager.self) { c in
+            DefaultHKObserverManager()
+        }
+        await container.register(HKAnchorStore.self) { _ in
+            UserDefaultsHKAnchorStore()
+        }
+        await container.register(DataLogFetcher.self) { c in
+            DataLogFetcher(
+                anchorStore: try await c.resolve(HKAnchorStore.self),
+                processor: try await c.resolve(DataLogProcessor.self),
+                logger: try await c.resolve(Logger.self)
+            )
+        }
+        await container.register(SamplesFetcher.self) { c in
+            SamplesFetcher()
+        }
+        await container.register(StatsFetcher.self) { c in
+            StatsFetcher()
+        }
+
+        // MARK: Sensors
+        await container.register(SensorStore.self) { _ in
+            UserDefaultsSensorStore()
+        }
+        await container.register(SensorManager.self) { c in
+            DefaultSensorManager(
+                sensorStore: try await c.resolve(SensorStore.self),
+                observerManager: try await c.resolve(HKObserverManager.self),
+                permissionManager: try await c.resolve(HKPermissionManager.self),
+                dataLogFetcher: try await c.resolve(DataLogFetcher.self),
+                samplesFetcher: try await c.resolve(SamplesFetcher.self),
+                statsFetcher: try await c.resolve(StatsFetcher.self),
+                logger: try await c.resolve(Logger.self)
+            )
+        }
+
+        // MARK: Biomarker
+        await container.register(BiomarkerService.self) { c in
+            DefaultBiomarkerService(api: try await c.resolve(APIClient.self))
+        }
+
+        // MARK: Score
+        await container.register(ScoreService.self) { c in
+            DefaultScoreService(api: try await c.resolve(APIClient.self))
+        }
+
+        // MARK: Demographic
+        await container.register(DemographicService.self) { c in
+            DefaultDemographicService(api: try await c.resolve(APIClient.self))
+        }
+        await container.register(DemographicManager.self) { c in
+            DefaultDemographicManager(demographicService: try await c.resolve(DemographicService.self))
+        }
+
+        //MARK: Lifecycle Listeners
+        await container.register(DeviceLogListener.self) { c in
+            DeviceLogListener(
+                collector: try await c.resolve(DeviceInfoCollector.self),
+                sensorStore: try await c.resolve(SensorStore.self),
+                processor: try await c.resolve(DataLogProcessor.self),
+            )
+        }
+        await container.register(DeviceInfoSyncListener.self) { c in
+            DeviceInfoSyncListener(
+                manager: try await c.resolve(DeviceInfoManager.self)
+            )
+        }
+
+        // MARK: Register Interceptors
+        let api = try await container.resolve(APIClient.self)
+        let authInterceptor = try await container.resolve(AuthInterceptor.self)
+        let loggingInterceptor = try await container.resolve(LoggingInterceptor.self)
+
+        await api.registerInterceptor(authInterceptor)
+        await api.registerInterceptor(loggingInterceptor)
+
+        // Run authenticated services if valid token
+        let tokenProvider = try await container.resolve(TokenProvider.self)
+
+        if (try? await tokenProvider.validProfileToken()) != nil {
+            try await onAuthenticated()
+        }
+    }
+
+    func onAuthenticated() async throws {
+        // Register lifecycle listeners
+        let lifecycleObserver = try await container.resolve(LifecycleObserver.self)
+        let deviceLogListener = try await container.resolve(DeviceLogListener.self)
+        let deviceInfoSyncListener = try await container.resolve(DeviceInfoSyncListener.self)
+
+        await lifecycleObserver.registerListener(deviceLogListener)
+        await lifecycleObserver.registerListener(deviceInfoSyncListener)
+
+        // Force sync device info
+        let deviceInfoManager = try await container.resolve(DeviceInfoManager.self)
+
+        do {
+            try await deviceInfoManager.forceSync()
+        } catch {
+            print("Failed to force sync device info: \(error)")
+        }
+
+        // Resume sensors
+        let sensorManager = try await container.resolve(SensorManager.self)
+
+        do {
+            try await sensorManager.resumeSensors()
+        } catch {
+            print("Failed to resume sensors: \(error)")
+        }
+    }
+
+    func resetContainer() async throws {
         guard let settings = settings else {
             throw SahhaError.notConfigured
         }
         await container.reset()
-        try await configure(with: settings)
+        try await configure(settings)
     }
 
     private func resolve<T: Sendable>(_ type: T.Type) async throws -> T {
-        if let task = configurationTask {
-            try await task.value
-        }
-        return try await container.resolve(type)
+        try await container.resolve(type)
     }
 
-    // MARK: Resolvers
+    // MARK: Convenience functions
 
-    func getAuthService() async throws -> AuthService {
-        return try await resolve(AuthService.self)
+    func getAuthManager() async throws -> AuthManager {
+        try await resolve(AuthManager.self)
     }
 
-    func getTokenManager() async throws -> TokenManager {
-        return try await resolve(TokenManager.self)
+    func getDemographicManager() async throws -> DemographicManager {
+        try await resolve(DemographicManager.self)
     }
 
-    func getDeviceInfoStore() async throws -> DeviceInformationStore {
-        return try await resolve(DeviceInformationStore.self)
-    }
-
-    func getDemographicStore() async throws -> DemographicStore {
-        return try await resolve(DemographicStore.self)
-    }
-
-    func getHkManager() async throws -> HKManager {
-        return try await resolve(HKManager.self)
+    func getSensorManager() async throws -> SensorManager {
+        try await resolve(SensorManager.self)
     }
 
     func getScoreService() async throws -> ScoreService {
-        return try await resolve(ScoreService.self)
+        try await resolve(ScoreService.self)
     }
 
     func getBiomarkerService() async throws -> BiomarkerService {
-        return try await resolve(BiomarkerService.self)
+        try await resolve(BiomarkerService.self)
     }
 }

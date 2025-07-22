@@ -1,6 +1,6 @@
 import Foundation
 
-enum ValidationError: Error, LocalizedError {
+enum ValidationError: LocalizedError {
     case emptyString(field: String)
     case emptyCollection(collection: String)
     case invalidDateRange
