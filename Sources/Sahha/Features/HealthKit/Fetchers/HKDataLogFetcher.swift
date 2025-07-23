@@ -89,12 +89,6 @@ final actor HKDataLogFetcher: HKDataLogFetching {
             throw HealthKitError.permissionDenied(sensor)
         }
 
-        // TODO: REMOVE THIS AFTER TESTING!!!
-        let startTime = Date()
-        var totalSamples = 0
-        await anchorStore.deleteAnchor(for: sensor.rawValue)
-        // END TODO
-
         var anchor: HKQueryAnchor?
         do {
             anchor = try await anchorStore.loadAnchor(for: sensor.rawValue)
@@ -111,14 +105,7 @@ final actor HKDataLogFetcher: HKDataLogFetching {
                 using: healthStore
             )
 
-            totalSamples += samples.count
-            print("Fetched \(samples.count) samples for \(sensor.rawValue), running total: \(totalSamples)")
-
-            guard !samples.isEmpty else {
-                let elapsed = Date().timeIntervalSince(startTime)
-                print("No more samples for sensor: \(sensor.rawValue), exiting fetch loop. Total samples: \(totalSamples), time: \(elapsed) seconds.")
-                break
-            }
+            guard !samples.isEmpty else { break }
 
             let dataLogs = await ConcurrentBatchProcessor.run(
                 items: samples,

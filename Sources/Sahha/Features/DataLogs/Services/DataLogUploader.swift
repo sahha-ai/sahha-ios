@@ -67,10 +67,7 @@ final actor DataLogUploader: DataLogUploading {
                 do {
                     let dataLogs = try await batchStorage.load(url: batchURL)
                     let dataLogRequests = try await requestFactory.map(dataLogs)
-                    // TODO: Add back after testing
-//                    try await apiClient.send(.postDataLogs(dataLogRequests))
-                    // Simulate batch upload time
-                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    try await apiClient.send(.postDataLogs(dataLogRequests))
                     try await batchStorage.delete(url: batchURL)
                     break
                 } catch is CancellationError {
