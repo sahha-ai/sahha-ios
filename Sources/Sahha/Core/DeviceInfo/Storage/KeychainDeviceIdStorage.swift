@@ -3,13 +3,11 @@ import UIKit
 final actor KeychainDeviceIdStorage: DeviceIdStoring {
     private let storage: KeychainStoring
     private let key = StorageKeys.Keychain.deviceIdKey
-    private let logger: ErrorLogger
     
     private var cached: String?
 
-    init(storage: KeychainStoring = KeychainStorage(), logger: ErrorLogger) {
+    init(storage: KeychainStoring = KeychainStorage()) {
         self.storage = storage
-        self.logger = logger
     }
 
     func getDeviceId() async throws -> String {

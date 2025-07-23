@@ -44,6 +44,7 @@ public final class Sahha {
                 try await actor.startAuthenticatedServices()
                 await MainActor.run { callback(nil, true) }
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, false) }
             }
         }
@@ -62,6 +63,7 @@ public final class Sahha {
                 try await actor.startAuthenticatedServices()
                 await MainActor.run { callback(nil, true) }
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, false) }
             }
         }
@@ -73,6 +75,7 @@ public final class Sahha {
                 try await actor.resetContainer()
                 await MainActor.run { callback(nil, true) }
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, false) }
             }
         }
@@ -88,6 +91,7 @@ public final class Sahha {
                 let demographic = try await demographicService.getDemographic()
                 await MainActor.run { callback(nil, demographic) }
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, nil) }
             }
         }
@@ -104,6 +108,7 @@ public final class Sahha {
                 try await demographicService.updateDemographic(demographic)
                 callback(nil, true)
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, false) }
             }
         }
@@ -123,6 +128,7 @@ public final class Sahha {
                 let status = try await sensorManager.getSensorStatus(sensors)
                 await MainActor.run { callback(nil, status) }
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, .unavailable) }
             }
         }
@@ -139,6 +145,7 @@ public final class Sahha {
                 let status = try await sensorManager.getSensorStatus(sensors)
                 await MainActor.run { callback(nil, status) }
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, .unavailable) }
             }
         }
@@ -159,6 +166,7 @@ public final class Sahha {
                 let samples = try await healthKitService.getSamples(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
                 await MainActor.run { callback(nil, samples) }
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, []) }
             }
         }
@@ -179,6 +187,7 @@ public final class Sahha {
                 let stats = try await healthKitService.getStats(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
                 await MainActor.run { callback(nil, stats) }
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, []) }
             }
         }
@@ -200,6 +209,7 @@ public final class Sahha {
                 let jsonString = try scores.asDataJsonString()
                 await MainActor.run { callback(nil, jsonString) }
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, nil) }
             }
         }
@@ -227,6 +237,7 @@ public final class Sahha {
                 let jsonString = try biomarkers.asDataJsonString()
                 await MainActor.run { callback(nil, jsonString) }
             } catch {
+                print(error)
                 await MainActor.run { callback(error.localizedDescription, nil) }
             }
         }

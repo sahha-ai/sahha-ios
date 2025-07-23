@@ -13,16 +13,14 @@ final actor SahhaActor {
     func configure(with settings: SahhaSettings) async throws {
         configurationTask = Task {
             defer { self.configurationTask = nil }
-
+            
             self.settings = settings
             let container = DIContainer()
-
+            
             // MARK: Device Info
 
-            await container.register(DeviceIdStoring.self) { container in
-                KeychainDeviceIdStorage(
-                    logger: try await container.resolve(ErrorLogger.self)
-                )
+            await container.register(DeviceIdStoring.self) { _ in
+                KeychainDeviceIdStorage()
             }
             await container.register(DeviceInfoCollecting.self) { container in
                 DeviceInfoCollector(
@@ -30,19 +28,19 @@ final actor SahhaActor {
                     sdkId: settings.framework.rawValue
                 )
             }
-
+            
             // MARK: Lifecycle
 
-            await container.register(LifecycleObserving.self) { container in
+            await container.register(LifecycleObserving.self) { _ in
                 LifecycleObserver()
             }
-
+            
             // MARK: API Client
 
             await container.register(APIClientProviding.self) { _ in
                 APIClient(baseURL: settings.environment.baseURL)
             }
-
+            
             // MARK: Logging
 
             await container.register(ErrorLogger.self) { container in
@@ -56,7 +54,7 @@ final actor SahhaActor {
                     logger: try await container.resolve(ErrorLogger.self)
                 )
             }
-
+            
             // MARK: Auth
 
             await container.register(TokenStoring.self) { _ in
@@ -73,7 +71,7 @@ final actor SahhaActor {
                     authService: try await container.resolve(AuthServiceProviding.self)
                 )
             }
-
+            
             // MARK: Biomarkers
             
             await container.register(BiomarkerServiceProviding.self) { container in
@@ -81,7 +79,7 @@ final actor SahhaActor {
                     apiClient: try await container.resolve(APIClientProviding.self)
                 )
             }
-            
+                        
             // MARK: Scores
 
             await container.register(ScoreServiceProviding.self) { container in
@@ -89,7 +87,7 @@ final actor SahhaActor {
                     apiClient: try await container.resolve(APIClientProviding.self)
                 )
             }
-            
+                        
             // MARK: Demographic
 
             await container.register(DemographicCaching.self) { container in
@@ -103,10 +101,10 @@ final actor SahhaActor {
                     apiClient: try await container.resolve(APIClientProviding.self),
                 )
             }
-
+            
             // MARK: DataLog Pipeline
 
-            await container.register(DataLogBatchStoring.self) { container in
+            await container.register(DataLogBatchStoring.self) { _ in
                 try await FileManagerDataLogBatchStorage(
                     storage: FileManagerStorage(directory: SahhaDirectories.batches)
                 )
@@ -130,10 +128,10 @@ final actor SahhaActor {
                     uploader: try await container.resolve(DataLogUploading.self)
                 )
             }
-
+            
             // MARK: HealthKit
 
-            await container.register(HKPermissionsProviding.self) { container in
+            await container.register(HKPermissionsProviding.self) { _ in
                 HKPermissionsService()
             }
             await container.register(HKObserverProviding.self) { container in
@@ -141,7 +139,7 @@ final actor SahhaActor {
                     logger: try await container.resolve(ErrorLogger.self)
                 )
             }
-            await container.register(HKAnchorStoring.self) { container in
+            await container.register(HKAnchorStoring.self) { _ in
                 UserDefaultsHKAnchorStorage()
             }
             await container.register(HKDataLogFetching.self) { container in
@@ -172,7 +170,7 @@ final actor SahhaActor {
                     logger: try await container.resolve(ErrorLogger.self)
                 )
             }
-
+            
             // MARK: Sensors
 
             await container.register(SensorStoring.self) { container in
@@ -219,10 +217,10 @@ final actor SahhaActor {
             
             // MARK: API Interceptors
             
-            let apiClient = try await resolve(APIClientProviding.self)
-            let authInterceptor = try await resolve(AuthIntercepting.self)
-            let errorLogInterceptor = try await resolve(ErrorLogIntercepting.self)
+            let apiClient = try await container.resolve(APIClientProviding.self)
+            let authInterceptor = try await container.resolve(AuthIntercepting.self)
             await apiClient.registerInterceptor(authInterceptor)
+            let errorLogInterceptor = try await container.resolve(ErrorLogIntercepting.self)
             await apiClient.registerInterceptor(errorLogInterceptor)
 
             self.container = container
