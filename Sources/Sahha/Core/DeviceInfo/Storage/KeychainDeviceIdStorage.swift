@@ -19,7 +19,7 @@ final actor KeychainDeviceIdStorage: DeviceIdStoring {
         // Try to read existing from keychain
         if let existingData = try await storage.get(forKey: key),
             let existing = String(data: existingData, encoding: .utf8),
-            !existing.isEmpty
+           existing.notEmpty
         {
             return existing
         }

@@ -36,7 +36,7 @@ enum HKWorkoutToDataLogNormaliser {
 
         var logs = [parent]
 
-        if let workoutEvents = sample.workoutEvents, !workoutEvents.isEmpty {
+        if let workoutEvents = sample.workoutEvents, workoutEvents.notEmpty {
             logs.append(
                 contentsOf: workoutEvents.compactMap { event in
                     DataLog(
@@ -55,7 +55,7 @@ enum HKWorkoutToDataLogNormaliser {
             )
         }
 
-        if #available(iOS 16.0, *), !sample.workoutActivities.isEmpty {
+        if #available(iOS 16.0, *), sample.workoutActivities.notEmpty {
             logs.append(
                 contentsOf: sample.workoutActivities.compactMap { activity in
                     DataLog(

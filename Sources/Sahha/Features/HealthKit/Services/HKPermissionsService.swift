@@ -13,6 +13,9 @@ final class HKPermissionsService: HKPermissionsProviding {
         }
         
         let types = Set(sensors.flatMap { $0.hkPermissions })
+        
+        guard types.notEmpty else { return }
+        
         try await healthStore.requestAuthorization(toShare: [], read: types)
     }
 
@@ -22,6 +25,8 @@ final class HKPermissionsService: HKPermissionsProviding {
         }
         
         let types = Set(sensors.flatMap { $0.hkPermissions })
+        
+        guard types.notEmpty else { return .pending }
         
         let status = try await healthStore.statusForAuthorizationRequest(toShare: [], read: types)
         

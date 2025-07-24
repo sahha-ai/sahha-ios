@@ -28,7 +28,7 @@ final actor AsyncSemaphore {
     }
     
     func waitForAll() async {
-        while !waiters.isEmpty || value < maxValue {
+        while waiters.notEmpty || value < maxValue {
             await wait()
         }
     }

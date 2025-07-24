@@ -12,13 +12,6 @@ final actor DataLogPipeline: DataLogPipelineProviding {
     private var bufferWaiters: [CheckedContinuation<Void, Never>] = []
     private var disposed = false
 
-    // Each ingest gets a ticket indicating the range of logs it contributed, and a continuation to complete.
-    private struct IngestionTicket {
-        let start: Int
-        let end: Int
-        let continuation: CheckedContinuation<Void, Error>
-        var completed: Bool = false
-    }
     private var pendingTickets: [IngestionTicket] = []
 
     init(
@@ -38,7 +31,7 @@ final actor DataLogPipeline: DataLogPipelineProviding {
     /// Ingest logs, suspending if buffer is full. Only resumes once *these logs* have been persisted.
     func ingest(_ logs: [DataLog]) async throws {
         guard !disposed else { throw CancellationError() }
-        
+
         // Enforce max buffer size, suspend if needed
         while buffer.count + logs.count > maxBufferSize {
             await withCheckedContinuation { cont in
@@ -77,16 +70,16 @@ final actor DataLogPipeline: DataLogPipelineProviding {
     /// Flush buffer in batches of batchSize. Resume only tickets for logs included in each batch.
     private func flush() async {
         guard !disposed else { return }
-        
+
         flushTimer?.invalidate()
         flushTimer = nil
 
-        guard !buffer.isEmpty else { return }
+        guard buffer.notEmpty else { return }
 
         var logsProcessed = 0
         while buffer.count > 0 {
             guard !disposed else { return }
-            
+
             // Pull the next batch
             let batchCount = min(batchSize, buffer.count)
             let logsToFlush = Array(buffer.prefix(batchCount))
@@ -107,16 +100,24 @@ final actor DataLogPipeline: DataLogPipelineProviding {
                 let url = try await batchStorage.save(batch: logsToFlush)
                 await uploader.enqueue(url)
                 // Resume all fulfilled tickets for this batch
-                ticketsForThisBatch.forEach { $0.continuation.resume() }
+                for ticket in ticketsForThisBatch {
+                    guard !ticket.completed else { continue }
+                    ticket.completed = true
+                    ticket.continuation.resume()
+                }
             } catch is CancellationError {
                 break
             } catch {
-                ticketsForThisBatch.forEach { $0.continuation.resume(throwing: error) }
+                for ticket in ticketsForThisBatch {
+                    guard !ticket.completed else { continue }
+                    ticket.completed = true
+                    ticket.continuation.resume(throwing: error)
+                }
             }
 
             // Remove completed tickets from pending
-            for index in fulfilledTickets.reversed() {
-                pendingTickets.remove(at: index)
+            pendingTickets.removeAll { ticket in
+                ticketsForThisBatch.contains(where: { $0 === ticket })
             }
 
             logsProcessed += batchCount
@@ -128,14 +129,14 @@ final actor DataLogPipeline: DataLogPipelineProviding {
 
     /// Wake as many waiting ingests as we have buffer space for.
     private func wakeBufferWaiters() {
-        while !bufferWaiters.isEmpty && buffer.count < maxBufferSize {
+        while bufferWaiters.notEmpty && buffer.count < maxBufferSize {
             bufferWaiters.removeFirst().resume()
         }
     }
 
     func dispose() async {
         disposed = true
-        
+
         // Invalidate timer
         flushTimer?.invalidate()
         flushTimer = nil
@@ -148,11 +149,27 @@ final actor DataLogPipeline: DataLogPipelineProviding {
 
         // Cancel all pending ingestion tickets
         for ticket in pendingTickets {
-            ticket.continuation.resume(throwing: CancellationError())
+            if !ticket.completed {
+                ticket.completed = true
+                ticket.continuation.resume(throwing: CancellationError())
+            }
         }
         pendingTickets.removeAll()
 
         // Clear buffer
         buffer.removeAll()
+    }
+}
+
+private final class IngestionTicket {
+    let start: Int
+    let end: Int
+    let continuation: CheckedContinuation<Void, Error>
+    var completed: Bool = false
+
+    init(start: Int, end: Int, continuation: CheckedContinuation<Void, Error>) {
+        self.start = start
+        self.end = end
+        self.continuation = continuation
     }
 }

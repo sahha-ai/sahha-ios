@@ -15,7 +15,7 @@ final class SensorManager: SensorManaging {
         try await healthKitService.enableSensors(sensors)
         
         let toDisable = previouslyEnabled.subtracting(sensors)
-        if !toDisable.isEmpty {
+        if toDisable.notEmpty {
             try await healthKitService.disableSensors(toDisable)
         }
     }

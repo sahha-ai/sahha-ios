@@ -262,7 +262,7 @@ final actor SahhaActor {
     private func isAuthenticated() async -> Bool {
         let authService = try? await resolve(AuthServiceProviding.self)
         if let profileToken = try? await authService?.validProfileToken() {
-            return !profileToken.isEmpty
+            return profileToken.notEmpty
         }
         return false
     }

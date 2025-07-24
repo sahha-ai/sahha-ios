@@ -68,7 +68,7 @@ final class HKSahhaStatsFetcher: HKSahhaStatsFetching {
 
         let samples = rawSamples.compactMap { $0 as? HKCategorySample }
 
-        guard !samples.isEmpty else {
+        guard samples.notEmpty else {
             throw HealthKitError.noData(.sleep)
         }
 
@@ -162,7 +162,7 @@ final class HKSahhaStatsFetcher: HKSahhaStatsFetching {
 
         let samples = rawSamples.compactMap { $0 as? HKWorkout }
 
-        guard !samples.isEmpty else {
+        guard samples.notEmpty else {
             throw HealthKitError.noData(.exercise)
         }
 
@@ -259,7 +259,7 @@ final class HKSahhaStatsFetcher: HKSahhaStatsFetching {
             using: healthStore
         )
 
-        guard let results = statsCollection?.statistics(), !results.isEmpty else {
+        guard let results = statsCollection?.statistics(), results.notEmpty else {
             throw HealthKitError.noData(sensor)
         }
 

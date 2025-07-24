@@ -12,7 +12,7 @@ enum SahhaValidator {
                 errors.append(error)
             }
         }
-        if !errors.isEmpty {
+        if errors.notEmpty {
             throw ValidationError.validationFailed(errors)
         }
     }

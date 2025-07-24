@@ -5,6 +5,6 @@
 final class AuthSnapshot: @unchecked Sendable {
     var profileToken: String?
     var isAuthenticated: Bool {
-        profileToken != nil && !profileToken!.isEmpty
+        profileToken != nil && profileToken!.notEmpty
     }
 }

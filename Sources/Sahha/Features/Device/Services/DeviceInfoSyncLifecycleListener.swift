@@ -12,7 +12,7 @@ final actor DeviceInfoSyncLifecycleListener: LifecycleListener {
     func handleLifecycleEvent(_ event: LifecycleEvent) async {
         guard event == .app_resume || event == .app_foreground,
             let token = try? await tokenStore.profileToken(),
-            !token.isEmpty
+            token.notEmpty
         else { return }
 
         do {

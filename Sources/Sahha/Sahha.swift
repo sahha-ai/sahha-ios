@@ -129,7 +129,13 @@ public final class Sahha {
                 await MainActor.run { callback(nil, status) }
             } catch {
                 print(error)
-                await MainActor.run { callback(error.localizedDescription, .unavailable) }
+                let status: SahhaSensorStatus = {
+                    if let hkError = error as? HealthKitError, case .healthKitUnavailable = hkError {
+                        return .unavailable
+                    }
+                    return .pending
+                }()
+                await MainActor.run { callback(error.localizedDescription, status) }
             }
         }
     }
@@ -146,7 +152,13 @@ public final class Sahha {
                 await MainActor.run { callback(nil, status) }
             } catch {
                 print(error)
-                await MainActor.run { callback(error.localizedDescription, .unavailable) }
+                let status: SahhaSensorStatus = {
+                    if let hkError = error as? HealthKitError, case .healthKitUnavailable = hkError {
+                        return .unavailable
+                    }
+                    return .pending
+                }()
+                await MainActor.run { callback(error.localizedDescription, status) }
             }
         }
     }

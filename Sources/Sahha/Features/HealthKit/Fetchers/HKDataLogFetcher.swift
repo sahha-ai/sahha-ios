@@ -105,7 +105,7 @@ final actor HKDataLogFetcher: HKDataLogFetching {
                 using: healthStore
             )
 
-            guard !samples.isEmpty else { break }
+            guard samples.notEmpty else { break }
 
             let dataLogs = await ConcurrentBatchProcessor.run(
                 items: samples,

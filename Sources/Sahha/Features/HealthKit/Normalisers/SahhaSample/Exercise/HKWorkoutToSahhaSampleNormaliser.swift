@@ -11,7 +11,7 @@ enum HKWorkoutToSahhaSampleNormaliser {
 
         var stats: [SahhaStat] = []
 
-        if #available(iOS 16.0, *), !sample.allStatistics.isEmpty {
+        if #available(iOS 16.0, *), sample.allStatistics.notEmpty {
             stats.append(
                 contentsOf: sample.allStatistics.values.compactMap{ SahhaStat.fromHKStatistics($0) }
             )

@@ -30,8 +30,4 @@ final actor UserDefaultsSensorStorage: SensorStoring {
     func clearSensors() async {
         await storage.delete(forKey: key)
     }
-    
-    func dispose() async {
-        await clearSensors()
-    }
 }

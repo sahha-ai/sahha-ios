@@ -50,7 +50,7 @@ final actor FileManagerDataLogBatchStorage: DataLogBatchStoring {
     }
 
     private func wakeFileWaiters() {
-        while !fileWaiters.isEmpty && fileCount < maxFileCount {
+        while fileWaiters.notEmpty && fileCount < maxFileCount {
             fileWaiters.removeFirst().resume()
         }
     }
