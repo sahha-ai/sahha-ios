@@ -1,4 +1,4 @@
-enum ErrorSource: String, Codable, Sendable {
-    case sdk = "SDK"
-    case api = "API"
+enum ErrorSource: String, Encodable {
+    case sdk
+    case api
 }

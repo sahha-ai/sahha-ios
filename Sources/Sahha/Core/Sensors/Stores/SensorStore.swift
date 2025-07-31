@@ -1,0 +1,31 @@
+actor SensorStore: SensorStoreProtocol {
+    private let storage: UserDefaultsStorageProtocol
+    private let key: String
+    
+    private var sensors: Set<SahhaSensor>?
+    
+    init(
+        storage: UserDefaultsStorageProtocol = UserDefaultsStorage(),
+        key: String = StorageKeys.UserDefaults.sensors
+    ) {
+        self.storage = storage
+        self.key = key
+    }
+    
+    func setSensors(_ sensors: Set<SahhaSensor>) throws {
+        try storage.setCodable(sensors, forKey: key)
+        self.sensors = sensors
+    }
+    
+    func getSensors() throws -> Set<SahhaSensor> {
+        if let sensors {
+            return sensors
+        }
+        sensors = try storage.codable(forKey: key)
+        return sensors ?? []
+    }
+    
+    func hasSensor(_ sensor: SahhaSensor) -> Bool {
+        sensors?.contains(sensor) ?? false
+    }
+}

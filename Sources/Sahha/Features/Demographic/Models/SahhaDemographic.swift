@@ -1,12 +1,25 @@
 public struct SahhaDemographic: Codable, Equatable, Sendable {
-    public var gender: String?
-    public var birthDate: String?
+    public var gender: String? = nil
+    public var birthDate: String? = nil
+}
+
+extension SahhaDemographic {
+    var isEmpty: Bool {
+        return gender == nil && birthDate == nil
+    }
     
-    public init(
-        gender: String? = nil,
-        birthDate: String? = nil
-    ) {
-        self.gender = gender
-        self.birthDate = birthDate
+    var isComplete: Bool {
+        return gender != nil && birthDate != nil
+    }
+    
+    mutating func mergeWith(_ other: SahhaDemographic) {
+        var result = self
+        if result.isEmpty {
+            result = other
+        } else {
+            result.gender = self.gender ?? other.gender
+            result.birthDate = self.birthDate ?? other.birthDate            
+        }
+        self = result
     }
 }

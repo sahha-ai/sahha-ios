@@ -1,8 +1,9 @@
 import Foundation
 
 open class DataLog: Codable, @unchecked Sendable {
+    let id: String
     var parentId: String?
-    var logType: LogType
+    var logType: DataLogType
     var dataType: String
     var value: Double
     var unit: String
@@ -11,11 +12,12 @@ open class DataLog: Codable, @unchecked Sendable {
     var deviceType: String
     var startDate: Date
     var endDate: Date
-    var additionalProperties: [String: String]?
+    var additionalProperties: AdditionalProperties?
 
     init(
+        id: String? = nil,
         parentId: String? = nil,
-        logType: LogType,
+        logType: DataLogType,
         dataType: String,
         value: Double,
         unit: String,
@@ -26,6 +28,12 @@ open class DataLog: Codable, @unchecked Sendable {
         endDate: Date,
         additionalProperties: [String: String]? = nil
     ) {
+        if let id {
+            self.id = id
+        } else {
+            let components = [dataType, source, deviceType, startDate.isoDateTime, endDate.isoDateTime]
+            self.id = UUIDFactory.v5(from: components).uuidString
+        }
         self.parentId = parentId
         self.logType = logType
         self.dataType = dataType
@@ -39,24 +47,17 @@ open class DataLog: Codable, @unchecked Sendable {
         self.additionalProperties = additionalProperties
     }
 
-    var id: String {
-        let components = [
-            dataType, source, deviceType,
-            startDate.isoDateTime, endDate.isoDateTime,
-        ]
-        return UUIDFactory.v5(from: components).uuidString
-    }
-
     private enum CodingKeys: String, CodingKey {
-        case parentId, logType, dataType, value, unit, source,
+        case id, parentId, logType, dataType, value, unit, source,
             recordingMethod, deviceType, startDate, endDate,
             additionalProperties
     }
 
     required public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
         parentId = try container.decodeIfPresent(String.self, forKey: .parentId)
-        logType = try container.decode(LogType.self, forKey: .logType)
+        logType = try container.decode(DataLogType.self, forKey: .logType)
         dataType = try container.decode(String.self, forKey: .dataType)
         value = try container.decode(Double.self, forKey: .value)
         unit = try container.decode(String.self, forKey: .unit)
@@ -65,14 +66,12 @@ open class DataLog: Codable, @unchecked Sendable {
         deviceType = try container.decode(String.self, forKey: .deviceType)
         startDate = try container.decode(Date.self, forKey: .startDate)
         endDate = try container.decode(Date.self, forKey: .endDate)
-        additionalProperties = try container.decodeIfPresent(
-            [String: String].self,
-            forKey: .additionalProperties
-        )
+        additionalProperties = try container.decodeIfPresent(AdditionalProperties.self, forKey: .additionalProperties)
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
         try container.encodeIfPresent(parentId, forKey: .parentId)
         try container.encode(logType, forKey: .logType)
         try container.encode(dataType, forKey: .dataType)

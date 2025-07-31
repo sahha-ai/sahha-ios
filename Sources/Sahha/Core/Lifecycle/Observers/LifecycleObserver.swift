@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-final actor LifecycleObserver: LifecycleObserving {
+final actor LifecycleObserver: LifecycleObserverProtocol {
     private struct Listener {
         weak var ref: LifecycleListener?
         let events: Set<LifecycleEvent>
@@ -57,6 +57,8 @@ final actor LifecycleObserver: LifecycleObserving {
         cleanupListeners()
         cleanupObservers()
 
+        print("Broadcasting \(event)")
+        
         for listener in listeners where listener.events.contains(event) {
             if let ref = listener.ref {
                 Task { await ref.handleLifecycleEvent(event) }
