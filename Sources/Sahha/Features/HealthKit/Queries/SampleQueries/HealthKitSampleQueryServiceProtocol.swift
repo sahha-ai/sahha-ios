@@ -10,7 +10,7 @@ protocol HealthKitSampleQueryServiceProtocol: Sendable {
 }
 
 extension HealthKitSampleQueryServiceProtocol {
-    public func runSampleQuery(
+    func runSampleQuery(
         for sampleType: HKSampleType,
         predicate: NSPredicate? = nil,
         limit: Int = HKObjectQueryNoLimit,

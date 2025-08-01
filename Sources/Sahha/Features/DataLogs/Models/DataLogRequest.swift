@@ -10,8 +10,8 @@ open class DataLogRequest: Encodable, @unchecked Sendable {
     var source: String
     var recordingMethod: String
     var deviceType: String
-    var startDate: Date
-    var endDate: Date
+    var startDateTime: String
+    var endDateTime: String
     var additionalProperties: String?
     var postDateTime: String
     var deviceId: String
@@ -26,8 +26,8 @@ open class DataLogRequest: Encodable, @unchecked Sendable {
         source: String,
         recordingMethod: String,
         deviceType: String,
-        startDate: Date,
-        endDate: Date,
+        startDateTime: String,
+        endDateTime: String,
         additionalProperties: String? = nil,
         deviceId: String
     ) {
@@ -40,8 +40,8 @@ open class DataLogRequest: Encodable, @unchecked Sendable {
         self.source = source
         self.recordingMethod = recordingMethod
         self.deviceType = deviceType
-        self.startDate = startDate
-        self.endDate = endDate
+        self.startDateTime = startDateTime
+        self.endDateTime = endDateTime
         self.additionalProperties = additionalProperties
         self.deviceId = deviceId
         self.postDateTime = Date().isoDateTime
@@ -49,7 +49,7 @@ open class DataLogRequest: Encodable, @unchecked Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, parentId, logType, dataType, value, unit, source,
-            recordingMethod, deviceType, startDate, endDate,
+            recordingMethod, deviceType, startDateTime, endDateTime,
             additionalProperties, deviceId, postDateTime
     }
 
@@ -64,8 +64,8 @@ open class DataLogRequest: Encodable, @unchecked Sendable {
         source = try container.decode(String.self, forKey: .source)
         recordingMethod = try container.decode(String.self, forKey: .recordingMethod)
         deviceType = try container.decode(String.self, forKey: .deviceType)
-        startDate = try container.decode(Date.self, forKey: .startDate)
-        endDate = try container.decode(Date.self, forKey: .endDate)
+        startDateTime = try container.decode(String.self, forKey: .startDateTime)
+        endDateTime = try container.decode(String.self, forKey: .endDateTime)
         additionalProperties = try container.decodeIfPresent(String.self, forKey: .additionalProperties)
         deviceId = try container.decode(String.self, forKey: .deviceId)
         postDateTime = try container.decode(String.self, forKey: .postDateTime)
@@ -82,8 +82,8 @@ open class DataLogRequest: Encodable, @unchecked Sendable {
         try container.encode(source, forKey: .source)
         try container.encode(recordingMethod, forKey: .recordingMethod)
         try container.encode(deviceType, forKey: .deviceType)
-        try container.encode(startDate, forKey: .startDate)
-        try container.encode(endDate, forKey: .endDate)
+        try container.encode(startDateTime, forKey: .startDateTime)
+        try container.encode(endDateTime, forKey: .endDateTime)
         try container.encodeIfPresent(additionalProperties, forKey: .additionalProperties)
         try container.encode(postDateTime, forKey: .postDateTime)
         try container.encode(deviceId, forKey: .deviceId)

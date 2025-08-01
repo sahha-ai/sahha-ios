@@ -4,7 +4,8 @@ enum DeviceLogDI {
             DeviceLogLifecycleListener(
                 sensorStore: try await container.resolve(SensorStoreProtocol.self),
                 deviceInfoBuilder: try await container.resolve(DeviceInfoBuilderProtocol.self),
-                dataLogPipeline: try await container.resolve(DataLogPipelineProtocol.self)
+                dataLogPipeline: try await container.resolve(DataLogPipelineProtocol.self),
+//                authManager: try await container.resolve(AuthManagerProtocol.self)
             )
         }
     }

@@ -71,10 +71,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         do {
             return try await dataLogService.postDataLogs(batch)
         } catch {
-            // Only post error on first error to prevent spam
-            if attempt == 0 {
-                logger.postError(error)
-            }
+            logger.postError(error)
             let waitTime = min(maxBackoff, initialBackoff * pow(2, Double(attempt)))
             try? await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
             await uploadBatch(batch, batchFile: batchFile, attempt: attempt + 1)

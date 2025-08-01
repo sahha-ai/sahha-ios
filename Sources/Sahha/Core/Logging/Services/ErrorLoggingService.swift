@@ -11,7 +11,6 @@ final class ErrorLoggingService: ErrorLoggingServiceProtocol {
             method: .POST,
             body: error
         )
-        // TODO: Add this back in after testing
-//        try await apiClient.send(request)
+        try await apiClient.send(request)
     }
 }

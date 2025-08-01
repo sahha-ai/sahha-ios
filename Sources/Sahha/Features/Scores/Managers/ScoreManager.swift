@@ -15,8 +15,8 @@ final class ScoreManager: ScoreManagerProtocol {
         guard !types.isEmpty else {
             throw SahhaError(message: "Empty types set is not allowed.")
         }
-        guard startDateTime < endDateTime else {
-            throw SahhaError(message: "Start date time must be less than end date time.")
+        guard startDateTime <= endDateTime else {
+            throw SahhaError(message: "Start date time must be less than or equal to end date time.")
         }
         
         let response = try await scoreService.fetchScores(

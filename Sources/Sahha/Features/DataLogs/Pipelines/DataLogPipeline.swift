@@ -28,7 +28,7 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
 
     func ingest(_ logs: [DataLog]) async {
         guard !disposed else { return }
-        
+    
         await waitForBufferSpace(for: logs.count)
         buffer.append(contentsOf: logs)
         tryResumeBufferWaiters()
@@ -80,7 +80,7 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
         cancelFlushTimer()
     }
 
-    // TODO: This is currently unused
+    // TODO: This is currently unused?
     func flushOnAppBackgroundOrExit() async {
         cancelFlushTimer()
         if !buffer.isEmpty {
@@ -92,6 +92,7 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
 
     private func flushBatch(_ batch: [DataLog]) async {
         guard !batch.isEmpty else { return }
+        
         await fileManager.persistBatch(batch)
         await uploader.uploadPendingBatches()
     }

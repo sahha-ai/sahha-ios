@@ -21,7 +21,7 @@ final class AuthService: AuthServiceProtocol {
         let request = APIRequest(
             endpoint: APIEndpoints.refreshToken,
             method: .POST,
-            body: RefreshTokenRequest(refreshToken: refreshToken)
+            body: RefreshTokenRequest(refreshToken: refreshToken),
         )
         return try await apiClient.send(request)
     }

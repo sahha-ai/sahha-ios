@@ -19,8 +19,8 @@ final class HealthKitSahhaStatCoordinator: HealthKitSahhaStatCoordinatorProtocol
     }
 
     func getStats(for sensor: SahhaSensor, startDateTime: Date, endDateTime: Date) async throws -> [SahhaStat] {
-        guard startDateTime < endDateTime else {
-            throw SahhaError(message: "Start date time must be less than end date time.")
+        guard startDateTime <= endDateTime else {
+            throw SahhaError(message: "Start date time must be less than or equal to end date time.")
         }
         
         switch sensor {

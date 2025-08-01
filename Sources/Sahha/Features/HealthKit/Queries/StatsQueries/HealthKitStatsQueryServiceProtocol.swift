@@ -11,7 +11,7 @@ protocol HealthKitStatsQueryServiceProtocol: Sendable {
 }
 
 extension HealthKitStatsQueryServiceProtocol {
-    public func runStatsQuery(
+    func runStatsQuery(
         for quantityType: HKQuantityType,
         predicate: NSPredicate? = nil,
         options: HKStatisticsOptions,

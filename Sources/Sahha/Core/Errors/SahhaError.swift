@@ -36,6 +36,10 @@ extension SahhaError {
                 return SahhaError(message: "A HealthKit error occurred (\(nsError.code)).", error: error)
             }
         }
+        
+        if let apiError = error as? APIErrorResponse {
+            return SahhaError(message: apiError.title, error: error)
+        }
 
         // Fallback: generic error
         return SahhaError(message: error.localizedDescription, error: error)

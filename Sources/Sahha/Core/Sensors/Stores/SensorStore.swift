@@ -10,6 +10,8 @@ actor SensorStore: SensorStoreProtocol {
     ) {
         self.storage = storage
         self.key = key
+        
+        self.sensors = try? storage.codable(forKey: key)
     }
     
     func setSensors(_ sensors: Set<SahhaSensor>) throws {
@@ -18,11 +20,9 @@ actor SensorStore: SensorStoreProtocol {
     }
     
     func getSensors() throws -> Set<SahhaSensor> {
-        if let sensors {
-            return sensors
-        }
-        sensors = try storage.codable(forKey: key)
-        return sensors ?? []
+        if let sensors { return sensors }
+        self.sensors = try storage.codable(forKey: key)
+        return self.sensors ?? []
     }
     
     func hasSensor(_ sensor: SahhaSensor) -> Bool {

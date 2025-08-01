@@ -10,7 +10,7 @@ protocol HealthKitAnchorQueryServiceProtocol: Sendable {
 }
 
 extension HealthKitAnchorQueryServiceProtocol {
-    public func runAnchorQuery(
+    func runAnchorQuery(
         for sampleType: HKSampleType,
         predicate: NSPredicate? = nil,
         anchor: HKQueryAnchor? = nil,

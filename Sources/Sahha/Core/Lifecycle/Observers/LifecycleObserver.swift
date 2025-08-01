@@ -8,57 +8,47 @@ final actor LifecycleObserver: LifecycleObserverProtocol {
     }
 
     private var listeners: [Listener] = []
-    private var observers: [LifecycleEvent: NSObjectProtocol] = [:]  // keeps NC tokens
 
-    /// Register `listener` for `events` (default = all).
+    init() {
+        // Set up default queue
+        let queue = OperationQueue()
+        queue.name = "ai.sahha.lifecycleEventQueue"
+        queue.qualityOfService = .utility
+        queue.maxConcurrentOperationCount = 1
+        // Eagerly set up NotificationCenter observers for ALL lifecycle events
+        for event in LifecycleEvent.allCases {
+            guard let name = event.notification else { continue }
+            NotificationCenter.default.addObserver(
+                forName: name,
+                object: nil,
+                queue: queue
+            ) { [weak self] _ in
+                Task { await self?.broadcast(event) }
+            }
+        }
+    }
+
+    // MARK: - Listener Registration
+
     func registerListener(
         _ listener: LifecycleListener,
-        for events: Set<LifecycleEvent> = .init(LifecycleEvent.allCases),
-        queue: OperationQueue? = LifecycleQueues.default
+        for events: Set<LifecycleEvent>
     ) {
-        // De-dup & purge dead boxes …
+        // De-dup & purge dead boxes
         listeners.removeAll { $0.ref == nil || $0.ref === listener }
         listeners.append(Listener(ref: listener, events: events))
-
-        // Lazily attach NotificationCenter observers
-        for event in events { ensureObserver(for: event, queue: queue) }
     }
 
-    private func ensureObserver(for event: LifecycleEvent, queue: OperationQueue?) {
-        guard observers[event] == nil, let name = event.notification else { return }
-
-        let observer = NotificationCenter.default.addObserver(
-            forName: name,
-            object: nil,
-            queue: queue
-        ) { [weak self] _ in
-            Task { await self?.broadcast(event) }
-        }
-        observers[event] = observer
-    }
+    // MARK: - Clean Up Dead Listeners
 
     private func cleanupListeners() {
         listeners.removeAll { $0.ref == nil }
     }
 
-    private func cleanupObservers() {
-        let toRemove = observers.keys.filter { event in
-            !listeners.contains { $0.events.contains(event) }
-        }
-
-        for event in toRemove {
-            if let token = observers.removeValue(forKey: event) {
-                NotificationCenter.default.removeObserver(token)
-            }
-        }
-    }
+    // MARK: - Broadcast Events
 
     private func broadcast(_ event: LifecycleEvent) {
         cleanupListeners()
-        cleanupObservers()
-
-        print("Broadcasting \(event)")
-        
         for listener in listeners where listener.events.contains(event) {
             if let ref = listener.ref {
                 Task { await ref.handleLifecycleEvent(event) }

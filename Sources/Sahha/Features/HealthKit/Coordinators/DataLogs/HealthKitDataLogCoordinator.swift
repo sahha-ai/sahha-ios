@@ -83,8 +83,7 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                     await self.dataLogPipeline.ingest(dataLogs)
                     if let newAnchor {
                         anchor = newAnchor
-                        // TODO: Remove after testing
-                        // try await anchorStore.saveAnchor(newAnchor, for: sensor)
+                         try await anchorStore.saveAnchor(newAnchor, for: sensor)
                     }
                 }
             }

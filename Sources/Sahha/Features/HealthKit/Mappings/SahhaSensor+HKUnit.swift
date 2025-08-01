@@ -21,11 +21,9 @@ extension SahhaSensor {
             return nil
         case .walking_asymmetry_percentage, .walking_double_support_percentage, .walking_steadiness:
             return .percent()
-        case .walking_speed:
-            return .meter().unitDivided(by: .second())
-        case .walking_step_length, .running_stride_length, .stair_ascent_speed, .stair_descent_speed, .six_minute_walk_test_distance:
+        case .walking_step_length, .running_stride_length, .six_minute_walk_test_distance:
             return .meter()
-        case .running_speed:
+        case .walking_speed, .running_speed, .stair_ascent_speed, .stair_descent_speed:
             return .meter().unitDivided(by: .second())
         case .running_power:
             guard #available(iOS 16.0, *) else { return nil }

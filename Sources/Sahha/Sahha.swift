@@ -18,8 +18,14 @@ public class Sahha {
     public static func configure(_ settings: SahhaSettings, callback: (() -> Void)? = nil) {
         let box = VoidCallbackBox(callback: callback)
         Task {
-            await actor.configure(with: settings)
-            box.callback?()
+            do {
+                try await actor.configure(with: settings)
+                DispatchQueue.main.async {
+                    box.callback?()
+                }
+            } catch {
+                print("[\(SDK.name)] ERROR: Failed to configure Sahha: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -38,7 +44,7 @@ public class Sahha {
             task: {
                 let authManager = try await actor.authManager()
                 try await authManager.authenticate(appId: appId, appSecret: appSecret, externalId: externalId)
-                await actor.startAuthenticatedServices()
+                try await actor.startAuthenticatedServices()
                 return true
             },
             defaultErrorValue: false
@@ -51,7 +57,7 @@ public class Sahha {
             task: {
                 let authManager = try await actor.authManager()
                 try await authManager.authenticate(profileToken: profileToken, refreshToken: refreshToken)
-                await actor.startAuthenticatedServices()
+                try await actor.startAuthenticatedServices()
                 return true
             },
             defaultErrorValue: false
@@ -243,10 +249,14 @@ public class Sahha {
             do {
                 if requiresAuth { try authGuard() }
                 let result = try await task()
-                box.callback(nil, result)
+                DispatchQueue.main.async {
+                    box.callback(nil, result)
+                }
             } catch {
                 let error = SahhaError.from(error)
-                box.callback(error.localizedDescription, defaultErrorValue())
+                DispatchQueue.main.async {
+                    box.callback(error.localizedDescription, defaultErrorValue())
+                }
             }
         }
     }
@@ -263,10 +273,14 @@ public class Sahha {
             do {
                 if requiresAuth { try authGuard() }
                 let result = try await task()
-                box.callback(nil, result)
+                DispatchQueue.main.async {
+                    box.callback(nil, result)
+                }
             } catch {
                 let error = SahhaError.from(error)
-                box.callback(error.localizedDescription, defaultErrorValue())
+                DispatchQueue.main.async {
+                    box.callback(error.localizedDescription, defaultErrorValue())
+                }
             }
         }
     }

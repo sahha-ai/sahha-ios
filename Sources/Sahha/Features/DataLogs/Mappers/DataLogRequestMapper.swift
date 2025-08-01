@@ -39,8 +39,8 @@ final class DataLogRequestMapper: DataLogRequestMapperProtocol {
             source: log.source,
             recordingMethod: log.recordingMethod.stringValue,
             deviceType: log.deviceType,
-            startDate: log.startDate,
-            endDate: log.endDate,
+            startDateTime: log.startDate.isoDateTime,
+            endDateTime: log.endDate.isoDateTime,
             additionalProperties: serializeAdditionalProperties(log.additionalProperties),
             deviceId: deviceId
         )
