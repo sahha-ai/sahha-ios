@@ -22,7 +22,7 @@ actor DataLogFileManager: DataLogFileManagerProtocol, Disposable {
         self.nextId = UInt64(Date().timeIntervalSince1970)
     }
 
-    func persistBatch(_ logs: [DataLog]) async {
+    func persistBatch(_ logs: [DataLogRequest]) async {
         guard !logs.isEmpty else { return }
         await waitForFileSpaceIfNeeded()
         let fileURL = batchDir.appendingPathComponent("\(nextId).bin")
@@ -43,10 +43,13 @@ actor DataLogFileManager: DataLogFileManagerProtocol, Disposable {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
-    func readBatchFile(_ url: URL) async -> [DataLog]? {
+    func readBatchFile(_ url: URL) async -> [DataLogRequest]? {
         guard let data = try? Data(contentsOf: url) else { return nil }
-        let logs = try? decodeBatch(data)
-        return logs
+        if let logs = try? decodeBatch(data) {
+            return logs
+        }
+        await deleteBatchFile(url)
+        return nil
     }
 
     func deleteBatchFile(_ url: URL) async {
@@ -94,7 +97,7 @@ actor DataLogFileManager: DataLogFileManagerProtocol, Disposable {
         }
     }
 
-    private func encodeBatch(_ logs: [DataLog]) throws -> Data {
+    private func encodeBatch(_ logs: [DataLogRequest]) throws -> Data {
         var batchData = Data()
         for log in logs {
             let logData = try encoder.encode(log)
@@ -105,8 +108,8 @@ actor DataLogFileManager: DataLogFileManagerProtocol, Disposable {
         return batchData
     }
 
-    private func decodeBatch(_ data: Data) throws -> [DataLog] {
-        var logs: [DataLog] = []
+    private func decodeBatch(_ data: Data) throws -> [DataLogRequest] {
+        var logs: [DataLogRequest] = []
         var cursor = data.startIndex
         while cursor < data.endIndex {
             guard data.endIndex - cursor >= UInt32.byteWidth else { break }
@@ -115,7 +118,7 @@ actor DataLogFileManager: DataLogFileManagerProtocol, Disposable {
             guard data.endIndex - cursor >= length else { break }
             let logData = data[cursor..<cursor + length]
             cursor += length
-            let log = try decoder.decode(DataLog.self, from: Data(logData))
+            let log = try decoder.decode(DataLogRequest.self, from: Data(logData))
             logs.append(log)
         }
         return logs

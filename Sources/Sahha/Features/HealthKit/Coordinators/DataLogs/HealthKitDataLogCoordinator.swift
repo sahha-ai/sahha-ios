@@ -68,8 +68,11 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
         do {
             try await queryTasks.run(for: key) { [weak self] in
                 guard let self else { return }
+                
+                var total = 0
 
-                var anchor = try await anchorStore.loadAnchor(for: sensor)
+//                var anchor = try await anchorStore.loadAnchor(for: sensor)
+                var anchor: HKQueryAnchor? = nil // TODO: Remove this after testing
 
                 while !Task.isCancelled {
                     let (samples, newAnchor) = try await anchorQueryService.runAnchorQuery(
@@ -78,6 +81,10 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                         limit: queryLimit
                     )
                     guard !samples.isEmpty else { break }
+                    
+                    total += samples.count
+                    print("Processed \(total) samples for \(sensor.rawValue)")
+                    
                     let dataLogs = samples.flatMap { self.normaliser.normalise($0) }
                     guard !Task.isCancelled else { break }
                     await self.dataLogPipeline.ingest(dataLogs)

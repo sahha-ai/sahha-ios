@@ -16,17 +16,6 @@ final class DataLogRequestMapper: DataLogRequestMapperProtocol {
     func map(_ logs: [DataLog]) -> [DataLogRequest] {
         logs.map(buildRequestBody)
     }
-
-    private func serializeAdditionalProperties(_ additionalProperties: AdditionalProperties?) -> String? {
-        guard let additionalProperties, !additionalProperties.isEmpty else { return nil }
-        do {
-            let data = try JSONEncoder().encode(additionalProperties)
-            return String(data: data, encoding: .utf8)
-        } catch {
-            logger.postError(error)
-            return nil
-        }
-    }
     
     private func buildRequestBody(for log: DataLog) -> DataLogRequest {
         DataLogRequest(
@@ -41,7 +30,7 @@ final class DataLogRequestMapper: DataLogRequestMapperProtocol {
             deviceType: log.deviceType,
             startDateTime: log.startDate.isoDateTime,
             endDateTime: log.endDate.isoDateTime,
-            additionalProperties: serializeAdditionalProperties(log.additionalProperties),
+            additionalProperties:log.additionalProperties,
             deviceId: deviceId
         )
     }

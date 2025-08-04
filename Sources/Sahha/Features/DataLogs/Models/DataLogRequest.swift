@@ -1,6 +1,6 @@
 import Foundation
 
-open class DataLogRequest: Encodable, @unchecked Sendable {
+open class DataLogRequest: Codable, @unchecked Sendable {
     var id: String
     var parentId: String?
     var logType: String
@@ -12,7 +12,7 @@ open class DataLogRequest: Encodable, @unchecked Sendable {
     var deviceType: String
     var startDateTime: String
     var endDateTime: String
-    var additionalProperties: String?
+    var additionalProperties: AdditionalProperties?
     var postDateTime: String
     var deviceId: String
 
@@ -28,7 +28,7 @@ open class DataLogRequest: Encodable, @unchecked Sendable {
         deviceType: String,
         startDateTime: String,
         endDateTime: String,
-        additionalProperties: String? = nil,
+        additionalProperties: AdditionalProperties? = nil,
         deviceId: String
     ) {
         self.id = id
@@ -66,7 +66,7 @@ open class DataLogRequest: Encodable, @unchecked Sendable {
         deviceType = try container.decode(String.self, forKey: .deviceType)
         startDateTime = try container.decode(String.self, forKey: .startDateTime)
         endDateTime = try container.decode(String.self, forKey: .endDateTime)
-        additionalProperties = try container.decodeIfPresent(String.self, forKey: .additionalProperties)
+        additionalProperties = try container.decodeIfPresent(AdditionalProperties.self, forKey: .additionalProperties)
         deviceId = try container.decode(String.self, forKey: .deviceId)
         postDateTime = try container.decode(String.self, forKey: .postDateTime)
     }

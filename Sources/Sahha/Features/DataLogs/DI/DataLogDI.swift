@@ -21,13 +21,13 @@ enum DataLogDI {
             DataLogUploader(
                 fileManager: try await container.resolve(DataLogFileManagerProtocol.self),
                 dataLogService: try await container.resolve(DataLogServiceProtocol.self),
-                requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
         }
         await container.register(DataLogPipelineProtocol.self) { container in
             DataLogPipeline(
                 fileManager: try await container.resolve(DataLogFileManagerProtocol.self),
+                requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),
                 uploader: try await container.resolve(DataLogUploaderProtocol.self)
             )
         }

@@ -1,10 +1,11 @@
 import Foundation
 
 actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
-    private let batchSize: Int
+    private let maxBatchBytes: Int
     private let maxBufferSize: Int
     private let flushInterval: TimeInterval
     private let fileManager: DataLogFileManagerProtocol
+    private let requestMapper: DataLogRequestMapperProtocol
     private let uploader: DataLogUploaderProtocol
 
     private var disposed = false
@@ -14,31 +15,29 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
 
     init(
         fileManager: DataLogFileManagerProtocol,
+        requestMapper: DataLogRequestMapperProtocol,
         uploader: DataLogUploaderProtocol,
-        batchSize: Int = 500,
+        maxBatchKB: Int = 150,
         maxBufferSize: Int = 50_000,
         flushInterval: TimeInterval = .seconds(5)
     ) {
         self.fileManager = fileManager
+        self.requestMapper = requestMapper
         self.uploader = uploader
-        self.batchSize = batchSize
+        self.maxBatchBytes = maxBatchKB * 1024  // Store as bytes internally
         self.maxBufferSize = maxBufferSize
         self.flushInterval = flushInterval
     }
 
     func ingest(_ logs: [DataLog]) async {
         guard !disposed else { return }
-    
+
         await waitForBufferSpace(for: logs.count)
         buffer.append(contentsOf: logs)
         tryResumeBufferWaiters()
 
-        while buffer.count >= batchSize {
-            let batch = Array(buffer.prefix(batchSize))
-            buffer.removeFirst(batchSize)
-            await flushBatch(batch)
-        }
-
+        // Batching and flushing by size
+        await flushBufferBySize()
         if !buffer.isEmpty && flushTask == nil {
             startFlushTimer()
         }
@@ -47,7 +46,7 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
     func ingest(_ log: DataLog) async {
         await ingest([log])
     }
-    
+
     func dispose() async {
         disposed = true
         cancelFlushTimer()
@@ -74,25 +73,19 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
             cancelFlushTimer()
             return
         }
-        let batch = buffer
-        buffer.removeAll()
-        await flushBatch(batch)
+        await flushBufferBySize()
         cancelFlushTimer()
     }
 
-    // TODO: This is currently unused?
     func flushOnAppBackgroundOrExit() async {
         cancelFlushTimer()
         if !buffer.isEmpty {
-            let batch = buffer
-            buffer.removeAll()
-            await flushBatch(batch)
+            await flushBufferBySize()
         }
     }
 
-    private func flushBatch(_ batch: [DataLog]) async {
+    private func flushBatch(_ batch: [DataLogRequest]) async {
         guard !batch.isEmpty else { return }
-        
         await fileManager.persistBatch(batch)
         await uploader.uploadPendingBatches()
     }
@@ -107,10 +100,36 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
 
     private func tryResumeBufferWaiters() {
         while let continuation = bufferWaiters.first,
-            buffer.count < maxBufferSize
-        {
+              buffer.count < maxBufferSize {
             bufferWaiters.removeFirst()
             continuation.resume()
+        }
+    }
+
+    private func flushBufferBySize() async {
+        var currentBatch: [DataLogRequest] = []
+        let encoder = JSONEncoder()
+
+        while !buffer.isEmpty {
+            let log = buffer.first!
+            let request = requestMapper.map(log)
+            let testBatch = currentBatch + [request]
+            if let data = try? encoder.encode(testBatch), data.count <= maxBatchBytes {
+                currentBatch = testBatch
+                buffer.removeFirst()
+            } else {
+                if !currentBatch.isEmpty {
+                    await flushBatch(currentBatch)
+                    currentBatch = []
+                } else {
+                    // Single mapped log is too large, flush it alone
+                    await flushBatch([request])
+                    buffer.removeFirst()
+                }
+            }
+        }
+        if !currentBatch.isEmpty {
+            await flushBatch(currentBatch)
         }
     }
 }

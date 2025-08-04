@@ -26,7 +26,7 @@ open class DataLog: Codable, @unchecked Sendable {
         deviceType: String,
         startDate: Date,
         endDate: Date,
-        additionalProperties: [String: String]? = nil
+        additionalProperties: AdditionalProperties? = nil
     ) {
         if let id {
             self.id = id

@@ -4,7 +4,7 @@ final class APIClient: APIClientProtocol {
     private let baseURL: URL
     private let session: URLSession
     private let interceptorStore: APIInterceptorStoreProtocol?
-    
+
     init(baseURL: URL, session: URLSession = .shared, interceptorStore: APIInterceptorStoreProtocol? = nil) {
         self.baseURL = baseURL
         self.session = session
@@ -133,6 +133,15 @@ final class APIClient: APIClientProtocol {
                 let apiError = try JSONDecoder().decode(APIErrorResponse.self, from: data)
                 throw apiError
             } catch {
+                print(request.endpoint)
+                print(error)
+                // DEBUG: Print raw JSON for investigation
+                do {
+                    let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
+                    print("DEBUG Raw error response:", jsonObject)
+                } catch {
+                    print("DEBUG Could not parse response as JSON.")
+                }
                 throw APIErrorResponse(
                     title: "HTTP Error",
                     statusCode: httpResponse.statusCode,
