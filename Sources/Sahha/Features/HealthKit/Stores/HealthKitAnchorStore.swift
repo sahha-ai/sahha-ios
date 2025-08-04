@@ -19,8 +19,16 @@ actor HealthKitAnchorStore: HealthKitAnchorStoreProtocol, Disposable {
 
     func loadAnchor(forKey key: String) throws -> HKQueryAnchor? {
         let key = prefix + key
-        guard let data = storage.data(forKey: key) else { return nil }
-        let unarchiver = try NSKeyedUnarchiver(forReadingFrom: data)
+
+        var anchorData: Data?
+        if let data = storage.data(forKey: key) {
+            anchorData = data
+        } else if let data = storage.data(forKey: "sahha_\(key)") {
+            // Legacy key for anchor data
+            anchorData = data
+        }
+        guard let anchorData else { return nil }
+        let unarchiver = try NSKeyedUnarchiver(forReadingFrom: anchorData)
         unarchiver.requiresSecureCoding = true
         return unarchiver.decodeObject(of: HKQueryAnchor.self, forKey: NSKeyedArchiveRootObjectKey)
     }

@@ -15,7 +15,11 @@ actor HealthKitAnchorDateStore: HealthKitAnchorDateStoreProtocol, Disposable {
     
     func loadAnchorDate(forKey key: String) -> Date? {
         let key = prefix + key
-        return storage.date(forKey: key)
+        if let date = storage.date(forKey: key) {
+            return date
+        }
+        // Try legacy storage key
+        return storage.date(forKey: "date_\(key)")
     }
 
     func dispose() async {

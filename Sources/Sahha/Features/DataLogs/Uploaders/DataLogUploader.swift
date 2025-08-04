@@ -16,7 +16,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         fileManager: DataLogFileManagerProtocol,
         dataLogService: DataLogServiceProtocol,
         requestMapper: DataLogRequestMapperProtocol,
-        maxConcurrentUploads: Int = 5,
+        maxConcurrentUploads: Int = 3,
         maxLogsPerUpload: Int = 100,
         maxBackoff: TimeInterval = .seconds(30),
         initialBackoff: TimeInterval = .seconds(1),
