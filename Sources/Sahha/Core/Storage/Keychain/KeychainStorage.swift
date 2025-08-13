@@ -32,11 +32,6 @@ final class KeychainStorage: KeychainStorageProtocol {
         }
     }
 
-    func set<T: Codable>(_ value: T, forKey key: String) throws {
-        let data = try JSONEncoder().encode(value)
-        try set(data, forKey: key)
-    }
-
     func get(forKey key: String) throws -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -66,11 +61,6 @@ final class KeychainStorage: KeychainStorageProtocol {
             )
             throw SahhaError(message: "Failed to retrieve data from keychain: \(key)", error: nsError)
         }
-    }
-
-    func get<T: Codable>(forKey key: String) throws -> T? {
-        guard let data = try get(forKey: key) else { return nil }
-        return try JSONDecoder().decode(T.self, from: data)
     }
 
     func removeObject(forKey key: String) throws {

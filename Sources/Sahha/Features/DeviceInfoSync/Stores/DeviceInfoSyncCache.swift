@@ -27,7 +27,7 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol {
         do {
             let hash = try deviceInfo.sha256Hash()
             let value = CachedDeviceInfo(hash: hash, lastSync: Date())
-            try storage.setCodable(value, forKey: key)
+            try storage.setObject(value, forKey: key)
         } catch {
             logger.postError(error)
         }
@@ -35,7 +35,7 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol {
 
     func needsSync(comparedTo deviceInfo: DeviceInfo) -> Bool {
         do {
-            guard let cached: CachedDeviceInfo = try storage.codable(forKey: key) else { return true }
+            guard let cached: CachedDeviceInfo = try storage.object(forKey: key) else { return true }
             
             let newHash = try deviceInfo.sha256Hash()
             let cacheExpired = cached.lastSync.addingTimeInterval(ttl) < Date()

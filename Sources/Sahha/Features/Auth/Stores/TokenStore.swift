@@ -13,7 +13,7 @@ actor TokenStore: TokenStoreProtocol {
         self.logger = logger
 
         do {
-            self.cached = try self.storage.get(forKey: key)
+            self.cached = try self.storage.object(forKey: key)
             Sahha.authSnapshot.profileToken = cached?.profileToken
         } catch {
             self.logger.postError(error)
@@ -21,7 +21,7 @@ actor TokenStore: TokenStoreProtocol {
     }
 
     func saveToken(_ token: TokenResponse) throws {
-        try storage.set(token, forKey: key)
+        try storage.setObject(token, forKey: key)
         Sahha.authSnapshot.profileToken = token.profileToken
         self.cached = token
     }

@@ -37,7 +37,7 @@ actor DemographicCache: DemographicCacheProtocol {
         }
         // Else load from Keychain
         do {
-            guard let cached: CachedDemographic = try storage.get(forKey: key),
+            guard let cached: CachedDemographic = try storage.object(forKey: key),
                   isCacheValid(cached.lastSync) else {
                 cachedDemographic = nil
                 return nil
@@ -54,7 +54,7 @@ actor DemographicCache: DemographicCacheProtocol {
         let value = CachedDemographic(demographic: demographic, lastSync: Date())
         cachedDemographic = value
         do {
-            try storage.set(value, forKey: key)
+            try storage.setObject(value, forKey: key)
         } catch {
             logger.postError(error)
         }
@@ -67,7 +67,7 @@ actor DemographicCache: DemographicCacheProtocol {
             return cached.demographic == demographic && isCacheValid(cached.lastSync)
         }
         do {
-            guard let cached: CachedDemographic = try storage.get(forKey: key) else { return false }
+            guard let cached: CachedDemographic = try storage.object(forKey: key) else { return false }
             cachedDemographic = cached
             return cached.demographic == demographic && isCacheValid(cached.lastSync)
         } catch {

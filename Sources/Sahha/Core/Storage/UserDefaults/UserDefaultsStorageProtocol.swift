@@ -11,11 +11,11 @@ extension UserDefaultsStorageProtocol {
     func data(forKey key: String) -> Data? {
         UserDefaults.standard.data(forKey: key)
     }
-    func setCodable<T: Codable>(_ value: T, forKey key: String) throws {
+    func setObject<T: Codable>(_ value: T, forKey key: String) throws {
         let data = try JSONEncoder().encode(value)
         UserDefaults.standard.set(data, forKey: key)
     }
-    func codable<T: Codable>(forKey key: String) throws -> T? {
+    func object<T: Codable>(forKey key: String) throws -> T? {
         guard let data = data(forKey: key) else { return nil }
         return try JSONDecoder().decode(T.self, from: data)
     }

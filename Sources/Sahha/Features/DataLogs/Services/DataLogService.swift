@@ -5,7 +5,6 @@ final class DataLogService: DataLogServiceProtocol {
         self.apiClient = apiClient
     }
     
-
     func postDataLogs(_ logs: [DataLogRequest]) async throws {
         let request = APIRequest(
             endpoint: APIEndpoints.dataLog,

@@ -19,28 +19,24 @@ actor DataLogFileManager: DataLogFileManagerProtocol, Disposable {
         try FileManager.default.createDirectory(at: batchDir, withIntermediateDirectories: true)
         self.maxBatchFileCount = maxBatchFileCount
         self.logger = logger
-        self.nextId = UInt64(Date().timeIntervalSince1970)
+        self.nextId = Self.seedNextId(in: batchDir)
     }
 
     func persistBatch(_ logs: [DataLogRequest]) async {
         guard !logs.isEmpty else { return }
         await waitForFileSpaceIfNeeded()
         let fileURL = batchDir.appendingPathComponent("\(nextId).bin")
-        nextId += 1
         do {
             let data = try encodeBatch(logs)
             try data.write(to: fileURL, options: .atomic)
+            nextId &+= 1
         } catch {
             logger.postError(error)
         }
     }
 
     func getAllBatchFiles() async -> [URL] {
-        let files = (try? FileManager.default.contentsOfDirectory(at: batchDir, includingPropertiesForKeys: nil)) ?? []
-        return
-            files
-            .filter { $0.pathExtension == "bin" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        Self.batchFilesSortedNumerically(in: batchDir)
     }
 
     func readBatchFile(_ url: URL) async -> [DataLogRequest]? {
@@ -74,8 +70,13 @@ actor DataLogFileManager: DataLogFileManagerProtocol, Disposable {
     }
 
     private var currentFiles: [URL] {
-        let contentsOfDirectory = try? FileManager.default.contentsOfDirectory(at: batchDir, includingPropertiesForKeys: nil)
-        return contentsOfDirectory?.filter { $0.pathExtension == "bin" } ?? []
+        (try? FileManager.default.contentsOfDirectory(
+            at: batchDir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ))?
+        .filter { $0.pathExtension == "bin" && UInt64($0.deletingPathExtension().lastPathComponent) != nil }
+            ?? []
     }
 
     private var currentFileCount: Int {
@@ -122,5 +123,34 @@ actor DataLogFileManager: DataLogFileManagerProtocol, Disposable {
             logs.append(log)
         }
         return logs
+    }
+
+    private static func batchFilesSortedNumerically(in directory: URL) -> [URL] {
+        let files =
+            (try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )) ?? []
+
+        return
+            files
+            .filter {
+                $0.pathExtension == "bin" && UInt64($0.deletingPathExtension().lastPathComponent) != nil
+            }
+            .sorted {
+                let a = UInt64($0.deletingPathExtension().lastPathComponent) ?? 0
+                let b = UInt64($1.deletingPathExtension().lastPathComponent) ?? 0
+                return a < b
+            }
+    }
+
+    private static func seedNextId(in dir: URL) -> UInt64 {
+        if let maxFile = batchFilesSortedNumerically(in: dir).last,
+            let n = UInt64(maxFile.deletingPathExtension().lastPathComponent)
+        {
+            return n &+ 1
+        }
+        return UInt64((Date().timeIntervalSince1970 * 1000).rounded())
     }
 }

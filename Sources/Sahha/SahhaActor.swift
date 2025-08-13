@@ -1,5 +1,7 @@
 import UIKit
 
+// TODO: Rename Feature/FeatureProtocol -> Feature/FeatureImpl (same as android).
+
 actor SahhaActor {
     static let shared = SahhaActor()
 
@@ -8,8 +10,8 @@ actor SahhaActor {
     private var configurationTask: Task<Void, Error>?
 
     private init() {}
-    
-   private let lifecycleObserver = LifecycleObserver()
+
+    private let lifecycleObserver = LifecycleObserver()
 
     // MARK: - Configuration
 
@@ -20,7 +22,7 @@ actor SahhaActor {
 
         self.settings = settings
 
-        configurationTask = Task {
+        configurationTask = Task { [settings] in
             let container = DIContainer()
 
             await StorageDI.registerDependencies(container: container)
@@ -36,103 +38,111 @@ actor SahhaActor {
             await DemographicDI.registerDependencies(container: container)
             await DeviceInfoSyncDI.registerDependencies(container: container)
             await DeviceLogDI.registerDependencies(container: container)
-            
-            let _ = try await container.resolve(AuthManagerProtocol.self)
-            
-            self.container = container
 
-            try await self.registerInterceptors(container: container)
-            try await self.setupAlwaysOnListeners(container: container)
-            try await self.startAuthenticatedServices()
+            // Device log listener
+            let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
+            await self.lifecycleObserver.registerListener(deviceLogListener)
+
+            // Register interceptors
+            let interceptorStore = try await container.resolve(APIInterceptorStoreProtocol.self)
+            let authInterceptor = try await container.resolve(AuthorizationInterceptor.self)
+            await interceptorStore.addInterceptor(authInterceptor)
+
+            // Start authenticated services if already logged in
+            let authManager = try await container.resolve(AuthManagerProtocol.self)
+            if  await authManager.hasValidProfileToken() {
+                try await self.startAuthenticatedServices(container)
+            }
+
+            self.container = container
         }
         
+        defer { configurationTask = nil }
+
         return try await configurationTask!.value
     }
 
-    // MARK: - Always-On Listeners
-    private func setupAlwaysOnListeners(container: DIContainer) async throws {
-        let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
-        await lifecycleObserver.registerListener(deviceLogListener)
-    }
-
-    // MARK: - Interceptors
-    private func registerInterceptors(container: DIContainer) async throws {
-        let interceptorStore = try await container.resolve(APIInterceptorStoreProtocol.self)
-        let authInterceptor = try await container.resolve(AuthorizationInterceptor.self)
-        await interceptorStore.addInterceptor(authInterceptor)
-    }
-
     // MARK: - Authenticated Services
+    
     func startAuthenticatedServices() async throws {
-        guard let container else {
-            throw SahhaError(message: "Sahha is not configured. Please call `Sahha.configure(...)` first.")
+        let (container, _) = try await requireConfig()
+        await startAuthenticatedServices(container)
+    }
+
+    private func startAuthenticatedServices(_ container: DIContainer) async {
+        async let a = startDataCollection(container)
+        async let b = forceSyncDeviceInfo(container)
+        async let c = setupLifecycleListeners(container)
+        async let d = syncDemographic(container)
+        _ = await (a, b, c, d)
+    }
+
+    private func setupLifecycleListeners(_ container: DIContainer) async {
+        do {
+            let deviceInfoSyncListener = try await container.resolve(DeviceInfoSyncLifecycleListener.self)
+            let postInsightsListener = try await container.resolve(PostInsightsLifecycleListener.self)
+            let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
+
+            await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
+            await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
+            await deviceLogListener.setAuthenticated(true)
+        } catch {
+            await log(error: error, message: "setupLifecycleListeners failed")
         }
+    }
+
+    private func forceSyncDeviceInfo(_ container: DIContainer) async {
+        do {
+            let deviceInfoSyncManager = try await container.resolve(DeviceInfoSyncManagerProtocol.self)
+            await deviceInfoSyncManager.forceSyncDeviceInfo()
+        } catch {
+            await log(error: error, message: "forceSyncDeviceInfo failed")
+        }
+    }
+
+    private func syncDemographic(_ container: DIContainer) async {
+        do {
+            let demographicManager = try await container.resolve(DemographicManagerProtocol.self)
+            var demographic = try await demographicManager.getDemographic()
+            if demographic.isComplete { return }
+            
+            let healthKitManager = try await container.resolve(HealthKitManagerProtocol.self)
+            let hkDemographic = try await healthKitManager.getDemographic()
         
-        let authManager = try await container.resolve(AuthManagerProtocol.self)
-        let isAuthenticated = await authManager.hasValidProfileToken()
-
-        if isAuthenticated {
-            try await forceSyncDeviceInfo(container: container)
-            try await syncDemographic(container: container)
-            try await startSensors(container: container)
-            try await setupLifecycleListeners(container: container)
+            guard !hkDemographic.isEmpty, demographic != hkDemographic else { return }
+            
+            demographic.mergeWith(hkDemographic)
+            try await demographicManager.updateDemographic(demographic)
+        } catch {
+            await log(error: error, message: "syncDemographic failed")
         }
     }
 
-    // MARK: - Lifecycle Listeners (post-auth)
-    private func setupLifecycleListeners(container: DIContainer) async throws {
-        let deviceInfoSyncListener = try await container.resolve(DeviceInfoSyncLifecycleListener.self)
-        let postInsightsListener = try await container.resolve(PostInsightsLifecycleListener.self)
-        let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
-
-        await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
-        await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
-        await deviceLogListener.setAuthenticated(true)
-    }
-
-    // MARK: - Force Sync Device Info
-    private func forceSyncDeviceInfo(container: DIContainer) async throws {
-        let deviceInfoSyncManager = try await container.resolve(DeviceInfoSyncManagerProtocol.self)
-        await deviceInfoSyncManager.forceSyncDeviceInfo()
-    }
-
-    // MARK: - Sync Demographic
-    private func syncDemographic(container: DIContainer) async throws {
-        let demographicManager = try await container.resolve(DemographicManagerProtocol.self)
-        let healthKitManager = try await container.resolve(HealthKitManagerProtocol.self)
-        var demographic = (try? await demographicManager.getDemographic()) ?? SahhaDemographic()
-        if demographic.isComplete { return }
-        let hkDemographic = try await healthKitManager.getDemographic()
-        guard !hkDemographic.isEmpty, demographic != hkDemographic else { return }
-        demographic.mergeWith(hkDemographic)
-        try await demographicManager.updateDemographic(demographic)
-    }
-
-    // MARK: - Start Sensors
-    private func startSensors(container: DIContainer) async throws {
-        let dataLogUploader = try await container.resolve(DataLogUploaderProtocol.self)
-        let healthKitManager = try await container.resolve(HealthKitManagerProtocol.self)
-
-        await dataLogUploader.uploadPendingBatches()
-        await healthKitManager.resumeSensors()
+    private func startDataCollection(_ container: DIContainer) async {
+        do {
+            let dataLogUploader = try await container.resolve(DataLogUploaderProtocol.self)
+            let healthKitManager = try await container.resolve(HealthKitManagerProtocol.self)
+            await dataLogUploader.uploadPendingBatches()
+            await healthKitManager.resumeSensors()
+        } catch {
+            await log(error: error, message: "startSensors failed")
+        }
     }
 
     // MARK: - Deauthentication
+
     func deauthenticate() async throws {
         if let task = configurationTask { _ = try await task.value }
-        guard let container, let settings else {
-            throw SahhaError(message: "Sahha is not configured. Please call `Sahha.configure(...)` first.")
-        }
+        let (container, settings) = try await requireConfig()
         await container.reset()
         try await configure(with: settings)
     }
 
     // MARK: - Resolvers
+
     private func resolve<T: Sendable>(_ type: T.Type = T.self) async throws -> T {
         if let task = configurationTask { _ = try await task.value }
-        guard let container else {
-            throw SahhaError(message: "Sahha is not configured. Please call `Sahha.configure(...)` first.")
-        }
+        let (container, _) = try await requireConfig()
         return try await container.resolve(type)
     }
 
@@ -155,13 +165,31 @@ actor SahhaActor {
     func demographicManager() async throws -> DemographicManagerProtocol {
         try await resolve(DemographicManagerProtocol.self)
     }
-    
+
+    // MARK: - Utilities
+
+    private func log(error: Error, message: String) async {
+        if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
+            await logger.postError(error)
+        } else {
+            print("\(message): \(error)")
+        }
+    }
+
+    func requireConfig() async throws -> (DIContainer, SahhaSettings) {
+        guard let container, let settings else {
+            throw SahhaError(message: "Sahha is not configured. Please call `Sahha.configure(...)` first.")
+        }
+        return (container, settings)
+    }
+
     // MARK: - Post Error
+
     func postError(framework: SahhaFramework = .ios_swift, message: String, path: String, method: String, body: String) async {
         let baseURL = settings?.environment.baseURL ?? SahhaEnvironment.sandbox.baseURL
         let apiClient = APIClient(baseURL: baseURL)
         let deviceIdProvider = DeviceIdProvider(storage: UserDefaultsStorage())
-        let deviceInfo = await DeviceInfoBuilder(sdkId: framework.rawValue,deviceIdProvider: deviceIdProvider).build()
+        let deviceInfo = await DeviceInfoBuilder(sdkId: framework.rawValue, deviceIdProvider: deviceIdProvider).build()
         let error = ErrorLogRequest(
             sdkId: deviceInfo.sdkId,
             sdkVersion: deviceInfo.sdkVersion,
