@@ -82,8 +82,8 @@ public class Sahha {
             callback: callback,
             requiresAuth: true,
             task: {
-                let manager = try await actor.demographicManager()
-                return try await manager.getDemographic()
+                let demographicManager = try await actor.demographicManager()
+                return try await demographicManager.getDemographic()
             }
         )
     }
@@ -93,8 +93,8 @@ public class Sahha {
             callback: callback,
             requiresAuth: true,
             task: {
-                let manager = try await actor.demographicManager()
-                try await manager.updateDemographic(demographic)
+                let demographicManager = try await actor.demographicManager()
+                try await demographicManager.updateDemographic(demographic)
                 return true
             },
             defaultErrorValue: false
@@ -106,8 +106,8 @@ public class Sahha {
         runAsyncWithCallback(
             callback: callback,
             task: {
-                let manager = try await actor.healthKitManager()
-                return try await manager.getSensorStatus(sensors)
+                let healthKitManager = try await actor.healthKitManager()
+                return try await healthKitManager.getSensorStatus(sensors)
             },
             defaultErrorValue: .pending
         )
@@ -118,9 +118,9 @@ public class Sahha {
             callback: callback,
             requiresAuth: true,
             task: {
-                let manager = try await actor.healthKitManager()
-                try await manager.enableSensors(sensors)
-                return try await manager.getSensorStatus(sensors)
+                let healthKitManager = try await actor.healthKitManager()
+                try await healthKitManager.enableSensors(sensors)
+                return try await healthKitManager.getSensorStatus(sensors)
             },
             defaultErrorValue: .pending
         )
@@ -142,8 +142,8 @@ public class Sahha {
         runAsyncWithCallback(
             callback: callback,
             task: {
-                let manager = try await actor.healthKitManager()
-                return try await manager.getSamples(
+                let healthKitManager = try await actor.healthKitManager()
+                return try await healthKitManager.getSamples(
                     for: sensor,
                     startDateTime: startDateTime,
                     endDateTime: endDateTime
@@ -158,8 +158,8 @@ public class Sahha {
         runAsyncWithCallback(
             callback: callback,
             task: {
-                let manager = try await actor.healthKitManager()
-                return try await manager.getStats(
+                let healthKitManager = try await actor.healthKitManager()
+                return try await healthKitManager.getStats(
                     for: sensor,
                     startDateTime: startDateTime,
                     endDateTime: endDateTime
@@ -175,8 +175,8 @@ public class Sahha {
             callback: callback,
             requiresAuth: true,
             task: {
-                let manager = try await actor.scoreManager()
-                return try await manager.getScores(types: types, startDateTime: startDateTime, endDateTime: endDateTime)
+                let scoreManager = try await actor.scoreManager()
+                return try await scoreManager.getScores(types: types, startDateTime: startDateTime, endDateTime: endDateTime)
             }
         )
     }
@@ -193,8 +193,8 @@ public class Sahha {
             callback: callback,
             requiresAuth: true,
             task: {
-                let manager = try await actor.biomarkerManager()
-                return try await manager.getBiomarkers(
+                let biomarkerManager = try await actor.biomarkerManager()
+                return try await biomarkerManager.getBiomarkers(
                     categories: categories,
                     types: types,
                     startDateTime: startDateTime,
@@ -214,7 +214,6 @@ public class Sahha {
                 return
             }
             await UIApplication.shared.open(settingsURL)
-
         }
     }
 

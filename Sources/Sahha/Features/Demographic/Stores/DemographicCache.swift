@@ -10,12 +10,11 @@ actor DemographicCache: DemographicCacheProtocol {
     private let storage: KeychainStorageProtocol
     private let ttl: TimeInterval
     private let logger: ErrorLoggerProtocol
-
-    // Keep the full cache object in memory, not just the demographic
+    
     private var cachedDemographic: CachedDemographic?
-
+    
     init(
-        key: String = StorageKeys.UserDefaults.deviceInfo,
+        key: String = StorageKeys.Keychain.demographic,
         storage: KeychainStorageProtocol,
         ttl: TimeInterval = .hours(1),
         logger: ErrorLoggerProtocol
@@ -24,32 +23,37 @@ actor DemographicCache: DemographicCacheProtocol {
         self.storage = storage
         self.ttl = ttl
         self.logger = logger
+        
+        do {
+            self.cachedDemographic = try storage.object(forKey: key)
+        } catch {
+            logger.postError(error)
+        }
     }
-
+    
     private func isCacheValid(_ lastSync: Date) -> Bool {
         lastSync.addingTimeInterval(ttl) >= Date()
     }
-
+    
     func getDemographic() async -> SahhaDemographic? {
-        // Prefer in-memory cache if valid
         if let cached = cachedDemographic, isCacheValid(cached.lastSync) {
             return cached.demographic
         }
-        // Else load from Keychain
         do {
-            guard let cached: CachedDemographic = try storage.object(forKey: key),
-                  isCacheValid(cached.lastSync) else {
+            if let cached: CachedDemographic = try storage.object(forKey: key),
+               isCacheValid(cached.lastSync) {
+                cachedDemographic = cached
+                return cached.demographic
+            } else {
                 cachedDemographic = nil
                 return nil
             }
-            cachedDemographic = cached
-            return cached.demographic
         } catch {
             logger.postError(error)
             return nil
         }
     }
-
+    
     func cacheDemographic(_ demographic: SahhaDemographic) {
         let value = CachedDemographic(demographic: demographic, lastSync: Date())
         cachedDemographic = value
@@ -59,23 +63,25 @@ actor DemographicCache: DemographicCacheProtocol {
             logger.postError(error)
         }
     }
-
+    
     /// Checks if the given demographic matches the cached value and the TTL has not expired
     func needsUpdate(comparedTo demographic: SahhaDemographic) -> Bool {
-        // Prefer in-memory cache if available
         if let cached = cachedDemographic {
-            return cached.demographic == demographic && isCacheValid(cached.lastSync)
+            return cached.demographic != demographic || !isCacheValid(cached.lastSync)
         }
         do {
-            guard let cached: CachedDemographic = try storage.object(forKey: key) else { return false }
-            cachedDemographic = cached
-            return cached.demographic == demographic && isCacheValid(cached.lastSync)
+            if let cached: CachedDemographic = try storage.object(forKey: key) {
+                cachedDemographic = cached
+                return cached.demographic != demographic || !isCacheValid(cached.lastSync)
+            } else {
+                return true
+            }
         } catch {
             logger.postError(error)
-            return false
+            return true
         }
     }
-
+    
     func dispose() async {
         cachedDemographic = nil
         do {

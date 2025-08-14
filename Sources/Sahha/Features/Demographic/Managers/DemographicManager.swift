@@ -1,8 +1,5 @@
-import HealthKit
-
 final class DemographicManager: DemographicManagerProtocol, Disposable {
     private let demographicService: DemographicServiceProtocol
-    private let sensorStore: SensorStoreProtocol
     private let cache: DemographicCacheProtocol
     private let logger: ErrorLoggerProtocol
 
@@ -10,12 +7,10 @@ final class DemographicManager: DemographicManagerProtocol, Disposable {
 
     init(
         demographicService: DemographicServiceProtocol,
-        sensorStore: SensorStoreProtocol,
         cache: DemographicCacheProtocol,
         logger: ErrorLoggerProtocol
     ) {
         self.demographicService = demographicService
-        self.sensorStore = sensorStore
         self.cache = cache
         self.logger = logger
     }
@@ -24,12 +19,14 @@ final class DemographicManager: DemographicManagerProtocol, Disposable {
         if let demographic = await cache.getDemographic() {
             return demographic
         }
-        return try await demographicService.getDemographic()
+        let remote = try await demographicService.getDemographic()
+        await cache.cacheDemographic(remote)
+        return remote
     }
 
     func updateDemographic(_ demographic: SahhaDemographic) async throws {
-        if await cache.needsUpdate(comparedTo: demographic) { return }
         try await updateTaskActor.run {
+            guard await self.cache.needsUpdate(comparedTo: demographic) else { return }
             try await self.demographicService.patchDemographic(demographic)
             await self.cache.cacheDemographic(demographic)
         }
