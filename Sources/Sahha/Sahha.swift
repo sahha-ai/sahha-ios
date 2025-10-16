@@ -1,251 +1,292 @@
+import Foundation
 import UIKit
 
-public final class Sahha {
-    @MainActor private static var profileTokenSnapshot: String?
-    
-    // MARK: Configuration
-    
-    public static func configure(_ settings: SahhaSettings, callback: (@Sendable () -> Void)? = nil) {
-        Task {
-            await ConfigurationStore.shared.set(settings)
-            await restoreSessionIfAuthenticated()
-            callback?()
-        }
-    }
-    
-    private static func restoreSessionIfAuthenticated() async {
-        if let token = await TokenStore.shared.getProfileToken() {
-            Task { @MainActor in
-                setProfileTokenSnapshot(token)
-                LifecycleObserver.shared.start()
-            }
-            await HKManager.shared.startSensors()
-            await RefreshTokenManager.shared.scheduleRefresh()
-        }
-    }
-    
-    // MARK: Authentication
-    
-    static func setProfileTokenSnapshot(_ token: String?) {
-        Task { @MainActor in
-            profileTokenSnapshot = token
-        }
-    }
-    
-    @MainActor
-    public static var isAuthenticated: Bool {
-        return profileTokenSnapshot != nil
-    }
-    
-    @MainActor
-    public static var profileToken: String? {
-        return profileTokenSnapshot
-    }
-    
-    public static func authenticate(appId: String, appSecret: String, externalId: String, callback: @escaping @Sendable (String?, Bool) -> Void) {
-        Task {
-            let result = await ApiController.registerProfile(appId: appId, appSecret: appSecret, externalId: externalId)
-            switch result {
-            case .success(let tokens):
-                authenticate(tokens, callback: callback)
-            case .failure(let error):
-                callback(error.localizedDescription, false)
-            }
-        }
-    }
-    
-    public static func authenticate(profileToken: String, refreshToken: String, callback: @escaping @Sendable (String?, Bool) -> Void) {
-        Task {
-            let tokens = TokenResponse(profileToken: profileToken, refreshToken: refreshToken)
-            authenticate(tokens, callback: callback)
-        }
-    }
-    
-    private static func authenticate(_ tokens: TokenResponse, callback: @escaping @Sendable (String?, Bool) -> Void) {
-        Task {
-            do {
-                try await TokenStore.shared.setTokens(tokens)
-                await DeviceInformationManager.shared.sync()
-                await HKManager.shared.startSensors()
-                await LifecycleObserver.shared.start()
-                callback(nil, true)
-            } catch {
-                callback(error.localizedDescription, false)
-            }
-        }
-    }
-    
-    public static func deauthenticate(callback: @escaping @Sendable (String?, Bool) -> Void) {
-        Task {
-            do {
-                Task { @MainActor in
-                    setProfileTokenSnapshot(nil)
-                }
-                
-                await RefreshTokenManager.shared.stop()
-                
-                await SensorManager.shared.stopSensors()
-                await LifecycleObserver.shared.stop()
-                
-                await HKManager.shared.reset()
-                await DataLogManager.shared.reset()
-                
-                await DeviceInformationStore.shared.clear()
-                try await DemographicStore.shared.clear()
-                try await TokenStore.shared.deleteTokens()
-                
-                callback(nil, true)
-            } catch {
-                callback(error.localizedDescription, false)
-            }
-        }
-    }
-    
-    // MARK: Sensors
-    
-    public static func enableSensors(_ sensors: Set<SahhaSensor>, callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void) {
-        Task {
-            let (error, status) = await SensorManager.shared.enableSensors(sensors)
-            callback(error, status)
-        }
-    }
-    
-    public static func getSensorStatus(_ sensors: Set<SahhaSensor>, callback: @escaping @Sendable (String?, SahhaSensorStatus) -> Void) {
-        Task {
-            let (error, status) = await SensorManager.shared.getSensorStatus(sensors)
-            callback(error, status)
-        }
-    }
-    
-    // MARK: Demographic
-    
-    public static func getDemographic(callback: @escaping @Sendable (String?, SahhaDemographic?) -> Void) {
-        Task {
-            if let cached = await DemographicStore.shared.get() {
-                callback(nil, cached)
-                return
-            }
-            
-            let result = await ApiController.getDemographic()
-            switch result {
-            case .success(let response):
-                let demographic = SahhaDemographic(from: response)
-                do {
-                    try await DemographicStore.shared.set(demographic)
-                    callback(nil, demographic)
-                } catch {
-                    callback(error.localizedDescription, nil)
-                }
-            case .failure(let error):
-                callback(error.localizedDescription, nil)
-            }
-        }
-    }
-    
-    public static func postDemographic(_ demographic: SahhaDemographic, callback: @escaping @Sendable (String?, Bool) -> Void) {
-        Task {
-            let cached = await DemographicStore.shared.get()
-            
-            if cached == demographic {
-                callback(nil, true)
-                return
-            }
-            
-            let request = demographic.toRequest()
-            let result = await ApiController.patchDemographic(request)
-            switch result {
-            case .success:
-                do {
-                    try await DemographicStore.shared.set(demographic)
-                    callback(nil, true)
-                } catch {
-                    callback(error.localizedDescription, false)
-                }
-            case .failure(let error):
-                callback(error.localizedDescription, false)
-            }
-        }
-    }
-    
-    // MARK: Samples
-    
-    public static func getSamples() {
-        // TODO: Implement me!
-    }
-    
-    // MARK: Stats
-    
-    public static func getStats() {
-        // TODO: Implement me!
-    }
-    
-    // MARK: Scores
-    
-    public static func getScores(
-        types: Set<String>,
-        startDateTime: Date,
-        endDateTime: Date,
-        callback: @escaping @Sendable (String?, String?) -> Void
-    ) {
-        Task {
-            let result = await ApiController.getScores(types: types, startDateTime: startDateTime, endDateTime: endDateTime)
-            switch result {
-            case .success(let scores):
-                let (error, json) = scores.wrappedAsDataEnvelope(named: "scores")
-                callback(error, json)
-            case .failure(let error):
-                callback(error.localizedDescription, nil)
-            }
-        }
-    }
-    
-    // MARK: Biomarkers
-    
-    public static func getBiomarkers(
-        categories: Set<String>,
-        types: Set<String>,
-        startDateTime: Date,
-        endDateTime: Date,
-        callback: @escaping @Sendable (String?, String?) -> Void
-    ) {
-        Task {
-            let result = await ApiController.getBiomarkers(categroies: categories, types: types, startDateTime: startDateTime, endDateTime: endDateTime)
-            switch result {
-            case .success(let biomarkers):
-                let (error, json) = biomarkers.wrappedAsDataEnvelope(named: "biomarkers")
-                callback(error, json)
-            case .failure(let error):
-                callback(error.localizedDescription, nil)
-            }
-        }
-    }
-    
-    // MARK: Settings
-    
-    @MainActor
-    public static func openAppSettings() {
-        guard let settingsURL = URL(string: UIApplication.openSettingsURLString),
-              UIApplication.shared.canOpenURL(settingsURL) else {
-            print("Sahha SDK: Invalid or unsupported settings URL.")
-            return
-        }
-        
-        UIApplication.shared.open(settingsURL)
+/// Synchronous auth for legacy API - updated from TokenStore
+final class AuthSnapshot: @unchecked Sendable {
+    var profileToken: String?
+    var isAuthenticated: Bool {
+        guard let profileToken else { return false }
+        return !profileToken.isEmpty
     }
 }
 
-// MARK: Helpers
+public class Sahha {
+    private static let actor: SahhaActor = .shared
+    static let authSnapshot = AuthSnapshot()
 
-/// This seems kinda silly - just return a typed array?
-private extension Encodable {
-    func wrappedAsDataEnvelope(named typeName: String) -> (error: String?, data: String?) {
-        let wrapper = ["data": self]
-        
-        do {
-            let json = try wrapper.toJsonString()
-            return (nil, json)
-        } catch {
-            return (error.localizedDescription, nil)
+    // MARK: - Configuration
+    public static func configure(_ settings: SahhaSettings, callback: (() -> Void)? = nil) {
+        let box = VoidCallbackBox(callback: callback)
+        Task {
+            do {
+                try await actor.configure(with: settings)
+                DispatchQueue.main.async {
+                    box.callback?()
+                }
+            } catch {
+                print("[\(SDK.name)] ERROR: Failed to configure Sahha: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    // MARK: - Authentication
+    public static var isAuthenticated: Bool {
+        authSnapshot.isAuthenticated
+    }
+
+    public static var profileToken: String? {
+        authSnapshot.profileToken
+    }
+
+    public static func authenticate(appId: String, appSecret: String, externalId: String, callback: @escaping (String?, Bool) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            task: {
+                let authManager = try await actor.authManager()
+                try await authManager.authenticate(appId: appId, appSecret: appSecret, externalId: externalId)
+                try await actor.startAuthenticatedServices()
+                return true
+            },
+            defaultErrorValue: false
+        )
+    }
+
+    public static func authenticate(profileToken: String, refreshToken: String, callback: @escaping (String?, Bool) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            task: {
+                let authManager = try await actor.authManager()
+                try await authManager.authenticate(profileToken: profileToken, refreshToken: refreshToken)
+                try await actor.startAuthenticatedServices()
+                return true
+            },
+            defaultErrorValue: false
+        )
+    }
+
+    public static func deauthenticate(callback: @escaping (String?, Bool) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            requiresAuth: true,
+            task: {
+                try await actor.deauthenticate()
+                return true
+            },
+            defaultErrorValue: false
+        )
+    }
+
+    // MARK: - Demographic
+    public static func getDemographic(callback: @escaping (String?, SahhaDemographic?) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            requiresAuth: true,
+            task: {
+                let demographicManager = try await actor.demographicManager()
+                return try await demographicManager.getDemographic()
+            }
+        )
+    }
+
+    public static func postDemographic(_ demographic: SahhaDemographic, callback: @escaping (String?, Bool) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            requiresAuth: true,
+            task: {
+                let demographicManager = try await actor.demographicManager()
+                try await demographicManager.updateDemographic(demographic)
+                return true
+            },
+            defaultErrorValue: false
+        )
+    }
+
+    // MARK: - Sensors
+    public static func getSensorStatus(_ sensors: Set<SahhaSensor>, callback: @escaping (String?, SahhaSensorStatus) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            task: {
+                let healthKitManager = try await actor.healthKitManager()
+                return try await healthKitManager.getSensorStatus(sensors)
+            },
+            defaultErrorValue: .pending
+        )
+    }
+
+    public static func enableSensors(_ sensors: Set<SahhaSensor>, callback: @escaping (String?, SahhaSensorStatus) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            requiresAuth: true,
+            task: {
+                let healthKitManager = try await actor.healthKitManager()
+                try await healthKitManager.enableSensors(sensors)
+                return try await healthKitManager.getSensorStatus(sensors)
+            },
+            defaultErrorValue: .pending
+        )
+    }
+
+    public static func postSensorData() {
+        Task {
+            do {
+                let healthKitManager = try await actor.healthKitManager()
+                await healthKitManager.querySensors()
+            } catch {
+                // Currently just fails silently
+            }
+        }
+    }
+
+    // MARK: - Samples
+    public static func getSamples(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [SahhaSample]) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            task: {
+                let healthKitManager = try await actor.healthKitManager()
+                return try await healthKitManager.getSamples(
+                    for: sensor,
+                    startDateTime: startDateTime,
+                    endDateTime: endDateTime
+                )
+            },
+            defaultErrorValue: []
+        )
+    }
+
+    // MARK: - Stats
+    public static func getStats(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [SahhaStat]) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            task: {
+                let healthKitManager = try await actor.healthKitManager()
+                return try await healthKitManager.getStats(
+                    for: sensor,
+                    startDateTime: startDateTime,
+                    endDateTime: endDateTime
+                )
+            },
+            defaultErrorValue: []
+        )
+    }
+
+    // MARK: - Scores
+    public static func getScores(types: Set<SahhaScoreType>, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, String?) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            requiresAuth: true,
+            task: {
+                let scoreManager = try await actor.scoreManager()
+                return try await scoreManager.getScores(types: types, startDateTime: startDateTime, endDateTime: endDateTime)
+            }
+        )
+    }
+
+    // MARK: - Biomarkers
+    public static func getBiomarkers(
+        categories: Set<SahhaBiomarkerCategory>,
+        types: Set<SahhaBiomarkerType>,
+        startDateTime: Date,
+        endDateTime: Date,
+        callback: @escaping (String?, String?) -> Void
+    ) {
+        runAsyncWithCallback(
+            callback: callback,
+            requiresAuth: true,
+            task: {
+                let biomarkerManager = try await actor.biomarkerManager()
+                return try await biomarkerManager.getBiomarkers(
+                    categories: categories,
+                    types: types,
+                    startDateTime: startDateTime,
+                    endDateTime: endDateTime
+                )
+            }
+        )
+    }
+
+    // MARK: - Settings
+    public static func openAppSettings() {
+        Task { @MainActor in
+            guard let settingsURL = URL(string: UIApplication.openSettingsURLString),
+                UIApplication.shared.canOpenURL(settingsURL)
+            else {
+                print("Failed to open app settings: Invalid or unsupported settings URL.")
+                return
+            }
+            await UIApplication.shared.open(settingsURL)
+        }
+    }
+
+    // MARK: - Errors
+    public static func postError(framework: SahhaFramework = .ios_swift, message: String, path: String, method: String, body: String) {
+        Task {
+            await actor.postError(framework: framework, message: message, path: path, method: method, body: body)
+        }
+    }
+
+    // MARK: - Private Helpers
+
+    /// Legacy support for completion handler APIs
+    private struct VoidCallbackBox: @unchecked Sendable {
+        let callback: (() -> Void)?
+    }
+    
+    /// Legacy support for completion handler APIs
+    private struct CallbackBox<T, K>: @unchecked Sendable {
+        let callback: (T, K) -> Void
+    }
+
+    /// Helper for async APIs that return a non-optional result via completion handler.
+    private static func runAsyncWithCallback<T>(
+        callback: @escaping (String?, T) -> Void,
+        requiresAuth: Bool = false,
+        task: @escaping @Sendable () async throws -> T,
+        defaultErrorValue: @autoclosure @escaping @Sendable () -> T
+    ) {
+        let box = CallbackBox(callback: callback)
+        Task {
+            do {
+                if requiresAuth { try authGuard() }
+                let result = try await task()
+                DispatchQueue.main.async {
+                    box.callback(nil, result)
+                }
+            } catch {
+                let error = SahhaError.from(error)
+                DispatchQueue.main.async {
+                    box.callback(error.localizedDescription, defaultErrorValue())
+                }
+            }
+        }
+    }
+
+    /// Helper for async APIs that return an optional result via completion handler.
+    private static func runAsyncWithCallback<T>(
+        callback: @escaping (String?, T?) -> Void,
+        requiresAuth: Bool = false,
+        task: @escaping @Sendable () async throws -> T,
+        defaultErrorValue: @autoclosure @escaping @Sendable () -> T? = nil
+    ) {
+        let box = CallbackBox(callback: callback)
+        Task {
+            do {
+                if requiresAuth { try authGuard() }
+                let result = try await task()
+                DispatchQueue.main.async {
+                    box.callback(nil, result)
+                }
+            } catch {
+                let error = SahhaError.from(error)
+                DispatchQueue.main.async {
+                    box.callback(error.localizedDescription, defaultErrorValue())
+                }
+            }
+        }
+    }
+    
+    private static func authGuard() throws {
+        if !isAuthenticated {
+            throw SahhaError(message: "Unauthorized. Please call `Sahha.authenticate(...)` first.")
         }
     }
 }

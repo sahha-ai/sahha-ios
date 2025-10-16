@@ -1,0 +1,130 @@
+import HealthKit
+
+final class ErrorLogger: ErrorLoggerProtocol {
+    private let errorLoggingService: ErrorLoggingServiceProtocol
+    private let deviceInfoBuilder: DeviceInfoBuilderProtocol
+
+    init(errorLoggingService: ErrorLoggingServiceProtocol, deviceInfoBuilder: DeviceInfoBuilderProtocol) {
+        self.errorLoggingService = errorLoggingService
+        self.deviceInfoBuilder = deviceInfoBuilder
+    }
+
+    func postError(_ error: any Error, file: StaticString, function: StaticString, line: UInt) {
+        guard shouldPostError(error) else { return }
+        
+        Task.detached(priority: .background) { [weak self] in
+            guard let self else { return }
+            let deviceInfo = await self.deviceInfoBuilder.build()
+            let errorLog = self.makeErrorLogRequest(
+                error: error,
+                deviceInfo: deviceInfo,
+                file: file,
+                function: function,
+                line: line
+            )
+
+            do {
+                try await self.errorLoggingService.postError(errorLog)
+            } catch {
+                #if DEBUG
+                    print("[\(SDK.name)] - ERROR: Failed to post error log: \(error)")
+                #endif
+            }
+
+        }
+    }
+
+    private func shouldPostError(_ error: Error) -> Bool {
+        if error is CancellationError {
+               return false
+           }
+        
+        if let sahhaError = error as? SahhaError {
+            if let underlying = sahhaError.error {
+                return shouldPostError(underlying)
+            }
+            return false
+        }
+
+        // HealthKit-specific error filtering
+        let nsError = error as NSError
+        if nsError.domain == HKErrorDomain {
+            switch HKError.Code(rawValue: nsError.code) {
+            case .errorAuthorizationDenied,
+                .errorAuthorizationNotDetermined,
+                .errorDatabaseInaccessible,
+                .errorHealthDataRestricted,
+                .errorHealthDataUnavailable,
+                .errorNoData,
+                .errorUserCanceled:
+                return false  // Common, user-expected errors
+            default:
+                return true  // Unexpected HealthKit error
+            }
+        }
+
+        // Default: send all other errors
+        return true
+    }
+
+    private func makeErrorLogRequest(
+        error: Error,
+        deviceInfo: DeviceInfo,
+        file: StaticString,
+        function: StaticString,
+        line: UInt
+    ) -> ErrorLogRequest {
+        switch error {
+        case let apiError as APIErrorResponse:
+            let errorBody: String? = {
+                if let data = try? JSONEncoder().encode(apiError.errors),
+                    let jsonString = String(data: data, encoding: .utf8)
+                {
+                    return jsonString
+                } else {
+                    return apiError.errors.map { "\($0.origin): \($0.errors.joined(separator: ", "))" }
+                        .joined(separator: " | ")
+                }
+            }()
+            return ErrorLogRequest(
+                sdkId: deviceInfo.sdkId,
+                sdkVersion: deviceInfo.sdkVersion,
+                appId: deviceInfo.appId,
+                appVersion: deviceInfo.appVersion,
+                deviceId: deviceInfo.deviceId,
+                deviceType: deviceInfo.deviceType,
+                deviceModel: deviceInfo.deviceModel,
+                system: deviceInfo.system,
+                systemVersion: deviceInfo.systemVersion,
+                errorSource: ErrorSource.api.rawValue,
+                errorCode: apiError.statusCode,
+                errorLocation: apiError.location,
+                errorMessage: apiError.title,
+                errorBody: errorBody,
+                codePath: file.description,
+                codeMethod: function.description,
+                codeBody: "line \(line)"
+            )
+        default:
+            return ErrorLogRequest(
+                sdkId: deviceInfo.sdkId,
+                sdkVersion: deviceInfo.sdkVersion,
+                appId: deviceInfo.appId,
+                appVersion: deviceInfo.appVersion,
+                deviceId: deviceInfo.deviceId,
+                deviceType: deviceInfo.deviceType,
+                deviceModel: deviceInfo.deviceModel,
+                system: deviceInfo.system,
+                systemVersion: deviceInfo.systemVersion,
+                errorSource: ErrorSource.sdk.rawValue,
+                errorCode: nil,
+                errorLocation: nil,
+                errorMessage: error.localizedDescription,
+                errorBody: String(describing: error),
+                codePath: file.description,
+                codeMethod: function.description,
+                codeBody: "line \(line)"
+            )
+        }
+    }
+}
