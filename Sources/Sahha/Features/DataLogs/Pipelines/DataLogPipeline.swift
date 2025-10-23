@@ -7,6 +7,7 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
     private let fileManager: DataLogFileManagerProtocol
     private let requestMapper: DataLogRequestMapperProtocol
     private let uploader: DataLogUploaderProtocol
+    private let priorityAssigner: UploadPriorityAssignerProtocol
 
     private var disposed = false
     private var buffer: [DataLog] = []
@@ -17,6 +18,7 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
         fileManager: DataLogFileManagerProtocol,
         requestMapper: DataLogRequestMapperProtocol,
         uploader: DataLogUploaderProtocol,
+        priorityAssigner: UploadPriorityAssignerProtocol,
         maxBatchKB: Int = 150,
         maxBufferSize: Int = 50_000,
         flushInterval: TimeInterval = .seconds(5)
@@ -24,6 +26,7 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
         self.fileManager = fileManager
         self.requestMapper = requestMapper
         self.uploader = uploader
+        self.priorityAssigner = priorityAssigner
         self.maxBatchBytes = maxBatchKB * 1024  // Store as bytes internally
         self.maxBufferSize = maxBufferSize
         self.flushInterval = flushInterval
@@ -35,6 +38,12 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
         await waitForBufferSpace(for: logs.count)
         buffer.append(contentsOf: logs)
         tryResumeBufferWaiters()
+
+        // NEW: Assign priorities before batching
+        let prioritizedLogs = logs.map { ($0, priorityAssigner.assignPriority(to: $0)) }
+        // Group by priority and add to uploader's queue (extend uploader to accept prioritized logs)
+        // For minimal changes, call uploader's new method here
+        await uploader.ingestPrioritizedLogs(prioritizedLogs)  // Assuming you add this method to DataLogUploader
 
         // Batching and flushing by size
         await flushBufferBySize()

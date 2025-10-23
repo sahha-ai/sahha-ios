@@ -21,15 +21,32 @@ enum DataLogDI {
             DataLogUploader(
                 fileManager: try await container.resolve(DataLogFileManagerProtocol.self),
                 dataLogService: try await container.resolve(DataLogServiceProtocol.self),
-                logger: try await container.resolve(ErrorLoggerProtocol.self)
+                requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),  
+                logger: try await container.resolve(ErrorLoggerProtocol.self),
+                priorityAssigner: try await container.resolve(UploadPriorityAssignerProtocol.self)  
             )
         }
         await container.register(DataLogPipelineProtocol.self) { container in
             DataLogPipeline(
                 fileManager: try await container.resolve(DataLogFileManagerProtocol.self),
                 requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),
-                uploader: try await container.resolve(DataLogUploaderProtocol.self)
+                uploader: try await container.resolve(DataLogUploaderProtocol.self),
+                priorityAssigner: try await container.resolve(UploadPriorityAssignerProtocol.self) 
             )
+        }
+        await container.register(UploadPriorityAssignerProtocol.self) { _ in
+            DefaultUploadPriorityAssigner()
+        }
+    }
+}
+
+//// Adjust what gets prioritized here 
+final class DefaultUploadPriorityAssigner: UploadPriorityAssignerProtocol {
+    func assignPriority(to log: DataLog) -> UploadPriority {
+        switch log.logType {
+        case .device: return .high  
+        case .demographic: return .critical  
+        default: return .normal  
         }
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import Compression
 
 final class APIClient: APIClientProtocol {
     private let baseURL: URL
@@ -89,9 +90,14 @@ final class APIClient: APIClientProtocol {
     }
 
     private func performRequest(_ request: APIRequest) async throws -> APIResponse {
-        let urlRequest: URLRequest
+        var urlRequest: URLRequest
         do {
             urlRequest = try buildURLRequest(from: request)
+            // Compress the body if it's > 1kb
+            if let compressedRequest = try compressBodyIfNeeded(urlRequest) {
+                print("[Sahha Compression] Compressed request body: \(urlRequest.httpBody?.count ?? 0) bytes → \(compressedRequest.httpBody?.count ?? 0) bytes")
+                urlRequest = compressedRequest
+            }
         } catch let apiError as APIErrorResponse {
             throw apiError
         } catch {
@@ -106,6 +112,7 @@ final class APIClient: APIClientProtocol {
         let data: Data
         let response: URLResponse
         do {
+            print("[Sahha Network] \(urlRequest.httpMethod ?? "GET") \(urlRequest.url?.absoluteString ?? "") | Headers: \(urlRequest.allHTTPHeaderFields ?? [:])")
             (data, response) = try await session.data(for: urlRequest)
         } catch {
             throw APIErrorResponse(
@@ -129,6 +136,7 @@ final class APIClient: APIClientProtocol {
         case 200...299:
             return APIResponse(data, httpResponse)
         default:
+            print("[Sahha Error] HTTP \(httpResponse.statusCode) | Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
             do {
                 let apiError = try JSONDecoder().decode(APIErrorResponse.self, from: data)
                 throw apiError
@@ -141,5 +149,53 @@ final class APIClient: APIClientProtocol {
                 )
             }
         }
+    }
+
+    //// Method to compress large bodies with gzip
+    private func compressBodyIfNeeded(_ urlRequest: URLRequest) throws -> URLRequest? {
+        guard let body = urlRequest.httpBody, body.count > 1024 else {
+            return nil // shows no comp. for bodies < 1kb
+        }
+        
+        var mutableRequest = urlRequest
+        do {
+            // Compression logic here
+            let compressedData = try compressGzip(data: body)
+            mutableRequest.setValue("gzip", forHTTPHeaderField: "Content-Encoding")
+            mutableRequest.httpBody = compressedData
+            return mutableRequest
+        } catch {
+            // Fallback: Log and return original request if compression fails
+            return nil
+        }
+    }
+
+    //function to compress data with gzip using Foundation's Compression, no added library needed
+    private func compressGzip(data: Data) throws -> Data {
+        guard !data.isEmpty else { return data }
+        
+        let destinationBufferSize = data.count
+        let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: destinationBufferSize)
+        defer { destinationBuffer.deallocate() }
+        
+        let compressedSize = data.withUnsafeBytes { (sourceBuffer: UnsafeRawBufferPointer) -> Int in
+            guard let sourcePtr = sourceBuffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                return 0
+            }
+            return compression_encode_buffer(
+                destinationBuffer,
+                destinationBufferSize,
+                sourcePtr,
+                data.count,
+                nil,
+                COMPRESSION_ZLIB
+            )
+        }
+        
+        guard compressedSize > 0 else {
+            throw SahhaError(message: "Compression failed")
+        }
+        
+        return Data(bytes: destinationBuffer, count: compressedSize)
     }
 }
