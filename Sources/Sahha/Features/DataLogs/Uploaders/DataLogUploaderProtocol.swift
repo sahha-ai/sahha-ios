@@ -1,6 +1,7 @@
 import Foundation
 
 protocol DataLogUploaderProtocol: Actor {
-    func uploadPendingBatches()
-    func ingestPrioritizedLogs(_ prioritizedLogs: [(DataLog, UploadPriority)]) async
+    func enqueue(_ chunk: DataLogChunk) async
+    func enqueueLogs(_ logs: [DataLog]) async
+    func dispose() async
 }

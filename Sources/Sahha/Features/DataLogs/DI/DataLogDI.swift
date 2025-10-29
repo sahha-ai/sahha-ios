@@ -11,24 +11,36 @@ enum DataLogDI {
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
         }
-        await container.register(DataLogFileManagerProtocol.self) { _ in
-            try DataLogFileManager(
-                directory: StorageDirectories.dataLogs,
-                logger: try await container.resolve(ErrorLoggerProtocol.self)
-            )
+        await container.register(CircuitBreaker.self) { _ in
+            CircuitBreaker()
         }
+        await container.register(NetworkMonitor.self) { _ in
+            NetworkMonitor()
+        }
+        await container.register(DeadLetterQueue.self) { _ in
+            DeadLetterQueue(baseDirectory: StorageDirectories.dataLogs)
+        }
+        await container.register(OfflineQueuePersistence.self) { _ in
+            OfflineQueuePersistence(baseDirectory: StorageDirectories.dataLogs)
+        }
+
         await container.register(DataLogUploaderProtocol.self) { container in
             DataLogUploader(
-                fileManager: try await container.resolve(DataLogFileManagerProtocol.self),
                 dataLogService: try await container.resolve(DataLogServiceProtocol.self),
-                requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),  
+                requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self),
-                priorityAssigner: try await container.resolve(UploadPriorityAssignerProtocol.self)  
+                circuitBreaker: try await container.resolve(CircuitBreaker.self),
+                networkMonitor: try await container.resolve(NetworkMonitor.self),
+                deadLetterQueue: try await container.resolve(DeadLetterQueue.self),
+                offlineQueue: try await container.resolve(OfflineQueuePersistence.self),
+                streamingProcessor: StreamingBatchProcessor(
+                    requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),
+                    priorityAssigner: try await container.resolve(UploadPriorityAssignerProtocol.self)
+                )
             )
         }
         await container.register(DataLogPipelineProtocol.self) { container in
             DataLogPipeline(
-                fileManager: try await container.resolve(DataLogFileManagerProtocol.self),
                 requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),
                 uploader: try await container.resolve(DataLogUploaderProtocol.self),
                 priorityAssigner: try await container.resolve(UploadPriorityAssignerProtocol.self) 

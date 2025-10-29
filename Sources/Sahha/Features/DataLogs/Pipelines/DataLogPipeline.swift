@@ -8,6 +8,7 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
     private let requestMapper: DataLogRequestMapperProtocol
     private let uploader: DataLogUploaderProtocol
     private let priorityAssigner: UploadPriorityAssignerProtocol
+    private let streamingProcessor: StreamingBatchProcessor
 
     private var disposed = false
     private var buffer: [DataLog] = []
@@ -30,26 +31,18 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
         self.maxBatchBytes = maxBatchKB * 1024  // Store as bytes internally
         self.maxBufferSize = maxBufferSize
         self.flushInterval = flushInterval
+        self.streamingProcessor = StreamingBatchProcessor(
+            requestMapper: requestMapper,
+            priorityAssigner: priorityAssigner,
+            maxChunkKB: maxBatchKB,
+            chunkSize: 100
+        )
     }
 
     func ingest(_ logs: [DataLog]) async {
         guard !disposed else { return }
 
-        await waitForBufferSpace(for: logs.count)
-        buffer.append(contentsOf: logs)
-        tryResumeBufferWaiters()
-
-        // NEW: Assign priorities before batching
-        let prioritizedLogs = logs.map { ($0, priorityAssigner.assignPriority(to: $0)) }
-        // Group by priority and add to uploader's queue (extend uploader to accept prioritized logs)
-        // For minimal changes, call uploader's new method here
-        await uploader.ingestPrioritizedLogs(prioritizedLogs)  // Assuming you add this method to DataLogUploader
-
-        // Batching and flushing by size
-        await flushBufferBySize()
-        if !buffer.isEmpty && flushTask == nil {
-            startFlushTimer()
-        }
+        await uploader.enqueueLogs(logs)
     }
 
     func ingest(_ log: DataLog) async {
@@ -93,12 +86,6 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
         }
     }
 
-    private func flushBatch(_ batch: [DataLogRequest]) async {
-        guard !batch.isEmpty else { return }
-        await fileManager.persistBatch(batch)
-        await uploader.uploadPendingBatches()
-    }
-
     private func waitForBufferSpace(for count: Int) async {
         while buffer.count + count > maxBufferSize {
             await withCheckedContinuation { continuation in
@@ -116,29 +103,27 @@ actor DataLogPipeline: DataLogPipelineProtocol, Disposable {
     }
 
     private func flushBufferBySize() async {
-        var currentBatch: [DataLogRequest] = []
-        let encoder = JSONEncoder()
-
-        while !buffer.isEmpty {
-            let log = buffer.first!
-            let request = requestMapper.map(log)
-            let testBatch = currentBatch + [request]
-            if let data = try? encoder.encode(testBatch), data.count <= maxBatchBytes {
-                currentBatch = testBatch
-                buffer.removeFirst()
-            } else {
-                if !currentBatch.isEmpty {
-                    await flushBatch(currentBatch)
-                    currentBatch = []
-                } else {
-                    // Single mapped log is too large, flush it alone
-                    await flushBatch([request])
-                    buffer.removeFirst()
-                }
-            }
+        // Use streaming processor for memory-efficient batch processing
+        // This keeps memory usage constant regardless of buffer size
+        guard !buffer.isEmpty else { return }
+        
+        // Take snapshot of buffer and clear it
+        let logsToProcess = buffer
+        buffer.removeAll()
+        tryResumeBufferWaiters()
+        
+        print("[Sahha Streaming] Processing \(logsToProcess.count) logs as stream...")
+        
+        // Stream chunks and enqueue them for upload
+        let chunkStream = await streamingProcessor.streamChunks(from: logsToProcess)
+        var chunkCount = 0
+        
+        for await chunk in chunkStream {
+            chunkCount += 1
+            print("[Sahha Streaming] Processing chunk \(chunkCount): \(chunk.requests.count) logs, \(chunk.sizeInBytes) bytes, priority: \(chunk.priority)")
+            await uploader.enqueue(chunk)
         }
-        if !currentBatch.isEmpty {
-            await flushBatch(currentBatch)
-        }
+        
+        print("[Sahha Streaming] Completed processing \(chunkCount) chunks")
     }
 }

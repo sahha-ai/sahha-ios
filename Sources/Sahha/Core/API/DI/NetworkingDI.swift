@@ -6,7 +6,8 @@ enum NetworkingDI {
         await container.register(APIClientProtocol.self) { container in
             APIClient(
                 baseURL: settings.environment.baseURL,
-                interceptorStore: try await container.resolve(APIInterceptorStoreProtocol.self),
+                session: URLSessionFactory.createOptimizedSession(),  // Use optimized session with HTTP/2
+                interceptorStore: try await container.resolve(APIInterceptorStoreProtocol.self)
             )
         }
     }

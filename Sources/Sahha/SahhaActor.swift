@@ -120,9 +120,7 @@ actor SahhaActor {
 
     private func startDataCollection(_ container: DIContainer) async {
         do {
-            let dataLogUploader = try await container.resolve(DataLogUploaderProtocol.self)
             let healthKitManager = try await container.resolve(HealthKitManagerProtocol.self)
-            await dataLogUploader.uploadPendingBatches()
             await healthKitManager.resumeSensors()
         } catch {
             await log(error: error, message: "startSensors failed")
