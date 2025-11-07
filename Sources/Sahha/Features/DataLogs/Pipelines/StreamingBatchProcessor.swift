@@ -1,7 +1,7 @@
 import Foundation
 
 /// A chunk of data logs ready for upload
-struct DataLogChunk: Sendable {
+struct DataLogChunk: Sendable, Codable {
     let requests: [DataLogRequest]
     let sizeInBytes: Int
     let priority: UploadPriority
@@ -17,13 +17,12 @@ actor StreamingBatchProcessor {
     init(
         requestMapper: DataLogRequestMapperProtocol,
         priorityAssigner: UploadPriorityAssignerProtocol,
-        maxChunkKB: Int = 150,
-        chunkSize: Int = 100
+        config: UploadConfig = .default
     ) {
         self.requestMapper = requestMapper
         self.priorityAssigner = priorityAssigner
-        self.maxChunkBytes = maxChunkKB * 1024
-        self.chunkSize = chunkSize
+        self.maxChunkBytes = config.maxChunkKB * 1024
+        self.chunkSize = config.maxLogsPerChunk
     }
     
     /// Stream logs as chunks, invoking callback for each chunk in priority order

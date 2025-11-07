@@ -1,113 +1,124 @@
 import Foundation
 
-/// Manages batches that have permanently failed after all retries
+/// Unified persistent storage for all data logs that require persistence
+/// Stores data with metadata about failure state, priority, and retry attempts
+/// All storage is persistent - survives app restarts and offline periods
 actor DeadLetterQueue {
     private let fileManager: FileManager
-    private let deadLetterDirectory: URL
-    private let maxDeadLetterSize: Int // Max number of dead letter files
+    private let persistentDirectory: URL
+    private let maxStoredBatches: Int
     
     init(
         fileManager: FileManager = .default,
         baseDirectory: URL,
-        maxDeadLetterSize: Int = 100
+        maxStoredBatches: Int = 500
     ) {
         self.fileManager = fileManager
-        self.deadLetterDirectory = baseDirectory.appendingPathComponent("DeadLetterQueue")
-        self.maxDeadLetterSize = maxDeadLetterSize
+        self.persistentDirectory = baseDirectory.appendingPathComponent("PersistentQueue")
+        self.maxStoredBatches = maxStoredBatches
         
         // Create directory if needed
         try? fileManager.createDirectory(
-            at: deadLetterDirectory,
+            at: persistentDirectory,
             withIntermediateDirectories: true
         )
     }
     
-    /// Add a batch to the dead letter queue
-    func enqueueFailed(
-        batch: [DataLogRequest],
-        error: Error,
-        attemptCount: Int
-    ) async {
+    // MARK: - Persistent Storage
+    
+    /// Persist a batch to disk with metadata
+    /// This is used for ALL persistence needs - offline storage, failed uploads, etc.
+    @discardableResult
+    func persistBatch(
+        _ chunk: DataLogChunk,
+        attemptCount: Int = 0,
+        lastError: String? = nil
+    ) async -> String? {
         let timestamp = Date().timeIntervalSince1970
-        let fileName = "dead_\(timestamp)_\(UUID().uuidString).json"
-        let fileURL = deadLetterDirectory.appendingPathComponent(fileName)
+        let id = UUID().uuidString
+        let fileName = "batch_\(chunk.priority.rawValue)_\(timestamp)_\(id).json"
+        let fileURL = persistentDirectory.appendingPathComponent(fileName)
         
-        let deadLetter = DeadLetterBatch(
-            batch: batch,
-            errorDescription: error.localizedDescription,
+        let persistedBatch = PersistedBatch(
+            id: id,
+            chunk: chunk,
+            timestamp: timestamp,
             attemptCount: attemptCount,
-            timestamp: timestamp
+            lastError: lastError
         )
         
         do {
             let encoder = JSONEncoder()
-            let data = try encoder.encode(deadLetter)
+            let data = try encoder.encode(persistedBatch)
             try data.write(to: fileURL)
             
-            print("[Dead Letter] Enqueued \(batch.count) logs after \(attemptCount) attempts: \(error.localizedDescription)")
+            let reason = lastError != nil ? "after failure" : "while offline"
+            print("[Persistent Queue] Stored batch with \(chunk.requests.count) logs (\(reason), priority: \(chunk.priority), attempts: \(attemptCount))")
             
-            // Clean up old dead letters if we exceed the limit
-            await cleanupOldDeadLetters()
+            // Cleanup old files if we exceed limit
+            await cleanupOldBatches()
+            return id
         } catch {
-            print("[Dead Letter] Failed to enqueue: \(error.localizedDescription)")
+            print("[Persistent Queue] Failed to persist batch: \(error.localizedDescription)")
+            return nil
         }
     }
     
-    /// Get all dead letter batches for manual recovery
-    func getAllDeadLetters() async -> [DeadLetterBatch] {
+    /// Load all persisted batches from disk (on app startup or network restoration)
+    /// Returns batches sorted by priority and timestamp
+    func loadAllBatches() async -> [PersistedBatch] {
         guard let files = try? fileManager.contentsOfDirectory(
-            at: deadLetterDirectory,
-            includingPropertiesForKeys: nil
+            at: persistentDirectory,
+            includingPropertiesForKeys: [.creationDateKey]
         ) else {
             return []
         }
         
-        var deadLetters: [DeadLetterBatch] = []
+        var batches: [PersistedBatch] = []
         let decoder = JSONDecoder()
         
         for fileURL in files where fileURL.pathExtension == "json" {
             if let data = try? Data(contentsOf: fileURL),
-               let deadLetter = try? decoder.decode(DeadLetterBatch.self, from: data) {
-                deadLetters.append(deadLetter)
+               let persistedBatch = try? decoder.decode(PersistedBatch.self, from: data) {
+                batches.append(persistedBatch)
             }
         }
         
-        return deadLetters.sorted { $0.timestamp < $1.timestamp }
+        // Sort by priority first, then by timestamp (oldest first within priority)
+        let sortedBatches = batches.sorted { lhs, rhs in
+            if lhs.chunk.priority != rhs.chunk.priority {
+                return lhs.chunk.priority > rhs.chunk.priority  // Higher priority first
+            }
+            return lhs.timestamp < rhs.timestamp  // Older timestamp first
+        }
+        
+        if !sortedBatches.isEmpty {
+            let totalLogs = sortedBatches.reduce(0) { $0 + $1.chunk.requests.count }
+            let failedCount = sortedBatches.filter { $0.lastError != nil }.count
+            print("[Persistent Queue] Loaded \(sortedBatches.count) batches (\(totalLogs) logs, \(failedCount) previously failed)")
+        }
+        
+        return sortedBatches
     }
     
-    /// Get count of dead letter batches
-    func getCount() async -> Int {
+    /// Remove a specific batch after successful upload
+    func removeBatch(withId id: String) async {
         guard let files = try? fileManager.contentsOfDirectory(
-            at: deadLetterDirectory,
+            at: persistentDirectory,
             includingPropertiesForKeys: nil
         ) else {
-            return 0
+            return
         }
         
-        return files.filter { $0.pathExtension == "json" }.count
-    }
-    
-    /// Retry all dead letter batches (manual recovery)
-    func retryAll() async -> [DataLogRequest] {
-        let deadLetters = await getAllDeadLetters()
-        var allBatches: [DataLogRequest] = []
-        
-        for deadLetter in deadLetters {
-            allBatches.append(contentsOf: deadLetter.batch)
+        for fileURL in files where fileURL.lastPathComponent.contains(id) {
+            try? fileManager.removeItem(at: fileURL)
         }
-        
-        // Clear dead letter queue after retrieval
-        await clearAll()
-        
-        print("[Dead Letter] Retrying \(deadLetters.count) dead letter batches (\(allBatches.count) total logs)")
-        
-        return allBatches
     }
     
-    /// Clear all dead letter batches
+    /// Clear all persisted batches
     func clearAll() async {
         guard let files = try? fileManager.contentsOfDirectory(
-            at: deadLetterDirectory,
+            at: persistentDirectory,
             includingPropertiesForKeys: nil
         ) else {
             return
@@ -117,13 +128,39 @@ actor DeadLetterQueue {
             try? fileManager.removeItem(at: fileURL)
         }
         
-        print("[Dead Letter] Cleared all dead letter batches")
+        print("[Persistent Queue] Cleared all persisted batches")
     }
     
-    /// Remove old dead letters to prevent unbounded growth
-    private func cleanupOldDeadLetters() async {
+    /// Get count of persisted batches
+    func getCount() async -> Int {
         guard let files = try? fileManager.contentsOfDirectory(
-            at: deadLetterDirectory,
+            at: persistentDirectory,
+            includingPropertiesForKeys: nil
+        ) else {
+            return 0
+        }
+        
+        return files.filter { $0.pathExtension == "json" }.count
+    }
+    
+    /// Get statistics about persisted batches
+    func getStatistics() async -> PersistenceStatistics {
+        let batches = await loadAllBatches()
+        let failedBatches = batches.filter { $0.lastError != nil }
+        let totalLogs = batches.reduce(0) { $0 + $1.chunk.requests.count }
+        
+        return PersistenceStatistics(
+            totalBatches: batches.count,
+            totalLogs: totalLogs,
+            failedBatches: failedBatches.count,
+            oldestTimestamp: batches.first?.timestamp
+        )
+    }
+    
+    /// Remove old batches to prevent unbounded growth
+    private func cleanupOldBatches() async {
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: persistentDirectory,
             includingPropertiesForKeys: [.creationDateKey]
         ) else {
             return
@@ -131,7 +168,7 @@ actor DeadLetterQueue {
         
         let jsonFiles = files.filter { $0.pathExtension == "json" }
         
-        guard jsonFiles.count > maxDeadLetterSize else { return }
+        guard jsonFiles.count > maxStoredBatches else { return }
         
         // Sort by creation date, oldest first
         let sortedFiles = jsonFiles.sorted { file1, file2 in
@@ -141,22 +178,40 @@ actor DeadLetterQueue {
         }
         
         // Remove oldest files to get back to limit
-        let filesToRemove = sortedFiles.prefix(jsonFiles.count - maxDeadLetterSize)
+        let filesToRemove = sortedFiles.prefix(jsonFiles.count - maxStoredBatches)
         for fileURL in filesToRemove {
             try? fileManager.removeItem(at: fileURL)
         }
         
         if !filesToRemove.isEmpty {
-            print("[Dead Letter] Cleaned up \(filesToRemove.count) old dead letter files")
+            print("[Persistent Queue] Cleaned up \(filesToRemove.count) old batch files")
         }
     }
 }
 
-/// A batch that has permanently failed
-struct DeadLetterBatch: Codable {
-    let batch: [DataLogRequest]
-    let errorDescription: String
-    let attemptCount: Int
-    let timestamp: TimeInterval
+// MARK: - Storage Models
+
+/// A persisted batch with all metadata needed for retry logic
+/// Used for ALL persistent storage - no distinction between offline and dead letter
+struct PersistedBatch: Codable {
+    let id: String                     // Unique identifier for removal after upload
+    let chunk: DataLogChunk            // The actual data to upload
+    let timestamp: TimeInterval        // When this was first persisted
+    let attemptCount: Int              // Number of upload attempts (0 = never tried)
+    let lastError: String?             // Last error if any (nil = offline storage, not failed)
+    
+    /// Whether this batch has failed (vs just being stored while offline)
+    var hasFailed: Bool {
+        lastError != nil
+    }
 }
+
+/// Statistics about persisted storage
+struct PersistenceStatistics {
+    let totalBatches: Int
+    let totalLogs: Int
+    let failedBatches: Int
+    let oldestTimestamp: TimeInterval?
+}
+
 

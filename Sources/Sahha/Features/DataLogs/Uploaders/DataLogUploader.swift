@@ -6,8 +6,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
     private let logger: ErrorLoggerProtocol
     private let circuitBreaker: CircuitBreaker
     private let networkMonitor: NetworkMonitor
-    private let deadLetterQueue: DeadLetterQueue
-    private let offlineQueue: OfflineQueuePersistence
+    private let persistentQueue: DeadLetterQueue
     private let streamingProcessor: StreamingBatchProcessor
     private let uploadSemaphore: AsyncSemaphore
     private let maxRetries: Int
@@ -21,40 +20,25 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         logger: ErrorLoggerProtocol,
         circuitBreaker: CircuitBreaker,
         networkMonitor: NetworkMonitor,
-        deadLetterQueue: DeadLetterQueue,
-        offlineQueue: OfflineQueuePersistence,
+        persistentQueue: DeadLetterQueue,
         streamingProcessor: StreamingBatchProcessor,
-        maxConcurrentUploads: Int = 3,
-        maxRetries: Int = 10
+        config: UploadConfig = .default
     ) {
         self.dataLogService = dataLogService
         self.requestMapper = requestMapper
         self.logger = logger
         self.circuitBreaker = circuitBreaker
         self.networkMonitor = networkMonitor
-        self.deadLetterQueue = deadLetterQueue
-        self.offlineQueue = offlineQueue
+        self.persistentQueue = persistentQueue
         self.streamingProcessor = streamingProcessor
-        self.uploadSemaphore = AsyncSemaphore(value: max(maxConcurrentUploads, 1))
-        self.maxRetries = max(maxRetries, 1)
+        self.uploadSemaphore = AsyncSemaphore(value: max(config.maxConcurrentUploads, 1))
+        self.maxRetries = max(config.maxRetries, 1)
         
-        // Inject network monitor into circuit breaker
+        // Inject network monitor into circuit breaker with connectivity callbacks
+        // Circuit breaker will automatically transition to half-open when network reconnects
         Task { [weak circuitBreaker, weak networkMonitor] in
             guard let circuitBreaker, let networkMonitor else { return }
             await circuitBreaker.setNetworkMonitor(networkMonitor)
-        }
-        
-        // Register for network state changes to handle offline→online transitions
-        Task { [weak self, weak networkMonitor] in
-            guard let self, let networkMonitor else { return }
-            await networkMonitor.onStateChange { [weak self] isConnected in
-                guard let self else { return }
-                if isConnected {
-                    Task { [weak self] in
-                        await self?.handleNetworkRestoration()
-                    }
-                }
-            }
         }
     }
 
@@ -86,42 +70,20 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         }
     }
     
-    /// Load persisted chunks and dead letter batches from disk
+    /// Load all persisted batches from disk
+    /// Includes both offline storage and previously failed batches
     private func loadPersistedData() async {
-        // 1. Load offline queue chunks
-        let persistedChunks = await offlineQueue.loadAllChunks()
-        for chunk in persistedChunks {
-            await chunkQueue.enqueue(chunk)
+        let persistedBatches = await persistentQueue.loadAllBatches()
+        
+        for batch in persistedBatches {
+            // Re-enqueue all persisted data with original priority and track their IDs
+            await chunkQueue.enqueue(batch.chunk, persistedId: batch.id)
         }
         
-        // 2. Load and retry dead letter batches
-        let deadLetterBatches = await deadLetterQueue.retryAll()
-        if !deadLetterBatches.isEmpty {
-            // Convert dead letter requests back to chunks for retry
-            let deadLetterChunk = DataLogChunk(
-                requests: deadLetterBatches,
-                sizeInBytes: deadLetterBatches.reduce(0) { $0 + (try? JSONEncoder().encode($1).count ?? 1024) },
-                priority: .high  // Give dead letter data high priority for retry
-            )
-            await chunkQueue.enqueue(deadLetterChunk)
-        }
-        
-        // 3. Clear persisted files after loading into memory
-        await offlineQueue.clearAll()
-        
-        print("[DataLogUploader] Loaded \(persistedChunks.count) persisted chunks and \(deadLetterBatches.count) dead letter logs")
+        let failedCount = persistedBatches.filter { $0.hasFailed }.count
+        print("[DataLogUploader] Loaded \(persistedBatches.count) persisted batches (\(failedCount) previously failed)")
     }
     
-    /// Handle network restoration - retry failed uploads and resume upload loop
-    private func handleNetworkRestoration() async {
-        print("[DataLogUploader] Network restored, resuming uploads...")
-        
-        // Load any persisted data that accumulated while offline
-        await loadPersistedData()
-        
-        // Restart upload loop if it's not running
-        await startUploadLoopIfNeeded()
-    }
 
     private func runUploadLoop() async {
         while !Task.isCancelled {
@@ -140,7 +102,12 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         uploadTask = nil
     }
 
-    private func uploadChunk(_ chunk: DataLogChunk) async {
+    private func uploadChunk(_ queuedChunk: QueuedChunk) async {
+        let chunk = queuedChunk.chunk
+        var persistedIds = Set<String>()
+        if let id = queuedChunk.persistedId {
+            persistedIds.insert(id)
+        }
         var attempt = 0
         var wasOffline = false
 
@@ -149,13 +116,19 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
                 try Task.checkCancellation()
 
                 // Check if device is offline
-                let isOffline = !await networkMonitor.shouldAttemptUpload()
+                let isOffline = !(await networkMonitor.shouldAttemptUpload())
                 
                 if isOffline {
                     // Persist chunk to disk if going offline
                     if !wasOffline {
                         print("[DataLogUploader] Device offline, persisting chunk with \(chunk.requests.count) logs")
-                        await offlineQueue.persistChunk(chunk)
+                        if let id = await persistentQueue.persistBatch(
+                            chunk,
+                            attemptCount: attempt,
+                            lastError: nil  // No error - just offline
+                        ) {
+                            persistedIds.insert(id)
+                        }
                         wasOffline = true
                     }
                     
@@ -176,6 +149,10 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
                 try await dataLogService.postDataLogs(chunk.requests)
                 await circuitBreaker.recordSuccess()
                 print("[DataLogUploader] Successfully uploaded chunk with \(chunk.requests.count) logs (priority: \(chunk.priority))")
+                // Remove any persisted copies now that upload succeeded
+                for id in persistedIds {
+                    await persistentQueue.removeBatch(withId: id)
+                }
                 return
             } catch {
                 attempt += 1
@@ -183,9 +160,13 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
                 logger.postError(error)
 
                 // If offline, persist and wait instead of retrying
-                if !await networkMonitor.shouldAttemptUpload() {
+                if !(await networkMonitor.shouldAttemptUpload()) {
                     print("[DataLogUploader] Upload failed due to offline state, persisting chunk")
-                    await offlineQueue.persistChunk(chunk)
+                    _ = await persistentQueue.persistBatch(
+                        chunk,
+                        attemptCount: attempt,
+                        lastError: nil  // Offline, not a real failure
+                    )
                     return  // Exit retry loop, will be retried on network restoration
                 }
 
@@ -196,17 +177,20 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
             }
         }
 
-        // Max retries exceeded - send to dead letter queue
+        // Max retries exceeded - persist with failure metadata
+        let errorMessage = "Max retry attempts exceeded for chunk with priority \(chunk.priority)"
         let error = NSError(
             domain: "DataLogUploader",
             code: -1,
-            userInfo: [NSLocalizedDescriptionKey: "Max retry attempts exceeded for chunk with priority \(chunk.priority)"]
+            userInfo: [NSLocalizedDescriptionKey: errorMessage]
         )
         logger.postError(error)
-        await deadLetterQueue.enqueueFailed(
-            batch: chunk.requests,
-            error: error,
-            attemptCount: attempt
+        
+        // Store as failed batch (will be retried on next app launch or network restoration)
+        _ = await persistentQueue.persistBatch(
+            chunk,
+            attemptCount: attempt,
+            lastError: errorMessage  // Mark as failed with error
         )
     }
 
@@ -218,19 +202,25 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
     }
 }
 
-private actor ChunkQueue {
-    private var storage: [UploadPriority: [DataLogChunk]] = [:]
+private struct QueuedChunk {
+    let chunk: DataLogChunk
+    let persistedId: String?
+}
 
-    func enqueue(_ chunk: DataLogChunk) {
-        storage[chunk.priority, default: []].append(chunk)
+private actor ChunkQueue {
+    private var storage: [UploadPriority: [QueuedChunk]] = [:]
+
+    func enqueue(_ chunk: DataLogChunk, persistedId: String? = nil) {
+        let item = QueuedChunk(chunk: chunk, persistedId: persistedId)
+        storage[chunk.priority, default: []].append(item)
     }
 
-    func dequeue() -> DataLogChunk? {
+    func dequeue() -> QueuedChunk? {
         for priority in [UploadPriority.critical, .high, .normal, .low] {
             if var queue = storage[priority], !queue.isEmpty {
-                let chunk = queue.removeFirst()
+                let item = queue.removeFirst()
                 storage[priority] = queue
-                return chunk
+                return item
             }
         }
         return nil

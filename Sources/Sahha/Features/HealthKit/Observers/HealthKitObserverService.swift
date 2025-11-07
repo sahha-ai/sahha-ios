@@ -4,17 +4,20 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     private let healthStore: HKHealthStore
     private let permissions: HealthKitPermissionsServiceProtocol
     private let observerStore: HealthKitObserverStoreProtocol
+    private let circuitBreaker: CircuitBreaker?
     private let logger: ErrorLoggerProtocol
     
     init(
         healthStore: HKHealthStore = .init(),
         permissions: HealthKitPermissionsServiceProtocol,
         observerStore: HealthKitObserverStoreProtocol,
+        circuitBreaker: CircuitBreaker? = nil,
         logger: ErrorLoggerProtocol
     ) {
         self.healthStore = healthStore
         self.permissions = permissions
         self.observerStore = observerStore
+        self.circuitBreaker = circuitBreaker
         self.logger = logger
     }
     
@@ -26,11 +29,27 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     
     private func startObserver(for sensor: SahhaSensor, handler: @escaping HealthKitObserverHandler) async throws {
         if let sampleType = sensor.hkSampleType, try await permissions.hasPermissions(for: sensor) {
-            let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { [weak self] _, completion, error in
+            let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { [weak self, weak circuitBreaker] _, completion, error in
                 if let error {
                     self?.logger.postError(error)
                 } else {
-                    Task { await handler(sensor, sampleType) }
+                    // Check circuit breaker state before triggering query
+                    Task {
+                        guard let self else { return }
+                        
+                        // If circuit breaker exists, check if system is healthy
+                        if let circuitBreaker = circuitBreaker {
+                            let isHealthy = await circuitBreaker.isHealthy()
+                            if !isHealthy {
+                                let (state, _) = await circuitBreaker.getState()
+                                print("[HealthKitObserver] Skipping query for \(sensor.rawValue) - circuit breaker is \(state)")
+                                return
+                            }
+                        }
+                        
+                        // Circuit is healthy or doesn't exist - proceed with query
+                        await handler(sensor, sampleType)
+                    }
                 }
                 completion()
             }
@@ -50,7 +69,7 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
             healthStore.stop(query)
         }
     }
-
+    
     func enableBackgroundDelivery(for sensors: Set<SahhaSensor>) async throws {
         for sensor in sensors {
             if let sampleType = sensor.hkSampleType {

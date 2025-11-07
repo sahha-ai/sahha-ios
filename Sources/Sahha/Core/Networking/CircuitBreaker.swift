@@ -8,12 +8,13 @@ enum CircuitState {
 }
 
 /// Circuit breaker to prevent overwhelming a struggling backend
-actor CircuitBreaker {
+actor CircuitBreaker: Disposable {
     private var state: CircuitState = .closed
     private var failureCount: Int = 0
     private var successCount: Int = 0
     private var lastFailureTime: Date?
     private weak var networkMonitor: NetworkMonitor?
+    private var networkCallbackToken: NetworkMonitor.CallbackToken?
     
     // Configuration
     private let failureThreshold: Int
@@ -21,7 +22,7 @@ actor CircuitBreaker {
     private let halfOpenSuccessThreshold: Int
     
     init(
-        failureThreshold: Int = 5,
+        failureThreshold: Int = 5,  
         recoveryTimeout: TimeInterval = 60,
         halfOpenSuccessThreshold: Int = 2
     ) {
@@ -31,8 +32,42 @@ actor CircuitBreaker {
     }
     
     /// Inject network monitor for connectivity-aware circuit breaking
-    func setNetworkMonitor(_ monitor: NetworkMonitor) {
+    /// Also registers callback to open circuit when device goes offline
+    func setNetworkMonitor(_ monitor: NetworkMonitor) async {
         self.networkMonitor = monitor
+        
+        // Register callback to open circuit when network disconnects
+        // Store token for cleanup
+        let token = await monitor.onStateChange { [weak self] isConnected in
+            guard let self else { return }
+            
+            if !isConnected {
+                // Device went offline - open circuit immediately
+                await self.handleNetworkDisconnected()
+            } else {
+                // Device came back online - allow recovery testing
+                await self.handleNetworkReconnected()
+            }
+        }
+        self.networkCallbackToken = token
+    }
+    
+    /// Handle network disconnection - open circuit to prevent wasted attempts
+    private func handleNetworkDisconnected() async {
+        guard state != .open else { return }
+        
+        print("[Circuit Breaker] Network disconnected - opening circuit")
+        state = .open
+        lastFailureTime = Date()
+    }
+    
+    /// Handle network reconnection - allow recovery testing
+    private func handleNetworkReconnected() async {
+        guard state == .open else { return }
+        
+        print("[Circuit Breaker] Network reconnected - transitioning to half-open for testing")
+        state = .halfOpen
+        successCount = 0
     }
     
     /// Check if request should be allowed
@@ -112,9 +147,19 @@ actor CircuitBreaker {
         }
     }
     
-    /// Get current state for debugging
+    /// Get current state for debugging and decision making
     func getState() async -> (state: CircuitState, failures: Int) {
         return (state, failureCount)
+    }
+    
+    /// Check if the circuit is healthy (closed state)
+    func isHealthy() async -> Bool {
+        return state == .closed
+    }
+    
+    /// Check if the circuit is open (failing fast)
+    func isOpen() async -> Bool {
+        return state == .open
     }
     
     /// Reset circuit breaker (for testing or manual recovery)
@@ -124,6 +169,20 @@ actor CircuitBreaker {
         successCount = 0
         lastFailureTime = nil
         print("[Circuit Breaker] Manual reset to closed state")
+    }
+    
+    /// Clean up network monitor callback registration
+    func cleanup() async {
+        if let token = networkCallbackToken, let monitor = networkMonitor {
+            await monitor.removeCallback(token: token)
+            networkCallbackToken = nil
+        }
+    }
+    
+    /// Dispose of circuit breaker resources
+    func dispose() async {
+        await cleanup()
+        print("[Circuit Breaker] Disposed and cleaned up network monitor callback")
     }
 }
 

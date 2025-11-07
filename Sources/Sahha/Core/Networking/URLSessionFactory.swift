@@ -33,7 +33,14 @@ struct URLSessionFactory {
     
     /// Create a background URLSession for background uploads
     /// This session can continue uploads even when the app is suspended
-    static func createBackgroundSession(identifier: String) -> URLSession {
+    /// - Parameters:
+    ///   - identifier: Unique identifier for the background session
+    ///   - delegate: Delegate to handle task completion events
+    /// - Returns: Configured background URLSession
+    static func createBackgroundSession(
+        identifier: String,
+        delegate: URLSessionDelegate
+    ) -> URLSession {
         let config = URLSessionConfiguration.background(withIdentifier: identifier)
         
         // Same optimizations as default
@@ -50,7 +57,15 @@ struct URLSessionFactory {
         
         print("[URLSession] Configured background session: \(identifier)")
         
-        return URLSession(configuration: config)
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        queue.qualityOfService = .userInitiated
+        
+        return URLSession(
+            configuration: config,
+            delegate: delegate,
+            delegateQueue: queue
+        )
     }
 }
 

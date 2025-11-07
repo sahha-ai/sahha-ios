@@ -2,7 +2,9 @@ import Foundation
 import Network
 
 /// Monitors network connectivity state
-actor NetworkMonitor {
+actor NetworkMonitor: Disposable {
+    typealias CallbackToken = UUID
+    
     private let monitor: NWPathMonitor
     private let queue = DispatchQueue(label: "ai.sahha.networkmonitor")
     private var isMonitoring = false
@@ -10,8 +12,8 @@ actor NetworkMonitor {
     private(set) var isConnected: Bool = true
     private(set) var connectionType: NWInterface.InterfaceType?
     
-    // Callbacks for network state changes
-    private var stateChangeCallbacks: [(Bool) -> Void] = []
+    // Callbacks for network state changes (keyed by token for removal)
+    private var stateChangeCallbacks: [CallbackToken: @Sendable (Bool) async -> Void] = [:]
     
     init() {
         self.monitor = NWPathMonitor()
@@ -72,14 +74,27 @@ actor NetworkMonitor {
     }
     
     /// Register callback for network state changes
-    func onStateChange(_ callback: @escaping (Bool) -> Void) {
-        stateChangeCallbacks.append(callback)
+    /// - Parameter callback: Async closure called when network state changes
+    /// - Returns: Token that can be used to remove the callback later
+    func onStateChange(_ callback: @escaping @Sendable (Bool) async -> Void) async -> CallbackToken {
+        let token = UUID()
+        stateChangeCallbacks[token] = callback
+        return token
+    }
+    
+    /// Remove a previously registered callback
+    /// - Parameter token: The token returned from onStateChange
+    func removeCallback(token: CallbackToken) async {
+        stateChangeCallbacks.removeValue(forKey: token)
     }
     
     /// Notify all registered callbacks
-    private func notifyStateChange(_ connected: Bool) {
-        for callback in stateChangeCallbacks {
-            callback(connected)
+    private nonisolated func notifyStateChange(_ connected: Bool) {
+        Task {
+            let callbacks = await stateChangeCallbacks.values
+            for callback in callbacks {
+                await callback(connected)
+            }
         }
     }
     
@@ -107,6 +122,13 @@ actor NetworkMonitor {
         // Could add logic here to prefer WiFi for large uploads
         // For now, allow uploads on any connection
         return true
+    }
+    
+    /// Dispose of network monitor resources
+    func dispose() async {
+        await stopMonitoring()
+        stateChangeCallbacks.removeAll()
+        print("[Network Monitor] Disposed and cleaned up all callbacks")
     }
 }
 

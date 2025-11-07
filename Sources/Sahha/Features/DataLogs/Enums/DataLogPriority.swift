@@ -1,4 +1,4 @@
-enum UploadPriority: Int, Comparable {
+enum UploadPriority: Int, Codable, Comparable {
     case low = 0      
     case normal = 1   
     case high = 2     

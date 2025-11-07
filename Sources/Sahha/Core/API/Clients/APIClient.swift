@@ -174,6 +174,7 @@ final class APIClient: APIClientProtocol {
     private func compressGzip(data: Data) throws -> Data {
         guard !data.isEmpty else { return data }
         
+        // First, compress using deflate (ZLIB without header/footer)
         let destinationBufferSize = data.count
         let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: destinationBufferSize)
         defer { destinationBuffer.deallocate() }
@@ -193,9 +194,59 @@ final class APIClient: APIClientProtocol {
         }
         
         guard compressedSize > 0 else {
-            throw SahhaError(message: "Compression failed")
+            throw SahhaError(message: "Deflate compression failed")
         }
         
-        return Data(bytes: destinationBuffer, count: compressedSize)
+        let deflateData = Data(bytes: destinationBuffer, count: compressedSize)
+        
+        // Now add gzip header and footer
+        var gzipData = Data()
+        
+        // GZIP Header (10 bytes)
+        gzipData.append(0x1F) // ID1
+        gzipData.append(0x8B) // ID2
+        gzipData.append(0x08) // CM (deflate)
+        gzipData.append(0x00) // FLG (no flags)
+        gzipData.append(contentsOf: [0x00, 0x00, 0x00, 0x00]) // MTIME (0)
+        gzipData.append(0x00) // XFL
+        gzipData.append(0xFF) // OS (unknown)
+        
+        // Append deflate data
+        gzipData.append(deflateData)
+        
+        // GZIP Footer (8 bytes): CRC32 and ISIZE
+        let crc32 = crc32checksum(data: data)
+        let isize = UInt32(data.count % (1 << 32))
+        
+        // Append CRC32 (little-endian)
+        gzipData.append(UInt8(crc32 & 0xFF))
+        gzipData.append(UInt8((crc32 >> 8) & 0xFF))
+        gzipData.append(UInt8((crc32 >> 16) & 0xFF))
+        gzipData.append(UInt8((crc32 >> 24) & 0xFF))
+        
+        // Append ISIZE (little-endian)
+        gzipData.append(UInt8(isize & 0xFF))
+        gzipData.append(UInt8((isize >> 8) & 0xFF))
+        gzipData.append(UInt8((isize >> 16) & 0xFF))
+        gzipData.append(UInt8((isize >> 24) & 0xFF))
+        
+        return gzipData
+    }
+
+    // Helper function for CRC32
+    private func crc32checksum(data: Data) -> UInt32 {
+        var crc: UInt32 = 0xFFFFFFFF
+        
+        let polynomial: UInt32 = 0xEDB88320
+        
+        for byte in data {
+            crc ^= UInt32(byte)
+            for _ in 0..<8 {
+                let mask: UInt32 = (crc & 1) == 0 ? 0 : UInt32.max
+                crc = (crc >> 1) ^ (polynomial & mask)
+            }
+        }
+        
+        return crc ^ 0xFFFFFFFF
     }
 }

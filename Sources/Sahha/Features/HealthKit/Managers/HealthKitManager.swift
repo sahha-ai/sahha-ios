@@ -59,12 +59,14 @@ final class HealthKitManager: HealthKitManagerProtocol {
         }
     }
     
-    func querySensors() async {
+    func querySensors() async -> PostSensorDataResult {
         do {
             let sensors = try await sensorStore.getSensors()
-            await dataLogCoordinator.querySensors(sensors)
+            let results = await dataLogCoordinator.querySensors(sensors)
+            return PostSensorDataResult(sensorResults: results)
         } catch {
             logger.postError(error)
+            return PostSensorDataResult(sensorResults: [], errorDescription: error.localizedDescription)
         }
     }
 

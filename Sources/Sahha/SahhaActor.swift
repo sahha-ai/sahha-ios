@@ -163,6 +163,10 @@ actor SahhaActor {
     func demographicManager() async throws -> DemographicManagerProtocol {
         try await resolve(DemographicManagerProtocol.self)
     }
+    
+    func backgroundDelegate() async throws -> BackgroundSessionDelegate {
+        try await resolve(BackgroundSessionDelegate.self)
+    }
 
     // MARK: - Utilities
 

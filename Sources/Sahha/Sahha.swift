@@ -126,13 +126,54 @@ public class Sahha {
         )
     }
 
-    public static func postSensorData() {
+    public static func postSensorData(
+        debug: Bool = false,
+        callback: (@Sendable (PostSensorDataResult) -> Void)? = nil
+    ) {
         Task {
             do {
                 let healthKitManager = try await actor.healthKitManager()
-                await healthKitManager.querySensors()
+                let result = await healthKitManager.querySensors()
+                if debug {
+                    logPostSensorData(result)
+                }
+                if let callback {
+                    await MainActor.run {
+                        callback(result)
+                    }
+                }
             } catch {
-                // Currently just fails silently
+                let result = PostSensorDataResult.failure(error)
+                if debug {
+                    logPostSensorData(result)
+                }
+                if let callback {
+                    await MainActor.run {
+                        callback(result)
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Background Upload Support
+    
+    /// Handle background URLSession completion events
+    /// Call this from your AppDelegate's `application(_:handleEventsForBackgroundURLSession:completionHandler:)`
+    /// - Parameters:
+    ///   - identifier: The session identifier from the system callback
+    ///   - completionHandler: The completion handler to call when all background tasks are done
+    public static func handleBackgroundSessionEvents(
+        identifier: String,
+        completionHandler: @escaping @Sendable () -> Void
+    ) {
+        Task {
+            do {
+                let delegate = try await actor.backgroundDelegate()
+                delegate.setCompletionHandler(completionHandler, for: identifier)
+            } catch {
+                print("[\(SDK.name)] Failed to handle background session events: \(error)")
+                completionHandler()
             }
         }
     }
@@ -287,6 +328,33 @@ public class Sahha {
     private static func authGuard() throws {
         if !isAuthenticated {
             throw SahhaError(message: "Unauthorized. Please call `Sahha.authenticate(...)` first.")
+        }
+    }
+
+    private static func logPostSensorData(_ result: PostSensorDataResult) {
+        print("[PostSensorData] Timestamp: \(result.timestamp)")
+        if let error = result.errorDescription {
+            print("  ❌ Error: \(error)")
+        }
+        print("  Sensors Queried: \(result.totalSensors)")
+        print("  Samples Fetched: \(result.totalSamples)")
+        print("  Logs Produced: \(result.totalLogs)")
+        print("  Success: \(result.successfulSensors) | Failed: \(result.failedSensors) | Skipped: \(result.skippedSensors)")
+        for sensorResult in result.sensorResults {
+            let statusIcon: String
+            switch sensorResult.status {
+            case .success: statusIcon = "✅"
+            case .noSamples: statusIcon = "ℹ️"
+            case .skippedCircuitOpen: statusIcon = "⏸"
+            case .failed: statusIcon = "❌"
+            }
+            print("    \(statusIcon) \(sensorResult.sensor.rawValue): status=\(sensorResult.status.rawValue), samples=\(sensorResult.samplesFetched), logs=\(sensorResult.logsProduced), anchorUpdated=\(sensorResult.anchorUpdated)")
+            if let message = sensorResult.message {
+                print("       note: \(message)")
+            }
+            if let errorDescription = sensorResult.errorDescription {
+                print("       error: \(errorDescription)")
+            }
         }
     }
 }
