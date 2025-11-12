@@ -334,27 +334,11 @@ public class Sahha {
     private static func logPostSensorData(_ result: PostSensorDataResult) {
         print("[PostSensorData] Timestamp: \(result.timestamp)")
         if let error = result.errorDescription {
-            print("  ❌ Error: \(error)")
+            print("  Error: \(error)")
         }
         print("  Sensors Queried: \(result.totalSensors)")
         print("  Samples Fetched: \(result.totalSamples)")
         print("  Logs Produced: \(result.totalLogs)")
         print("  Success: \(result.successfulSensors) | Failed: \(result.failedSensors) | Skipped: \(result.skippedSensors)")
-        for sensorResult in result.sensorResults {
-            let statusIcon: String
-            switch sensorResult.status {
-            case .success: statusIcon = "✅"
-            case .noSamples: statusIcon = "ℹ️"
-            case .skippedCircuitOpen: statusIcon = "⏸"
-            case .failed: statusIcon = "❌"
-            }
-            print("    \(statusIcon) \(sensorResult.sensor.rawValue): status=\(sensorResult.status.rawValue), samples=\(sensorResult.samplesFetched), logs=\(sensorResult.logsProduced), anchorUpdated=\(sensorResult.anchorUpdated)")
-            if let message = sensorResult.message {
-                print("       note: \(message)")
-            }
-            if let errorDescription = sensorResult.errorDescription {
-                print("       error: \(errorDescription)")
-            }
-        }
     }
 }
