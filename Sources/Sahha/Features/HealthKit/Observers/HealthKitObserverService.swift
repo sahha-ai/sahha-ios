@@ -29,16 +29,21 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     
     private func startObserver(for sensor: SahhaSensor, handler: @escaping HealthKitObserverHandler) async throws {
         if let sampleType = sensor.hkSampleType, try await permissions.hasPermissions(for: sensor) {
-            let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { [weak self, weak circuitBreaker] _, completion, error in
+            let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { [weak self] _, completion, error in
                 if let error {
                     self?.logger.postError(error)
+                    completion()
                 } else {
                     // Check circuit breaker state before triggering query
+                    let wrappedCompletion = SendableCompletion(run: completion)
+                    
                     Task {
+                        defer { wrappedCompletion.run() }
+                        
                         guard let self else { return }
                         
                         // If circuit breaker exists, check if system is healthy
-                        if let circuitBreaker = circuitBreaker {
+                        if let circuitBreaker = self.circuitBreaker {
                             let isHealthy = await circuitBreaker.isHealthy()
                             if !isHealthy {
                                 let (state, _) = await circuitBreaker.getState()
@@ -51,11 +56,14 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
                         await handler(sensor, sampleType)
                     }
                 }
-                completion()
             }
             await observerStore.addObserver(query, for: sensor)
             healthStore.execute(query)
         }
+    }
+    
+    private struct SendableCompletion: @unchecked Sendable {
+        let run: () -> Void
     }
     
     func stopObservers(for sensors: Set<SahhaSensor>) async throws {

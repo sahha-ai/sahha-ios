@@ -33,6 +33,7 @@ actor SahhaActor {
             await AuthDI.registerDependencies(container: container)
             await DataLogDI.registerDependencies(container: container)
             await HealthKitDI.registerDependencies(container: container)
+            await BackgroundDI.registerDependencies(container: container)
             await ScoreDI.registerDependencies(container: container)
             await BiomarkerDI.registerDependencies(container: container)
             await DemographicDI.registerDependencies(container: container)
@@ -74,7 +75,17 @@ actor SahhaActor {
         async let b = forceSyncDeviceInfo(container)
         async let c = setupLifecycleListeners(container)
         async let d = syncDemographic(container)
-        _ = await (a, b, c, d)
+        async let e = startBackgroundCoordinator(container)
+        _ = await (a, b, c, d, e)
+    }
+
+    private func startBackgroundCoordinator(_ container: DIContainer) async {
+        do {
+            let coordinator = try await container.resolve(BackgroundCoordinatorProtocol.self)
+            await coordinator.start()
+        } catch {
+            await log(error: error, message: "startBackgroundCoordinator failed")
+        }
     }
 
     private func setupLifecycleListeners(_ container: DIContainer) async {

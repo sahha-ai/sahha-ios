@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import BackgroundTasks
 
 /// Synchronous auth for legacy API - updated from TokenStore
 final class AuthSnapshot: @unchecked Sendable {
@@ -176,6 +177,59 @@ public class Sahha {
                 completionHandler()
             }
         }
+    }
+    
+    // MARK: - Background App Refresh
+    
+    /// Registers a background app refresh task to ensure reliable data collection.
+    /// Call this in `application(_:didFinishLaunchingWithOptions:)`.
+    /// - Parameter identifier: The identifier for the background task (must match Info.plist)
+    public static func registerBackgroundRefreshTask(identifier: String) {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
+            guard let task = task as? BGAppRefreshTask else { return }
+            handleBackgroundRefreshTask(task)
+        }
+    }
+    
+    /// Schedules the next background app refresh.
+    /// Call this when the app enters background or after a successful refresh.
+    /// - Parameters:
+    ///   - identifier: The identifier for the background task
+    ///   - timeInterval: The minimum time interval (in seconds) to wait before the task runs (default: 15 minutes)
+    public static func scheduleBackgroundRefreshTask(identifier: String, timeInterval: TimeInterval = 900) {
+        let request = BGAppRefreshTaskRequest(identifier: identifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: timeInterval)
+        
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            print("[\(SDK.name)] Failed to schedule background refresh: \(error)")
+        }
+    }
+    
+    private static func handleBackgroundRefreshTask(_ task: BGAppRefreshTask) {
+        // Schedule the next refresh immediately
+        scheduleBackgroundRefreshTask(identifier: task.identifier)
+        
+        task.expirationHandler = {
+            // The system is killing the task.
+            // postSensorData doesn't currently support explicit cancellation,
+            // but the process termination will stop it.
+        }
+        
+        let sendableTask = SendableBGTask(task: task)
+        
+        // Perform the data sync
+        postSensorData { result in
+            // Mark task as completed with actual success status
+            let success = result.failedSensors == 0 && result.errorDescription == nil
+            sendableTask.task.setTaskCompleted(success: success)
+        }
+    }
+
+    // Wrapper to allow passing BGTask to Sendable closure
+    private struct SendableBGTask: @unchecked Sendable {
+        let task: BGTask
     }
 
     // MARK: - Samples

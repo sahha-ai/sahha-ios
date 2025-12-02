@@ -8,6 +8,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
     private let networkMonitor: NetworkMonitor
     private let persistentQueue: DeadLetterQueue
     private let streamingProcessor: StreamingBatchProcessor
+    private let sentLogStore: SentLogStore
     private let uploadSemaphore: AsyncSemaphore
     private let maxRetries: Int
     private let chunkQueue = ChunkQueue()
@@ -22,6 +23,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         networkMonitor: NetworkMonitor,
         persistentQueue: DeadLetterQueue,
         streamingProcessor: StreamingBatchProcessor,
+        sentLogStore: SentLogStore,
         config: UploadConfig = .default
     ) {
         self.dataLogService = dataLogService
@@ -31,6 +33,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         self.networkMonitor = networkMonitor
         self.persistentQueue = persistentQueue
         self.streamingProcessor = streamingProcessor
+        self.sentLogStore = sentLogStore
         self.uploadSemaphore = AsyncSemaphore(value: max(config.maxConcurrentUploads, 1))
         self.maxRetries = max(config.maxRetries, 1)
         
@@ -43,7 +46,10 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
     }
 
     func enqueue(_ chunk: DataLogChunk) async {
-        await chunkQueue.enqueue(chunk)
+        // Persist chunk immediately to ensure crash resilience
+        // If app crashes before upload completes, chunk will be recovered on next launch
+        let persistedId = await persistentQueue.persistBatch(chunk, attemptCount: 0, lastError: nil)
+        await chunkQueue.enqueue(chunk, persistedId: persistedId)
         await startUploadLoopIfNeeded()
     }
 
@@ -103,13 +109,38 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
     }
 
     private func uploadChunk(_ queuedChunk: QueuedChunk) async {
-        let chunk = queuedChunk.chunk
+        let originalChunk = queuedChunk.chunk
         var persistedIds = Set<String>()
         if let id = queuedChunk.persistedId {
             persistedIds.insert(id)
         }
         var attempt = 0
         var wasOffline = false
+        
+        // Filter out already-sent requests to prevent duplicates
+        let unsentRequests = await sentLogStore.filterUnsentRequests(originalChunk.requests)
+        
+        // If all requests were already sent, we're done
+        guard !unsentRequests.isEmpty else {
+            print("[DataLogUploader] All \(originalChunk.requests.count) logs in chunk already sent, skipping")
+            // Remove any persisted copies since all were already sent
+            for id in persistedIds {
+                await persistentQueue.removeBatch(withId: id)
+            }
+            return
+        }
+        
+        // Create a new chunk with only unsent requests
+        let chunk = DataLogChunk(
+            requests: unsentRequests,
+            sizeInBytes: originalChunk.sizeInBytes,  // Approximate, could recalculate
+            priority: originalChunk.priority
+        )
+        
+        let filteredCount = originalChunk.requests.count - unsentRequests.count
+        if filteredCount > 0 {
+            print("[DataLogUploader] Filtered out \(filteredCount) already-sent logs, uploading \(unsentRequests.count)")
+        }
 
         while attempt < maxRetries && !Task.isCancelled {
             do {
@@ -148,6 +179,11 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
 
                 try await dataLogService.postDataLogs(chunk.requests)
                 await circuitBreaker.recordSuccess()
+                
+                // Mark all successfully uploaded log IDs as sent
+                let sentIds = chunk.requests.map { $0.id }
+                await sentLogStore.markSent(sentIds)
+                
                 print("[DataLogUploader] Successfully uploaded chunk with \(chunk.requests.count) logs (priority: \(chunk.priority))")
                 // Remove any persisted copies now that upload succeeded
                 for id in persistedIds {

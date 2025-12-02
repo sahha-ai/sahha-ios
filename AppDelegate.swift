@@ -19,5 +19,16 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             completionHandler: completionHandler
         )
     }
+
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Register the background task
+        Sahha.registerBackgroundRefreshTask(identifier: "com.sahha.background_refresh")
+        return true
+    }
+
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        // Schedule the background task when entering background
+        Sahha.scheduleBackgroundRefreshTask(identifier: "com.sahha.background_refresh")
+    }
 }
 

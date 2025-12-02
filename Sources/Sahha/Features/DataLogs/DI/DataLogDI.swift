@@ -24,6 +24,11 @@ enum DataLogDI {
                 maxStoredBatches: 500
             )
         }
+        await container.register(SentLogStore.self) { container in
+            SentLogStore(
+                storage: try await container.resolve(UserDefaultsStorageProtocol.self)
+            )
+        }
 
         await container.register(DataLogUploaderProtocol.self) { container in
             DataLogUploader(
@@ -37,7 +42,8 @@ enum DataLogDI {
                     requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),
                     priorityAssigner: try await container.resolve(UploadPriorityAssignerProtocol.self),
                     config: .default
-                )
+                ),
+                sentLogStore: try await container.resolve(SentLogStore.self)
             )
         }
         await container.register(DataLogPipelineProtocol.self) { container in

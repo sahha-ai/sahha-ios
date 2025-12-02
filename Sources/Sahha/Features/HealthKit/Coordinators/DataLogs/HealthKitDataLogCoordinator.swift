@@ -1,5 +1,16 @@
 import HealthKit
 
+enum HealthKitDataLogCoordinatorError: LocalizedError {
+    case queryTimeout(sensor: SahhaSensor, seconds: TimeInterval)
+
+    var errorDescription: String? {
+        switch self {
+        case let .queryTimeout(sensor, seconds):
+            return "HealthKit anchor query timed out for sensor \(sensor.rawValue) after \(Int(seconds))s"
+        }
+    }
+}
+
 actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposable {
     private let observerService: HealthKitObserverServiceProtocol
     private let anchorQueryService: HealthKitAnchorQueryServiceProtocol
@@ -9,8 +20,8 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
     private let circuitBreaker: CircuitBreaker?
     private let logger: ErrorLoggerProtocol
     private let queryLimit: Int
+    private let queryTimeout: TimeInterval
 
-    private var observerTasks: [Task<Void, Never>] = []
     private let queryTasks = SingleTaskActorMap<String, SensorQueryResult>()
 
     init(
@@ -21,7 +32,8 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
         dataLogPipeline: DataLogPipelineProtocol,
         circuitBreaker: CircuitBreaker? = nil,
         logger: ErrorLoggerProtocol,
-        queryLimit: Int = 500
+        queryLimit: Int = 500,
+        queryTimeout: TimeInterval = 30
     ) {
         self.observerService = observerService
         self.anchorQueryService = anchorQueryService
@@ -31,11 +43,21 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
         self.circuitBreaker = circuitBreaker
         self.logger = logger
         self.queryLimit = queryLimit
+        self.queryTimeout = queryTimeout
     }
 
     func startDataLogCollection(for sensors: Set<SahhaSensor>) async throws {
         try await observerService.startObservers(for: sensors) { [weak self] sensor, sampleType in
-            await self?.launchTrackedQuery(for: sensor, sampleType: sampleType)
+            guard let self else {
+                print("[HealthKitDataLogCoordinator] Observer fired but coordinator was deallocated for sensor: \(sensor.rawValue)")
+                return
+            }
+            let result = await self.runSensorQuery(for: sensor, sampleType: sampleType)
+            print("[HealthKitDataLogCoordinator] Background observer query completed for \(sensor.rawValue): \(result.status.rawValue), samples: \(result.samplesFetched), logs: \(result.logsProduced)")
+            
+            if result.status == .failed, let error = result.errorDescription {
+                print("[HealthKitDataLogCoordinator] Background query error for \(sensor.rawValue): \(error)")
+            }
         }
         try await observerService.enableBackgroundDelivery(for: sensors)
     }
@@ -49,34 +71,33 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
     }
 
     func querySensors(_ sensors: Set<SahhaSensor>) async -> [SensorQueryResult] {
-        var results: [SensorQueryResult] = []
-        for sensor in sensors {
-            guard let sampleType = sensor.hkSampleType else {
-                let result = SensorQueryResult(
-                    sensor: sensor,
-                    status: .failed,
-                    samplesFetched: 0,
-                    logsProduced: 0,
-                    anchorUpdated: false,
-                    message: "Sensor has no HKSampleType",
-                    errorDescription: nil
-                )
-                results.append(result)
-                continue
+        await withTaskGroup(of: SensorQueryResult.self) { group in
+            for sensor in sensors {
+                if let sampleType = sensor.hkSampleType {
+                    group.addTask { [self] in
+                        await self.runSensorQuery(for: sensor, sampleType: sampleType)
+                    }
+                } else {
+                    group.addTask {
+                        SensorQueryResult(
+                            sensor: sensor,
+                            status: .failed,
+                            samplesFetched: 0,
+                            logsProduced: 0,
+                            anchorUpdated: false,
+                            message: "Sensor has no HKSampleType",
+                            errorDescription: nil
+                        )
+                    }
+                }
             }
-            let result = await runSensorQuery(for: sensor, sampleType: sampleType)
-            results.append(result)
-        }
-        return results
-    }
 
-    private func launchTrackedQuery(for sensor: SahhaSensor, sampleType: HKSampleType) async {
-        let task = Task { [weak self] in
-            if let self {
-                _ = await self.runSensorQuery(for: sensor, sampleType: sampleType)
+            var results: [SensorQueryResult] = []
+            for await result in group {
+                results.append(result)
             }
+            return results
         }
-        observerTasks.append(task)
     }
 
     private func runSensorQuery(for sensor: SahhaSensor, sampleType: HKSampleType) async -> SensorQueryResult {
@@ -125,10 +146,11 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                 var anchor = try await anchorStore.loadAnchor(for: sensor)
 
                 while !Task.isCancelled {
-                    let (samples, newAnchor) = try await anchorQueryService.runAnchorQuery(
+                    let (samples, newAnchor) = try await runAnchorQueryWithTimeout(
                         for: sampleType,
                         anchor: anchor,
-                        limit: queryLimit
+                        limit: queryLimit,
+                        sensor: sensor
                     )
                     guard !samples.isEmpty else { break }
 
@@ -141,9 +163,18 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                     await self.dataLogPipeline.ingest(dataLogs)
 
                     if let newAnchor {
-                        anchor = newAnchor
-                        try await anchorStore.saveAnchor(newAnchor, for: sensor)
-                        anchorUpdated = true
+                        do {
+                            try await anchorStore.saveAnchor(newAnchor, for: sensor)
+                            anchor = newAnchor
+                            anchorUpdated = true
+                        } catch {
+                            let anchorError = NSError(
+                                domain: "HealthKitDataLogCoordinator",
+                                code: -1,
+                                userInfo: [NSLocalizedDescriptionKey: "Failed to save anchor for \(sensor.rawValue): \(error.localizedDescription)"]
+                            )
+                            self.logger.postError(anchorError)
+                        }
                     }
                 }
             } catch {
@@ -174,10 +205,36 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
     }
 
     func dispose() async {
-        for task in observerTasks {
-            task.cancel()
-        }
-        observerTasks.removeAll()
         await queryTasks.cancelAll()
+    }
+
+    private func runAnchorQueryWithTimeout(
+        for sampleType: HKSampleType,
+        anchor: HKQueryAnchor?,
+        limit: Int,
+        sensor: SahhaSensor
+    ) async throws -> ([HKSample], HKQueryAnchor?) {
+        try await withThrowingTaskGroup(of: ([HKSample], HKQueryAnchor?).self) { group in
+            group.addTask { [self] in
+                try await self.anchorQueryService.runAnchorQuery(
+                    for: sampleType,
+                    anchor: anchor,
+                    limit: limit
+                )
+            }
+
+            let timeoutNanoseconds = UInt64(max(queryTimeout, 0.1) * 1_000_000_000)
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                throw HealthKitDataLogCoordinatorError.queryTimeout(sensor: sensor, seconds: self.queryTimeout)
+            }
+
+            guard let result = try await group.next() else {
+                throw HealthKitDataLogCoordinatorError.queryTimeout(sensor: sensor, seconds: self.queryTimeout)
+            }
+
+            group.cancelAll()
+            return result
+        }
     }
 }
