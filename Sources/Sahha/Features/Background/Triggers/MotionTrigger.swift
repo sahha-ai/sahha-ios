@@ -70,6 +70,7 @@ actor MotionTrigger {
         }
     }
     
+    
     private func queryPedometerData(from start: Date, to end: Date) async throws -> CMPedometerData {
         return try await withCheckedThrowingContinuation { continuation in
             pedometer.queryPedometerData(from: start, to: end) { data, error in

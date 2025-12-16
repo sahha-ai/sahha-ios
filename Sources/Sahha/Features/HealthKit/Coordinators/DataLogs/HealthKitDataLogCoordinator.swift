@@ -144,10 +144,25 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
 
             do {
                 var anchor = try await anchorStore.loadAnchor(for: sensor)
+                
+                // If this is the FIRST run (no anchor), limit data to the last 30 days
+                // to prevent flooding the server with years of historical data.
+                var startDate: Date?
+                var endDate: Date?
+                
+                if anchor == nil {
+                    let now = Date()
+                    let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? now.addingTimeInterval(-30 * 24 * 3600)
+                    startDate = thirtyDaysAgo
+                    endDate = now
+                    print("[HealthKitDataLogCoordinator] Initial sync for \(sensor.rawValue). Limiting to 30 days history.")
+                }
 
                 while !Task.isCancelled {
                     let (samples, newAnchor) = try await runAnchorQueryWithTimeout(
                         for: sampleType,
+                        startDate: startDate,
+                        endDate: endDate,
                         anchor: anchor,
                         limit: queryLimit,
                         sensor: sensor
@@ -210,14 +225,22 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
 
     private func runAnchorQueryWithTimeout(
         for sampleType: HKSampleType,
+        startDate: Date? = nil,
+        endDate: Date? = nil,
         anchor: HKQueryAnchor?,
         limit: Int,
         sensor: SahhaSensor
     ) async throws -> ([HKSample], HKQueryAnchor?) {
         try await withThrowingTaskGroup(of: ([HKSample], HKQueryAnchor?).self) { group in
             group.addTask { [self] in
-                try await self.anchorQueryService.runAnchorQuery(
+                var predicate: NSPredicate?
+                if let startDate, let endDate {
+                    predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
+                }
+                
+                return try await self.anchorQueryService.runAnchorQuery(
                     for: sampleType,
+                    predicate: predicate,
                     anchor: anchor,
                     limit: limit
                 )

@@ -9,7 +9,6 @@ protocol BackgroundCoordinatorProtocol: Sendable, Disposable {
 actor BackgroundCoordinator: BackgroundCoordinatorProtocol, BackgroundTriggerDelegate {
     private let healthKitManager: HealthKitManagerProtocol
     private let dataLogPipeline: DataLogPipelineProtocol
-    private var locationTrigger: LocationTrigger?
     private var motionTrigger: MotionTrigger?
     private let logger: ErrorLoggerProtocol
     
@@ -24,14 +23,12 @@ actor BackgroundCoordinator: BackgroundCoordinatorProtocol, BackgroundTriggerDel
     }
     
     func start() async {
-        await startLocationTrigger()
         await startMotionTrigger()
         
         print("[Sahha] Background Coordinator started")
     }
 
     func stop() async {
-        await stopLocationTrigger()
         await stopMotionTrigger()
         print("[Sahha] Background Coordinator stopped")
     }
@@ -54,28 +51,10 @@ actor BackgroundCoordinator: BackgroundCoordinatorProtocol, BackgroundTriggerDel
         
         let result = await healthKitManager.querySensors()
         
-        // Fallback Logic
+        // Fallback Logic - only if HealthKit yields NO logs
         if isProtected, result.totalLogs == 0, let fallbackData, !fallbackData.isEmpty {
              print("[Sahha] Using fallback Motion data (\(fallbackData.count) logs) as HK failed/empty.")
              await dataLogPipeline.ingest(fallbackData)
-        }
-    }
-
-    private func startLocationTrigger() async {
-        if locationTrigger == nil {
-            let trigger = await MainActor.run { LocationTrigger(delegate: self) }
-            locationTrigger = trigger
-        }
-        guard let trigger = locationTrigger else { return }
-        await MainActor.run {
-            trigger.start()
-        }
-    }
-
-    private func stopLocationTrigger() async {
-        guard let trigger = locationTrigger else { return }
-        await MainActor.run {
-            trigger.stop()
         }
     }
 
