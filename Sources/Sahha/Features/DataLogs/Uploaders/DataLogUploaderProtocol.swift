@@ -1,5 +1,7 @@
 import Foundation
 
 protocol DataLogUploaderProtocol: Actor {
-    func uploadPendingBatches()
+    func enqueue(_ chunk: DataLogChunk) async
+    func enqueueLogs(_ logs: [DataLog]) async
+    func dispose() async
 }

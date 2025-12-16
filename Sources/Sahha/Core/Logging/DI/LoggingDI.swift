@@ -9,6 +9,7 @@ enum LoggingDI {
             ErrorLogger(
                 errorLoggingService: try await container.resolve(ErrorLoggingServiceProtocol.self),
                 deviceInfoBuilder: try await container.resolve(DeviceInfoBuilderProtocol.self),
+                circuitBreaker: try? await container.resolve(CircuitBreaker.self)
             )
         }
     }

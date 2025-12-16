@@ -3,10 +3,16 @@ import HealthKit
 final class ErrorLogger: ErrorLoggerProtocol {
     private let errorLoggingService: ErrorLoggingServiceProtocol
     private let deviceInfoBuilder: DeviceInfoBuilderProtocol
+    private let circuitBreaker: CircuitBreaker?
 
-    init(errorLoggingService: ErrorLoggingServiceProtocol, deviceInfoBuilder: DeviceInfoBuilderProtocol) {
+    init(
+        errorLoggingService: ErrorLoggingServiceProtocol,
+        deviceInfoBuilder: DeviceInfoBuilderProtocol,
+        circuitBreaker: CircuitBreaker? = nil
+    ) {
         self.errorLoggingService = errorLoggingService
         self.deviceInfoBuilder = deviceInfoBuilder
+        self.circuitBreaker = circuitBreaker
     }
 
     func postError(_ error: any Error, file: StaticString, function: StaticString, line: UInt) {
@@ -14,6 +20,18 @@ final class ErrorLogger: ErrorLoggerProtocol {
         
         Task.detached(priority: .background) { [weak self] in
             guard let self else { return }
+            
+            // Check circuit breaker health before attempting to post
+            if let circuitBreaker = self.circuitBreaker {
+                let isHealthy = await circuitBreaker.isHealthy()
+                if !isHealthy {
+                    #if DEBUG
+                        print("[\(SDK.name)] - ERROR: Skipping error log - circuit breaker is open")
+                    #endif
+                    return
+                }
+            }
+            
             let deviceInfo = await self.deviceInfoBuilder.build()
             let errorLog = self.makeErrorLogRequest(
                 error: error,

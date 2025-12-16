@@ -5,6 +5,7 @@ enum StorageKeys {
         static let sensors = "sensors"
         static let hkAnchorPrefix = "hkAnchor."
         static let hkAnchorDatePrefix = "hkAnchorDate."
+        static let sentLogIds = "sentLogIds"
     }
     
     enum Keychain {
