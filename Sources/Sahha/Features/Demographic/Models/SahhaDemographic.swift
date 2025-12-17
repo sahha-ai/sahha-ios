@@ -23,7 +23,7 @@ extension SahhaDemographic {
             result = other
         } else {
             result.gender = self.gender ?? other.gender
-            result.birthDate = self.birthDate ?? other.birthDate            
+            result.birthDate = self.birthDate ?? other.birthDate
         }
         self = result
     }

@@ -1,18 +1,19 @@
 import Foundation
 
+/// Immutable data log entry - all fields are constants after creation for thread safety
 open class DataLog: Codable, @unchecked Sendable {
     let id: String
-    var parentId: String?
-    var logType: DataLogType
-    var dataType: String
-    var value: Double
-    var unit: String
-    var source: String
-    var recordingMethod: RecordingMethod
-    var deviceType: String
-    var startDate: Date
-    var endDate: Date
-    var additionalProperties: AdditionalProperties?
+    let parentId: String?
+    let logType: DataLogType
+    let dataType: String
+    let value: Double
+    let unit: String
+    let source: String
+    let recordingMethod: RecordingMethod
+    let deviceType: String
+    let startDate: Date
+    let endDate: Date
+    let additionalProperties: AdditionalProperties?
 
     init(
         id: String? = nil,
@@ -31,7 +32,17 @@ open class DataLog: Codable, @unchecked Sendable {
         if let id {
             self.id = id
         } else {
-            let components = [dataType, source, deviceType, startDate.isoDateTime, endDate.isoDateTime]
+            // Include value in ID generation to ensure uniqueness even if same sample is updated
+            // Also include logType for completeness
+            let components: [Any] = [
+                logType.rawValue,
+                dataType,
+                value,
+                source,
+                deviceType,
+                startDate.isoDateTime,
+                endDate.isoDateTime
+            ]
             self.id = UUIDFactory.v5(from: components).uuidString
         }
         self.parentId = parentId

@@ -45,6 +45,7 @@ enum HealthKitDI {
             HealthKitObserverService(
                 permissions: try await container.resolve(HealthKitPermissionsServiceProtocol.self),
                 observerStore: try await container.resolve(HealthKitObserverStoreProtocol.self),
+                circuitBreaker: try? await container.resolve(CircuitBreaker.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
         }
@@ -92,6 +93,7 @@ enum HealthKitDI {
                 anchorStore: try await container.resolve(HealthKitAnchorStoreProtocol.self),
                 normaliser: try await container.resolve(HKSampleToDataLogNormaliserProtocol.self),
                 dataLogPipeline: try await container.resolve(DataLogPipelineProtocol.self),
+                circuitBreaker: try? await container.resolve(CircuitBreaker.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
         }
