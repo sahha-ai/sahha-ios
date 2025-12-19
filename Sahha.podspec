@@ -7,7 +7,7 @@ Pod::Spec.new do |s|
   s.author           = { 'Sahha' => 'developer@sahha.ai' }
   s.source           = { :git => 'https://github.com/sahha-ai/sahha-ios.git', :tag => s.version.to_s }
   s.ios.deployment_target = '15.0'
-  s.swift_version = '6.0'
+  s.swift_versions = ['5.5', '6.0']
   s.source_files = 'Sources/Sahha/**/*'
 end
 
