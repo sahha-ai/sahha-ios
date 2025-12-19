@@ -2,6 +2,8 @@ import Foundation
 
 /// Delegate to handle background URLSession task completion events
 /// This allows uploads to continue even when the app is suspended
+/// Note: Marked @unchecked Sendable because synchronization is handled via DispatchQueue
+@unchecked Sendable
 final class BackgroundSessionDelegate: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
     private let circuitBreaker: CircuitBreaker?
     private let logger: ErrorLoggerProtocol?
