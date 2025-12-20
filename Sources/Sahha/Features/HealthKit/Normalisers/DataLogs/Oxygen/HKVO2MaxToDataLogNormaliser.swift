@@ -39,11 +39,13 @@ final class HKVO2MaxToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
 
 extension HKVO2MaxTestType {
     fileprivate var stringValue: String {
-        switch self {
-        case .maxExercise: return "max_exercise"
-        case .predictionNonExercise: return "prediction_non_exercise"
-        case .predictionSubMaxExercise: return "prediction_sub_max_exercise"
-        @unknown default: return "unknown"
-        }
+        // Use a dictionary to avoid Swift 6 exhaustiveness warnings for HealthKit enums
+        // that may have unknown future cases
+        let mapping: [HKVO2MaxTestType: String] = [
+            .maxExercise: "max_exercise",
+            .predictionNonExercise: "prediction_non_exercise",
+            .predictionSubMaxExercise: "prediction_sub_max_exercise"
+        ]
+        return mapping[self] ?? "unknown"
     }
 }

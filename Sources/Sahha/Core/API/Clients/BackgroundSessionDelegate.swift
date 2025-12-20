@@ -2,9 +2,7 @@ import Foundation
 
 /// Delegate to handle background URLSession task completion events
 /// This allows uploads to continue even when the app is suspended
-/// Note: Marked @unchecked Sendable because synchronization is handled via DispatchQueue
-@unchecked Sendable
-final class BackgroundSessionDelegate: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
+final class BackgroundSessionDelegate: NSObject, @unchecked Sendable, URLSessionTaskDelegate, URLSessionDataDelegate {
     private let circuitBreaker: CircuitBreaker?
     private let logger: ErrorLoggerProtocol?
     
@@ -52,7 +50,7 @@ final class BackgroundSessionDelegate: NSObject, URLSessionTaskDelegate, URLSess
                 // Task failed
                 print("[Background Upload] Task failed: \(error.localizedDescription)")
                 await self.circuitBreaker?.recordFailure()
-                await self.logger?.postError(error)
+                self.logger?.postError(error)
             } else if let httpResponse = task.response as? HTTPURLResponse {
                 // Task completed - check status code
                 switch httpResponse.statusCode {
