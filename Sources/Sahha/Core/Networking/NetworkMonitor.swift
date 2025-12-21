@@ -126,7 +126,7 @@ actor NetworkMonitor: Disposable {
     
     /// Dispose of network monitor resources
     func dispose() async {
-        await stopMonitoring()
+        stopMonitoring()
         stateChangeCallbacks.removeAll()
         print("[Network Monitor] Disposed and cleaned up all callbacks")
     }
