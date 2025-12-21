@@ -52,7 +52,7 @@ actor SahhaActor {
             // Start authenticated services if already logged in
             let authManager = try await container.resolve(AuthManagerProtocol.self)
             if  await authManager.hasValidProfileToken() {
-                try await self.startAuthenticatedServices(container)
+                await self.startAuthenticatedServices(container)
             }
 
             self.container = container
@@ -71,11 +71,11 @@ actor SahhaActor {
     }
 
     private func startAuthenticatedServices(_ container: DIContainer) async {
-        async let a = startDataCollection(container)
-        async let b = forceSyncDeviceInfo(container)
-        async let c = setupLifecycleListeners(container)
-        async let d = syncDemographic(container)
-        async let e = startBackgroundCoordinator(container)
+        async let a: Void = startDataCollection(container)
+        async let b: Void = forceSyncDeviceInfo(container)
+        async let c: Void = setupLifecycleListeners(container)
+        async let d: Void = syncDemographic(container)
+        async let e: Void = startBackgroundCoordinator(container)
         _ = await (a, b, c, d, e)
     }
 
@@ -183,7 +183,7 @@ actor SahhaActor {
 
     private func log(error: Error, message: String) async {
         if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
-            await logger.postError(error)
+            logger.postError(error)
         } else {
             print("\(message): \(error)")
         }
