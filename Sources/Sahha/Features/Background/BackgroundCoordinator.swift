@@ -11,25 +11,34 @@ actor BackgroundCoordinator: BackgroundCoordinatorProtocol, BackgroundTriggerDel
     private let dataLogPipeline: DataLogPipelineProtocol
     private var motionTrigger: MotionTrigger?
     private let logger: ErrorLoggerProtocol
+    private let enableMotionTrigger: Bool
     
     init(
         healthKitManager: HealthKitManagerProtocol,
         dataLogPipeline: DataLogPipelineProtocol,
-        logger: ErrorLoggerProtocol
+        logger: ErrorLoggerProtocol,
+        enableMotionTrigger: Bool = false
     ) {
         self.healthKitManager = healthKitManager
         self.dataLogPipeline = dataLogPipeline
         self.logger = logger
+        self.enableMotionTrigger = enableMotionTrigger
     }
     
     func start() async {
-        await startMotionTrigger()
+        if enableMotionTrigger {
+            await startMotionTrigger()
+        } else {
+            print("[Sahha] Motion trigger disabled by configuration")
+        }
         
         print("[Sahha] Background Coordinator started")
     }
 
     func stop() async {
-        await stopMotionTrigger()
+        if enableMotionTrigger {
+            await stopMotionTrigger()
+        }
         print("[Sahha] Background Coordinator stopped")
     }
     

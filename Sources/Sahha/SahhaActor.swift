@@ -33,7 +33,7 @@ actor SahhaActor {
             await AuthDI.registerDependencies(container: container)
             await DataLogDI.registerDependencies(container: container)
             await HealthKitDI.registerDependencies(container: container)
-            await BackgroundDI.registerDependencies(container: container)
+            await BackgroundDI.registerDependencies(container: container, settings: settings)
             await ScoreDI.registerDependencies(container: container)
             await BiomarkerDI.registerDependencies(container: container)
             await DemographicDI.registerDependencies(container: container)
