@@ -4,15 +4,18 @@ final class ErrorLogger: ErrorLoggerProtocol {
     private let errorLoggingService: ErrorLoggingServiceProtocol
     private let deviceInfoBuilder: DeviceInfoBuilderProtocol
     private let circuitBreaker: CircuitBreaker?
+    private let environment: SahhaEnvironment
 
     init(
         errorLoggingService: ErrorLoggingServiceProtocol,
         deviceInfoBuilder: DeviceInfoBuilderProtocol,
-        circuitBreaker: CircuitBreaker? = nil
+        circuitBreaker: CircuitBreaker? = nil,
+        environment: SahhaEnvironment
     ) {
         self.errorLoggingService = errorLoggingService
         self.deviceInfoBuilder = deviceInfoBuilder
         self.circuitBreaker = circuitBreaker
+        self.environment = environment
     }
 
     func postError(_ error: any Error, file: StaticString, function: StaticString, line: UInt) {
@@ -53,15 +56,19 @@ final class ErrorLogger: ErrorLoggerProtocol {
     }
 
     private func shouldPostError(_ error: Error) -> Bool {
+        // In sandbox/development, send ALL errors for debugging visibility
+        let isDebugEnvironment = environment == .sandbox || environment == .development
+        
         if error is CancellationError {
-               return false
-           }
+            return false
+        }
         
         if let sahhaError = error as? SahhaError {
             if let underlying = sahhaError.error {
                 return shouldPostError(underlying)
             }
-            return false
+            // Send SahhaErrors in debug environments for visibility
+            return isDebugEnvironment
         }
 
         // HealthKit-specific error filtering
@@ -75,9 +82,11 @@ final class ErrorLogger: ErrorLoggerProtocol {
                 .errorHealthDataUnavailable,
                 .errorNoData,
                 .errorUserCanceled:
-                return false  // Common, user-expected errors
+                // In production: filter out common user-expected errors
+                // In sandbox/development: send all for debugging
+                return isDebugEnvironment
             default:
-                return true  // Unexpected HealthKit error
+                return true  // Unexpected HealthKit error - always send
             }
         }
 
