@@ -347,9 +347,12 @@ public class Sahha {
                     box.callback(nil, result)
                 }
             } catch {
-                let error = SahhaError.from(error)
+                // Log error through the SDK's error logger (respects environment filtering)
+                await actor.logError(error)
+                
+                let sahhaError = SahhaError.from(error)
                 DispatchQueue.main.async {
-                    box.callback(error.localizedDescription, defaultErrorValue())
+                    box.callback(sahhaError.localizedDescription, defaultErrorValue())
                 }
             }
         }
@@ -371,9 +374,12 @@ public class Sahha {
                     box.callback(nil, result)
                 }
             } catch {
-                let error = SahhaError.from(error)
+                // Log error through the SDK's error logger (respects environment filtering)
+                await actor.logError(error)
+                
+                let sahhaError = SahhaError.from(error)
                 DispatchQueue.main.async {
-                    box.callback(error.localizedDescription, defaultErrorValue())
+                    box.callback(sahhaError.localizedDescription, defaultErrorValue())
                 }
             }
         }

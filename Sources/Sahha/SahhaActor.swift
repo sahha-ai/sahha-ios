@@ -188,6 +188,15 @@ actor SahhaActor {
             print("\(message): \(error)")
         }
     }
+    
+    /// Log an error through the DI-resolved ErrorLogger (for public API error logging)
+    func logError(_ error: Error) async {
+        if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
+            logger.postError(error)
+        } else {
+            print("[Sahha] Error (logger unavailable): \(error)")
+        }
+    }
 
     func requireConfig() async throws -> (DIContainer, SahhaSettings) {
         guard let container, let settings else {
@@ -199,11 +208,19 @@ actor SahhaActor {
     // MARK: - Post Error
 
     func postError(framework: SahhaFramework = .ios_swift, message: String, path: String, method: String, body: String) async {
-        let baseURL = settings?.environment.baseURL ?? SahhaEnvironment.sandbox.baseURL
-        let apiClient = APIClient(baseURL: baseURL)
+        // Use DI-resolved API client if available (includes auth interceptor)
+        let apiClient: APIClientProtocol
+        if let resolvedClient = try? await container?.resolve(APIClientProtocol.self) {
+            apiClient = resolvedClient
+        } else {
+            // Fallback to basic client without auth (for pre-configuration errors)
+            let baseURL = settings?.environment.baseURL ?? SahhaEnvironment.sandbox.baseURL
+            apiClient = APIClient(baseURL: baseURL)
+        }
+        
         let deviceIdProvider = DeviceIdProvider(storage: UserDefaultsStorage())
         let deviceInfo = await DeviceInfoBuilder(sdkId: framework.rawValue, deviceIdProvider: deviceIdProvider).build()
-        let error = ErrorLogRequest(
+        let errorLog = ErrorLogRequest(
             sdkId: deviceInfo.sdkId,
             sdkVersion: deviceInfo.sdkVersion,
             appId: deviceInfo.appId,
@@ -223,8 +240,14 @@ actor SahhaActor {
         let request = APIRequest(
             endpoint: APIEndpoints.error,
             method: .POST,
-            body: error
+            body: errorLog,
+            requiresAuth: true
         )
-        try? await apiClient.send(request)
+        do {
+            try await apiClient.send(request)
+            print("[Sahha] Error log sent successfully")
+        } catch {
+            print("[Sahha] Failed to send error log: \(error.localizedDescription)")
+        }
     }
 }
