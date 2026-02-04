@@ -1,21 +1,18 @@
-import HealthKit
+import Foundation
 
 final class ErrorLogger: ErrorLoggerProtocol {
     private let errorLoggingService: ErrorLoggingServiceProtocol
     private let deviceInfoBuilder: DeviceInfoBuilderProtocol
     private let circuitBreaker: CircuitBreaker?
-    private let environment: SahhaEnvironment
 
     init(
         errorLoggingService: ErrorLoggingServiceProtocol,
         deviceInfoBuilder: DeviceInfoBuilderProtocol,
-        circuitBreaker: CircuitBreaker? = nil,
-        environment: SahhaEnvironment
+        circuitBreaker: CircuitBreaker? = nil
     ) {
         self.errorLoggingService = errorLoggingService
         self.deviceInfoBuilder = deviceInfoBuilder
         self.circuitBreaker = circuitBreaker
-        self.environment = environment
     }
 
     func postError(_ error: any Error, file: StaticString, function: StaticString, line: UInt) {
@@ -56,41 +53,20 @@ final class ErrorLogger: ErrorLoggerProtocol {
     }
 
     private func shouldPostError(_ error: Error) -> Bool {
-        // In sandbox/development, send ALL errors for debugging visibility
-        let isDebugEnvironment = environment == .sandbox || environment == .development
-        
+        // Skip cancellation errors - these are expected during task cancellation
         if error is CancellationError {
             return false
         }
         
+        // Unwrap SahhaError to check underlying error
         if let sahhaError = error as? SahhaError {
             if let underlying = sahhaError.error {
                 return shouldPostError(underlying)
             }
-            // Send SahhaErrors in debug environments for visibility
-            return isDebugEnvironment
+            return true
         }
 
-        // HealthKit-specific error filtering
-        let nsError = error as NSError
-        if nsError.domain == HKErrorDomain {
-            switch HKError.Code(rawValue: nsError.code) {
-            case .errorAuthorizationDenied,
-                .errorAuthorizationNotDetermined,
-                .errorDatabaseInaccessible,
-                .errorHealthDataRestricted,
-                .errorHealthDataUnavailable,
-                .errorNoData,
-                .errorUserCanceled:
-                // In production: filter out common user-expected errors
-                // In sandbox/development: send all for debugging
-                return isDebugEnvironment
-            default:
-                return true  // Unexpected HealthKit error - always send
-            }
-        }
-
-        // Default: send all other errors
+        // Send all errors to server for visibility across all environments
         return true
     }
 

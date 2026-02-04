@@ -28,7 +28,7 @@ actor SahhaActor {
             await StorageDI.registerDependencies(container: container)
             await DeviceInfoDI.registerDependencies(container: container, settings: settings)
             await NetworkingDI.registerDependencies(container: container, settings: settings)
-            await LoggingDI.registerDependencies(container: container, settings: settings)
+            await LoggingDI.registerDependencies(container: container)
             await SensorDI.registerDependencies(container: container)
             await AuthDI.registerDependencies(container: container)
             await DataLogDI.registerDependencies(container: container)
