@@ -31,7 +31,7 @@ final class BiomarkerManager: BiomarkerManagerProtocol {
         )
         
         do {
-            return try response.toDataWrappedJSONString()
+            return try response.toJSONString()
         } catch {
             let message: String
             if let encodingError = error as? EncodingError,

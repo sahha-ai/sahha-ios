@@ -9,7 +9,8 @@ final class ErrorLoggingService: ErrorLoggingServiceProtocol {
         let request = APIRequest(
             endpoint: APIEndpoints.error,
             method: .POST,
-            body: error
+            body: error,
+            requiresAuth: true
         )
         try await apiClient.send(request)
     }

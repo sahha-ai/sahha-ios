@@ -4,4 +4,6 @@ public struct SahhaScoreFactor: Codable, Sendable {
     let goal: Double
     let score: Double
     let state: String
+    let id: String
+    let unit: String
 }
