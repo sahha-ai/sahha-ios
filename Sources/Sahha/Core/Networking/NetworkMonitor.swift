@@ -5,7 +5,9 @@ import Network
 actor NetworkMonitor: Disposable {
     typealias CallbackToken = UUID
     
-    private let monitor: NWPathMonitor
+    /// NWPathMonitor is single-use: once cancel() is called, it cannot be restarted.
+    /// We create a new instance each time monitoring is started.
+    private var monitor: NWPathMonitor?
     private let queue = DispatchQueue(label: "ai.sahha.networkmonitor")
     private var isMonitoring = false
     
@@ -15,21 +17,23 @@ actor NetworkMonitor: Disposable {
     // Callbacks for network state changes (keyed by token for removal)
     private var stateChangeCallbacks: [CallbackToken: @Sendable (Bool) async -> Void] = [:]
     
-    init() {
-        self.monitor = NWPathMonitor()
-    }
+    init() {}
     
     /// Start monitoring network state
     func startMonitoring() {
         guard !isMonitoring else { return }
         
-        monitor.pathUpdateHandler = { [weak self] path in
+        // Create a fresh NWPathMonitor each time (cancel() is irreversible)
+        let newMonitor = NWPathMonitor()
+        self.monitor = newMonitor
+        
+        newMonitor.pathUpdateHandler = { [weak self] path in
             Task { [weak self] in
                 await self?.handlePathUpdate(path)
             }
         }
         
-        monitor.start(queue: queue)
+        newMonitor.start(queue: queue)
         isMonitoring = true
         print("[Network Monitor] Started monitoring network connectivity")
     }
@@ -38,7 +42,8 @@ actor NetworkMonitor: Disposable {
     func stopMonitoring() {
         guard isMonitoring else { return }
         
-        monitor.cancel()
+        monitor?.cancel()
+        monitor = nil
         isMonitoring = false
         print("[Network Monitor] Stopped monitoring network connectivity")
     }

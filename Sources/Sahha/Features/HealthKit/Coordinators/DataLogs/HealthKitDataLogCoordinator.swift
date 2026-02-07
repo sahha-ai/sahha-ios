@@ -57,6 +57,12 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
             
             if result.status == .failed, let error = result.errorDescription {
                 print("[HealthKitDataLogCoordinator] Background query error for \(sensor.rawValue): \(error)")
+                // Schedule background refresh to retry failed queries
+                Sahha.scheduleBackgroundRefreshIfNeeded(timeInterval: 300) // 5 minutes
+            } else if result.logsProduced > 0 {
+                // Data was queued for upload - schedule background refresh as safety net
+                // in case uploads don't complete before app is suspended
+                Sahha.scheduleBackgroundRefreshIfNeeded(timeInterval: 900) // 15 minutes
             }
         }
         try await observerService.enableBackgroundDelivery(for: sensors)

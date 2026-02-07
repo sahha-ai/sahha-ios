@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 actor DataLogUploader: DataLogUploaderProtocol, Disposable {
     private let dataLogService: DataLogServiceProtocol
@@ -71,8 +72,31 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         
         uploadTask = Task { [weak self] in
             guard let self else { return }
+            
+            // Request background execution time so uploads complete even when
+            // the app is woken briefly by HealthKit background delivery
+            let bgTaskId = await Self.beginUploadBackgroundTask()
+            
             await self.networkMonitor.startMonitoring()
             await self.runUploadLoop()
+            
+            Self.endUploadBackgroundTask(bgTaskId)
+        }
+    }
+    
+    /// Request background execution time from iOS for the upload loop
+    @MainActor
+    private static func beginUploadBackgroundTask() -> UIBackgroundTaskIdentifier {
+        return UIApplication.shared.beginBackgroundTask(withName: "Sahha.DataLog.Upload") {
+            print("[DataLogUploader] Background upload task expiring")
+        }
+    }
+    
+    /// End background task when upload loop completes
+    private static func endUploadBackgroundTask(_ taskId: UIBackgroundTaskIdentifier) {
+        guard taskId != .invalid else { return }
+        Task { @MainActor in
+            UIApplication.shared.endBackgroundTask(taskId)
         }
     }
     
@@ -94,17 +118,17 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
     private func runUploadLoop() async {
         while !Task.isCancelled {
             guard let chunk = await chunkQueue.dequeue() else {
-                await networkMonitor.stopMonitoring()
                 break
             }
 
             await uploadSemaphore.wait()
-            Task { [weak self] in
-                guard let self else { return }
-                await self.uploadChunk(chunk)
-                await self.uploadSemaphore.signal()
-            }
+            // Upload synchronously within the loop to ensure the background task
+            // stays alive until all uploads complete. Previous implementation spawned
+            // separate Tasks that outlived the background task protection.
+            await uploadChunk(chunk)
+            await uploadSemaphore.signal()
         }
+        await networkMonitor.stopMonitoring()
         uploadTask = nil
     }
 
@@ -203,6 +227,8 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
                         attemptCount: attempt,
                         lastError: nil  // Offline, not a real failure
                     )
+                    // Schedule background refresh to retry when network is available
+                    Sahha.scheduleBackgroundRefreshIfNeeded(timeInterval: 300) // 5 minutes
                     return  // Exit retry loop, will be retried on network restoration
                 }
 
@@ -228,6 +254,31 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
             attemptCount: attempt,
             lastError: errorMessage  // Mark as failed with error
         )
+        
+        // Schedule background refresh to retry failed uploads
+        Sahha.scheduleBackgroundRefreshIfNeeded(timeInterval: 900) // 15 minutes
+    }
+
+    /// Retry any persisted batches that weren't uploaded (e.g., after app suspension).
+    /// Called on app resume/unlock to pick up where we left off.
+    func retryPendingUploads() async {
+        // If an upload loop is already running, skip
+        guard uploadTask == nil else {
+            print("[DataLogUploader] Upload loop already running, skipping retry")
+            return
+        }
+        
+        let persistedBatches = await persistentQueue.loadAllBatches()
+        guard !persistedBatches.isEmpty else {
+            print("[DataLogUploader] No pending batches to retry")
+            return
+        }
+        
+        print("[DataLogUploader] Retrying \(persistedBatches.count) pending batches on app wake")
+        for batch in persistedBatches {
+            await chunkQueue.enqueue(batch.chunk, persistedId: batch.id)
+        }
+        await startUploadLoopIfNeeded()
     }
 
     func dispose() async {

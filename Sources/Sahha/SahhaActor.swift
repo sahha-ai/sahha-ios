@@ -93,10 +93,16 @@ actor SahhaActor {
             let deviceInfoSyncListener = try await container.resolve(DeviceInfoSyncLifecycleListener.self)
             let postInsightsListener = try await container.resolve(PostInsightsLifecycleListener.self)
             let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
+            let dataLogRetryListener = try await container.resolve(DataLogRetryLifecycleListener.self)
 
             await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
             await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
             await deviceLogListener.setAuthenticated(true)
+            
+            // Retry pending uploads on resume, foreground, and unlock events.
+            // This ensures data queued during background delivery (but not uploaded
+            // before suspension) gets sent when the app next wakes.
+            await lifecycleObserver.registerListener(dataLogRetryListener, for: [.app_resume, .app_foreground, .app_unlocked])
         } catch {
             await log(error: error, message: "setupLifecycleListeners failed")
         }

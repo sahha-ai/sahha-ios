@@ -181,18 +181,45 @@ public class Sahha {
     
     // MARK: - Background App Refresh
     
-    /// Registers a background app refresh task to ensure reliable data collection.
+    /// Stored identifier for auto-scheduling background tasks
+    nonisolated(unsafe) private static var backgroundTaskIdentifier: String?
+    nonisolated(unsafe) private static var backgroundObserver: NSObjectProtocol?
+    
+    /// Enables automatic background refresh for reliable data collection.
+    /// This registers the task and automatically schedules refreshes when the app enters background.
     /// Call this in `application(_:didFinishLaunchingWithOptions:)`.
     /// - Parameter identifier: The identifier for the background task (must match Info.plist)
-    public static func registerBackgroundRefreshTask(identifier: String) {
+    public static func enableBackgroundRefresh(identifier: String) {
+        backgroundTaskIdentifier = identifier
+        
+        // Register the background task
         BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
             guard let task = task as? BGAppRefreshTask else { return }
             handleBackgroundRefreshTask(task)
         }
+        
+        // Auto-schedule when app enters background
+        if backgroundObserver == nil {
+            backgroundObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.didEnterBackgroundNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                scheduleBackgroundRefreshIfNeeded()
+            }
+        }
+        
+        print("[\(SDK.name)] Background refresh enabled with identifier: \(identifier)")
+    }
+    
+    /// Legacy method - registers a background app refresh task.
+    /// Prefer `enableBackgroundRefresh(identifier:)` for automatic scheduling.
+    /// - Parameter identifier: The identifier for the background task (must match Info.plist)
+    public static func registerBackgroundRefreshTask(identifier: String) {
+        enableBackgroundRefresh(identifier: identifier)
     }
     
     /// Schedules the next background app refresh.
-    /// Call this when the app enters background or after a successful refresh.
     /// - Parameters:
     ///   - identifier: The identifier for the background task
     ///   - timeInterval: The minimum time interval (in seconds) to wait before the task runs (default: 15 minutes)
@@ -202,16 +229,28 @@ public class Sahha {
         
         do {
             try BGTaskScheduler.shared.submit(request)
+            print("[\(SDK.name)] Scheduled background refresh for \(Int(timeInterval/60)) minutes from now")
         } catch {
             print("[\(SDK.name)] Failed to schedule background refresh: \(error)")
         }
     }
     
+    /// Internal method to schedule refresh using stored identifier
+    internal static func scheduleBackgroundRefreshIfNeeded(timeInterval: TimeInterval = 900) {
+        guard let identifier = backgroundTaskIdentifier else {
+            return // Background refresh not enabled
+        }
+        scheduleBackgroundRefreshTask(identifier: identifier, timeInterval: timeInterval)
+    }
+    
     private static func handleBackgroundRefreshTask(_ task: BGAppRefreshTask) {
-        // Schedule the next refresh immediately
+        print("[\(SDK.name)] Background refresh task started")
+        
+        // Schedule the next refresh immediately (before doing work)
         scheduleBackgroundRefreshTask(identifier: task.identifier)
         
         task.expirationHandler = {
+            print("[\(SDK.name)] Background refresh task expiring")
             // The system is killing the task.
             // postSensorData doesn't currently support explicit cancellation,
             // but the process termination will stop it.
@@ -223,6 +262,7 @@ public class Sahha {
         postSensorData { result in
             // Mark task as completed with actual success status
             let success = result.failedSensors == 0 && result.errorDescription == nil
+            print("[\(SDK.name)] Background refresh task completed (success: \(success))")
             sendableTask.task.setTaskCompleted(success: success)
         }
     }

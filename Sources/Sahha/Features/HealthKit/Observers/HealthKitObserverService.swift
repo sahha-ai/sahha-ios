@@ -1,4 +1,5 @@
 import HealthKit
+import UIKit
 
 final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     private let healthStore: HKHealthStore
@@ -38,9 +39,18 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
                     let wrappedCompletion = SendableCompletion(run: completion)
                     
                     Task {
-                        defer { wrappedCompletion.run() }
+                        guard let self else {
+                            wrappedCompletion.run()
+                            return
+                        }
                         
-                        guard let self else { return }
+                        // Request background execution time to ensure query + upload completes
+                        let backgroundTaskId = await self.beginBackgroundTask(for: sensor)
+                        
+                        defer {
+                            wrappedCompletion.run()
+                            self.endBackgroundTask(backgroundTaskId)
+                        }
                         
                         // If circuit breaker exists, check if system is healthy
                         if let circuitBreaker = self.circuitBreaker {
@@ -53,12 +63,31 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
                         }
                         
                         // Circuit is healthy or doesn't exist - proceed with query
+                        print("[HealthKitObserver] Background delivery triggered for \(sensor.rawValue)")
                         await handler(sensor, sampleType)
+                        print("[HealthKitObserver] Background delivery completed for \(sensor.rawValue)")
                     }
                 }
             }
             await observerStore.addObserver(query, for: sensor)
             healthStore.execute(query)
+        }
+    }
+    
+    /// Request additional background execution time from iOS
+    @MainActor
+    private func beginBackgroundTask(for sensor: SahhaSensor) -> UIBackgroundTaskIdentifier {
+        return UIApplication.shared.beginBackgroundTask(withName: "Sahha.HealthKit.\(sensor.rawValue)") {
+            // Expiration handler - called when time is about to run out
+            print("[HealthKitObserver] Background task expiring for \(sensor.rawValue)")
+        }
+    }
+    
+    /// End background task when work is complete
+    private func endBackgroundTask(_ taskId: UIBackgroundTaskIdentifier) {
+        guard taskId != .invalid else { return }
+        Task { @MainActor in
+            UIApplication.shared.endBackgroundTask(taskId)
         }
     }
     

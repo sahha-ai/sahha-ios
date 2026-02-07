@@ -54,6 +54,13 @@ enum DataLogDI {
         await container.register(UploadPriorityAssignerProtocol.self) { _ in
             DefaultUploadPriorityAssigner()
         }
+        
+        // Lifecycle listener that retries pending uploads on app resume/unlock
+        await container.register(DataLogRetryLifecycleListener.self) { container in
+            DataLogRetryLifecycleListener(
+                uploader: try await container.resolve(DataLogUploaderProtocol.self)
+            )
+        }
     }
 }
 
