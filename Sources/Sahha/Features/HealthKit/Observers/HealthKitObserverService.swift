@@ -32,7 +32,6 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
         if let sampleType = sensor.hkSampleType, try await permissions.hasPermissions(for: sensor) {
             let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { [weak self] _, completion, error in
                 if let error {
-                    self?.logger.postError(error)
                     completion()
                 } else {
                     // Check circuit breaker state before triggering query
@@ -57,15 +56,15 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
                             let isHealthy = await circuitBreaker.isHealthy()
                             if !isHealthy {
                                 let (state, _) = await circuitBreaker.getState()
-                                print("[HealthKitObserver] Skipping query for \(sensor.rawValue) - circuit breaker is \(state)")
+                                Sahha.log("[HealthKitObserver] Skipping query for \(sensor.rawValue) - circuit breaker is \(state)")
                                 return
                             }
                         }
                         
                         // Circuit is healthy or doesn't exist - proceed with query
-                        print("[HealthKitObserver] Background delivery triggered for \(sensor.rawValue)")
+                        Sahha.log("[HealthKitObserver] Background delivery triggered for \(sensor.rawValue)")
                         await handler(sensor, sampleType)
-                        print("[HealthKitObserver] Background delivery completed for \(sensor.rawValue)")
+                        Sahha.log("[HealthKitObserver] Background delivery completed for \(sensor.rawValue)")
                     }
                 }
             }
@@ -79,7 +78,7 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     private func beginBackgroundTask(for sensor: SahhaSensor) -> UIBackgroundTaskIdentifier {
         return UIApplication.shared.beginBackgroundTask(withName: "Sahha.HealthKit.\(sensor.rawValue)") {
             // Expiration handler - called when time is about to run out
-            print("[HealthKitObserver] Background task expiring for \(sensor.rawValue)")
+            Sahha.log("[HealthKitObserver] Background task expiring for \(sensor.rawValue)")
         }
     }
     
@@ -138,7 +137,6 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
         do {
             try await healthStore.disableAllBackgroundDelivery()
         } catch {
-            logger.postError(error)
         }
     }
 }

@@ -15,6 +15,14 @@ public class Sahha {
     private static let actor: SahhaActor = .shared
     static let authSnapshot = AuthSnapshot()
 
+    /// Controls whether internal SDK logs are logged. Off by default.
+    public static var debugLogging = false
+
+    static func log(_ message: @autoclosure () -> String) {
+        guard debugLogging else { return }
+        print(message())
+    }
+
     // MARK: - Configuration
     public static func configure(_ settings: SahhaSettings, callback: (() -> Void)? = nil) {
         let box = VoidCallbackBox(callback: callback)
@@ -25,7 +33,7 @@ public class Sahha {
                     box.callback?()
                 }
             } catch {
-                print("[\(SDK.name)] ERROR: Failed to configure Sahha: \(error.localizedDescription)")
+                Sahha.log("[\(SDK.name)] ERROR: Failed to configure Sahha: \(error.localizedDescription)")
             }
         }
     }
@@ -173,7 +181,7 @@ public class Sahha {
                 let delegate = try await actor.backgroundDelegate()
                 delegate.setCompletionHandler(completionHandler, for: identifier)
             } catch {
-                print("[\(SDK.name)] Failed to handle background session events: \(error)")
+                Sahha.log("[\(SDK.name)] Failed to handle background session events: \(error)")
                 completionHandler()
             }
         }
@@ -209,7 +217,7 @@ public class Sahha {
             }
         }
         
-        print("[\(SDK.name)] Background refresh enabled with identifier: \(identifier)")
+        Sahha.log("[\(SDK.name)] Background refresh enabled with identifier: \(identifier)")
     }
     
     /// Legacy method - registers a background app refresh task.
@@ -229,9 +237,9 @@ public class Sahha {
         
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("[\(SDK.name)] Scheduled background refresh for \(Int(timeInterval/60)) minutes from now")
+            Sahha.log("[\(SDK.name)] Scheduled background refresh for \(Int(timeInterval/60)) minutes from now")
         } catch {
-            print("[\(SDK.name)] Failed to schedule background refresh: \(error)")
+            Sahha.log("[\(SDK.name)] Failed to schedule background refresh: \(error)")
         }
     }
     
@@ -244,13 +252,13 @@ public class Sahha {
     }
     
     private static func handleBackgroundRefreshTask(_ task: BGAppRefreshTask) {
-        print("[\(SDK.name)] Background refresh task started")
+        Sahha.log("[\(SDK.name)] Background refresh task started")
         
         // Schedule the next refresh immediately (before doing work)
         scheduleBackgroundRefreshTask(identifier: task.identifier)
         
         task.expirationHandler = {
-            print("[\(SDK.name)] Background refresh task expiring")
+            Sahha.log("[\(SDK.name)] Background refresh task expiring")
             // The system is killing the task.
             // postSensorData doesn't currently support explicit cancellation,
             // but the process termination will stop it.
@@ -262,7 +270,7 @@ public class Sahha {
         postSensorData { result in
             // Mark task as completed with actual success status
             let success = result.failedSensors == 0 && result.errorDescription == nil
-            print("[\(SDK.name)] Background refresh task completed (success: \(success))")
+            Sahha.log("[\(SDK.name)] Background refresh task completed (success: \(success))")
             sendableTask.task.setTaskCompleted(success: success)
         }
     }
@@ -345,7 +353,7 @@ public class Sahha {
             guard let settingsURL = URL(string: UIApplication.openSettingsURLString),
                 UIApplication.shared.canOpenURL(settingsURL)
             else {
-                print("Failed to open app settings: Invalid or unsupported settings URL.")
+                Sahha.log("Failed to open app settings: Invalid or unsupported settings URL.")
                 return
             }
             await UIApplication.shared.open(settingsURL)
@@ -432,13 +440,13 @@ public class Sahha {
     }
 
     private static func logPostSensorData(_ result: PostSensorDataResult) {
-        print("[PostSensorData] Timestamp: \(result.timestamp)")
+        Sahha.log("[PostSensorData] Timestamp: \(result.timestamp)")
         if let error = result.errorDescription {
-            print("  Error: \(error)")
+            Sahha.log("  Error: \(error)")
         }
-        print("  Sensors Queried: \(result.totalSensors)")
-        print("  Samples Fetched: \(result.totalSamples)")
-        print("  Logs Produced: \(result.totalLogs)")
-        print("  Success: \(result.successfulSensors) | Failed: \(result.failedSensors) | Skipped: \(result.skippedSensors)")
+        Sahha.log("  Sensors Queried: \(result.totalSensors)")
+        Sahha.log("  Samples Fetched: \(result.totalSamples)")
+        Sahha.log("  Logs Produced: \(result.totalLogs)")
+        Sahha.log("  Success: \(result.successfulSensors) | Failed: \(result.failedSensors) | Skipped: \(result.skippedSensors)")
     }
 }

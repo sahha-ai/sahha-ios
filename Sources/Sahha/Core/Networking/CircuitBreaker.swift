@@ -56,7 +56,7 @@ actor CircuitBreaker: Disposable {
     private func handleNetworkDisconnected() async {
         guard state != .open else { return }
         
-        print("[Circuit Breaker] Network disconnected - opening circuit")
+        Sahha.log("[Circuit Breaker] Network disconnected - opening circuit")
         state = .open
         lastFailureTime = Date()
     }
@@ -65,7 +65,7 @@ actor CircuitBreaker: Disposable {
     private func handleNetworkReconnected() async {
         guard state == .open else { return }
         
-        print("[Circuit Breaker] Network reconnected - transitioning to half-open for testing")
+        Sahha.log("[Circuit Breaker] Network reconnected - transitioning to half-open for testing")
         state = .halfOpen
         successCount = 0
     }
@@ -80,12 +80,12 @@ actor CircuitBreaker: Disposable {
             // Check if enough time has passed to try recovery
             if let lastFailure = lastFailureTime,
                Date().timeIntervalSince(lastFailure) >= recoveryTimeout {
-                print("[Circuit Breaker] Transitioning to half-open, testing recovery...")
+                Sahha.log("[Circuit Breaker] Transitioning to half-open, testing recovery...")
                 state = .halfOpen
                 successCount = 0
                 return true
             }
-            print("[Circuit Breaker] Circuit is OPEN, failing fast to protect backend")
+            Sahha.log("[Circuit Breaker] Circuit is OPEN, failing fast to protect backend")
             return false
             
         case .halfOpen:
@@ -103,7 +103,7 @@ actor CircuitBreaker: Disposable {
         case .halfOpen:
             successCount += 1
             if successCount >= halfOpenSuccessThreshold {
-                print("[Circuit Breaker] Backend recovered, closing circuit")
+                Sahha.log("[Circuit Breaker] Backend recovered, closing circuit")
                 state = .closed
                 failureCount = 0
                 successCount = 0
@@ -123,7 +123,7 @@ actor CircuitBreaker: Disposable {
         let isNetworkIssue = await networkMonitor?.isConnected == false
         
         if isNetworkIssue {
-            print("[Circuit Breaker] Failure due to network disconnection, not counting towards threshold")
+            Sahha.log("[Circuit Breaker] Failure due to network disconnection, not counting towards threshold")
             // Don't count network failures towards circuit breaker threshold
             // The device being offline isn't the backend's fault
             return
@@ -133,12 +133,12 @@ actor CircuitBreaker: Disposable {
         case .closed:
             failureCount += 1
             if failureCount >= failureThreshold {
-                print("[Circuit Breaker] Threshold reached (\(failureCount) failures), opening circuit for \(recoveryTimeout)s")
+                Sahha.log("[Circuit Breaker] Threshold reached (\(failureCount) failures), opening circuit for \(recoveryTimeout)s")
                 state = .open
             }
             
         case .halfOpen:
-            print("[Circuit Breaker] Recovery test failed, reopening circuit")
+            Sahha.log("[Circuit Breaker] Recovery test failed, reopening circuit")
             state = .open
             successCount = 0
             
@@ -168,7 +168,7 @@ actor CircuitBreaker: Disposable {
         failureCount = 0
         successCount = 0
         lastFailureTime = nil
-        print("[Circuit Breaker] Manual reset to closed state")
+        Sahha.log("[Circuit Breaker] Manual reset to closed state")
     }
     
     /// Clean up network monitor callback registration
@@ -182,7 +182,7 @@ actor CircuitBreaker: Disposable {
     /// Dispose of circuit breaker resources
     func dispose() async {
         await cleanup()
-        print("[Circuit Breaker] Disposed and cleaned up network monitor callback")
+        Sahha.log("[Circuit Breaker] Disposed and cleaned up network monitor callback")
     }
 }
 

@@ -58,13 +58,13 @@ actor DeadLetterQueue {
             try data.write(to: fileURL)
             
             let reason = lastError != nil ? "after failure" : "while offline"
-            print("[Persistent Queue] Stored batch with \(chunk.requests.count) logs (\(reason), priority: \(chunk.priority), attempts: \(attemptCount))")
+            Sahha.log("[Persistent Queue] Stored batch with \(chunk.requests.count) logs (\(reason), priority: \(chunk.priority), attempts: \(attemptCount))")
             
             // Cleanup old files if we exceed limit
             await cleanupOldBatches()
             return id
         } catch {
-            print("[Persistent Queue] Failed to persist batch: \(error.localizedDescription)")
+            Sahha.log("[Persistent Queue] Failed to persist batch: \(error.localizedDescription)")
             return nil
         }
     }
@@ -97,7 +97,7 @@ actor DeadLetterQueue {
             for fileURL in expiredFiles {
                 try? fileManager.removeItem(at: fileURL)
             }
-            print("[Persistent Queue] Evicted \(expiredFiles.count) batches older than 3 days")
+            Sahha.log("[Persistent Queue] Evicted \(expiredFiles.count) batches older than 3 days")
         }
         
         let sortedBatches = batches.sorted { lhs, rhs in
@@ -110,7 +110,7 @@ actor DeadLetterQueue {
         if !sortedBatches.isEmpty {
             let totalLogs = sortedBatches.reduce(0) { $0 + $1.chunk.requests.count }
             let failedCount = sortedBatches.filter { $0.lastError != nil }.count
-            print("[Persistent Queue] Loaded \(sortedBatches.count) batches (\(totalLogs) logs, \(failedCount) previously failed)")
+            Sahha.log("[Persistent Queue] Loaded \(sortedBatches.count) batches (\(totalLogs) logs, \(failedCount) previously failed)")
         }
         
         return sortedBatches
@@ -141,7 +141,7 @@ actor DeadLetterQueue {
             try? fileManager.removeItem(at: fileURL)
         }
         
-        print("[Persistent Queue] Cleared all persisted batches")
+        Sahha.log("[Persistent Queue] Cleared all persisted batches")
     }
     
     func getCount() async -> Int {
@@ -192,7 +192,7 @@ actor DeadLetterQueue {
         }
         
         if evictedCount > 0 {
-            print("[Persistent Queue] Force evicted \(evictedCount) expired batches")
+            Sahha.log("[Persistent Queue] Force evicted \(evictedCount) expired batches")
         }
     }
     
@@ -220,7 +220,7 @@ actor DeadLetterQueue {
         }
         
         if !filesToRemove.isEmpty {
-            print("[Persistent Queue] Cleaned up \(filesToRemove.count) old batch files")
+            Sahha.log("[Persistent Queue] Cleaned up \(filesToRemove.count) old batch files")
         }
     }
 }

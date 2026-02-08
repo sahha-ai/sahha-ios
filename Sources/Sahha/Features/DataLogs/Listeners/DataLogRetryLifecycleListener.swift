@@ -12,7 +12,7 @@ final class DataLogRetryLifecycleListener: LifecycleListener {
     }
 
     func handleLifecycleEvent(_ event: LifecycleEvent) async {
-        print("[DataLogRetry] App lifecycle event: \(event.rawValue) — checking for pending uploads")
+        Sahha.log("[DataLogRetry] App lifecycle event: \(event.rawValue) — checking for pending uploads")
         await uploader.retryPendingUploads()
     }
 }

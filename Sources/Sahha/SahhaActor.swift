@@ -191,7 +191,7 @@ actor SahhaActor {
         if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
             logger.postError(error)
         } else {
-            print("\(message): \(error)")
+            Sahha.log("\(message): \(error)")
         }
     }
     
@@ -200,7 +200,7 @@ actor SahhaActor {
         if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
             logger.postError(error)
         } else {
-            print("[Sahha] Error (logger unavailable): \(error)")
+            Sahha.log("[Sahha] Error (logger unavailable): \(error)")
         }
     }
 
@@ -251,9 +251,9 @@ actor SahhaActor {
         )
         do {
             try await apiClient.send(request)
-            print("[Sahha] Error log sent successfully")
+            Sahha.log("[Sahha] Error log sent successfully")
         } catch {
-            print("[Sahha] Failed to send error log: \(error.localizedDescription)")
+            Sahha.log("[Sahha] Failed to send error log: \(error.localizedDescription)")
         }
     }
 }

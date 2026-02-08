@@ -95,7 +95,7 @@ final class APIClient: APIClientProtocol {
             urlRequest = try buildURLRequest(from: request)
             // Compress the body if it's > 1kb
             if let compressedRequest = try compressBodyIfNeeded(urlRequest) {
-                print("[Sahha Compression] Compressed request body: \(urlRequest.httpBody?.count ?? 0) bytes → \(compressedRequest.httpBody?.count ?? 0) bytes")
+                Sahha.log("[Sahha Compression] Compressed request body: \(urlRequest.httpBody?.count ?? 0) bytes → \(compressedRequest.httpBody?.count ?? 0) bytes")
                 urlRequest = compressedRequest
             }
         } catch let apiError as APIErrorResponse {
@@ -112,7 +112,7 @@ final class APIClient: APIClientProtocol {
         let data: Data
         let response: URLResponse
         do {
-            print("[Sahha Network] \(urlRequest.httpMethod ?? "GET") \(urlRequest.url?.absoluteString ?? "") | Headers: \(urlRequest.allHTTPHeaderFields ?? [:])")
+            Sahha.log("[Sahha Network] \(urlRequest.httpMethod ?? "GET") \(urlRequest.url?.absoluteString ?? "") | Headers: \(urlRequest.allHTTPHeaderFields ?? [:])")
             (data, response) = try await session.data(for: urlRequest)
         } catch {
             throw APIErrorResponse(
@@ -136,7 +136,7 @@ final class APIClient: APIClientProtocol {
         case 200...299:
             return APIResponse(data, httpResponse)
         default:
-            print("[Sahha Error] HTTP \(httpResponse.statusCode) | Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
+            Sahha.log("[Sahha Error] HTTP \(httpResponse.statusCode) | Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
             do {
                 let apiError = try JSONDecoder().decode(APIErrorResponse.self, from: data)
                 throw apiError

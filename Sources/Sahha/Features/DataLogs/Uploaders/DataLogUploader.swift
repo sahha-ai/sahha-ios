@@ -88,7 +88,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
     @MainActor
     private static func beginUploadBackgroundTask() -> UIBackgroundTaskIdentifier {
         return UIApplication.shared.beginBackgroundTask(withName: "Sahha.DataLog.Upload") {
-            print("[DataLogUploader] Background upload task expiring")
+            Sahha.log("[DataLogUploader] Background upload task expiring")
         }
     }
     
@@ -111,7 +111,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         }
         
         let failedCount = persistedBatches.filter { $0.hasFailed }.count
-        print("[DataLogUploader] Loaded \(persistedBatches.count) persisted batches (\(failedCount) previously failed)")
+        Sahha.log("[DataLogUploader] Loaded \(persistedBatches.count) persisted batches (\(failedCount) previously failed)")
     }
     
 
@@ -146,7 +146,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         
         // If all requests were already sent, we're done
         guard !unsentRequests.isEmpty else {
-            print("[DataLogUploader] All \(originalChunk.requests.count) logs in chunk already sent, skipping")
+            Sahha.log("[DataLogUploader] All \(originalChunk.requests.count) logs in chunk already sent, skipping")
             // Remove any persisted copies since all were already sent
             for id in persistedIds {
                 await persistentQueue.removeBatch(withId: id)
@@ -163,7 +163,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
         
         let filteredCount = originalChunk.requests.count - unsentRequests.count
         if filteredCount > 0 {
-            print("[DataLogUploader] Filtered out \(filteredCount) already-sent logs, uploading \(unsentRequests.count)")
+            Sahha.log("[DataLogUploader] Filtered out \(filteredCount) already-sent logs, uploading \(unsentRequests.count)")
         }
 
         while attempt < maxRetries && !Task.isCancelled {
@@ -176,7 +176,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
                 if isOffline {
                     // Persist chunk to disk if going offline
                     if !wasOffline {
-                        print("[DataLogUploader] Device offline, persisting chunk with \(chunk.requests.count) logs")
+                        Sahha.log("[DataLogUploader] Device offline, persisting chunk with \(chunk.requests.count) logs")
                         if let id = await persistentQueue.persistBatch(
                             chunk,
                             attemptCount: attempt,
@@ -191,7 +191,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
                     try await networkMonitor.waitForConnectivity(timeout: 60)
                     
                     // If we get here, network is back - continue to upload
-                    print("[DataLogUploader] Network restored, resuming upload for chunk")
+                    Sahha.log("[DataLogUploader] Network restored, resuming upload for chunk")
                     wasOffline = false
                     continue
                 }
@@ -208,7 +208,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
                 let sentIds = chunk.requests.map { $0.id }
                 await sentLogStore.markSent(sentIds)
                 
-                print("[DataLogUploader] Successfully uploaded chunk with \(chunk.requests.count) logs (priority: \(chunk.priority))")
+                Sahha.log("[DataLogUploader] Successfully uploaded chunk with \(chunk.requests.count) logs (priority: \(chunk.priority))")
                 // Remove any persisted copies now that upload succeeded
                 for id in persistedIds {
                     await persistentQueue.removeBatch(withId: id)
@@ -221,7 +221,7 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
 
                 // If offline, persist and wait instead of retrying
                 if !(await networkMonitor.shouldAttemptUpload()) {
-                    print("[DataLogUploader] Upload failed due to offline state, persisting chunk")
+                    Sahha.log("[DataLogUploader] Upload failed due to offline state, persisting chunk")
                     _ = await persistentQueue.persistBatch(
                         chunk,
                         attemptCount: attempt,
@@ -264,17 +264,17 @@ actor DataLogUploader: DataLogUploaderProtocol, Disposable {
     func retryPendingUploads() async {
         // If an upload loop is already running, skip
         guard uploadTask == nil else {
-            print("[DataLogUploader] Upload loop already running, skipping retry")
+            Sahha.log("[DataLogUploader] Upload loop already running, skipping retry")
             return
         }
         
         let persistedBatches = await persistentQueue.loadAllBatches()
         guard !persistedBatches.isEmpty else {
-            print("[DataLogUploader] No pending batches to retry")
+            Sahha.log("[DataLogUploader] No pending batches to retry")
             return
         }
         
-        print("[DataLogUploader] Retrying \(persistedBatches.count) pending batches on app wake")
+        Sahha.log("[DataLogUploader] Retrying \(persistedBatches.count) pending batches on app wake")
         for batch in persistedBatches {
             await chunkQueue.enqueue(batch.chunk, persistedId: batch.id)
         }

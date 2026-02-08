@@ -35,7 +35,7 @@ actor NetworkMonitor: Disposable {
         
         newMonitor.start(queue: queue)
         isMonitoring = true
-        print("[Network Monitor] Started monitoring network connectivity")
+        Sahha.log("[Network Monitor] Started monitoring network connectivity")
     }
     
     /// Stop monitoring network state
@@ -45,7 +45,7 @@ actor NetworkMonitor: Disposable {
         monitor?.cancel()
         monitor = nil
         isMonitoring = false
-        print("[Network Monitor] Stopped monitoring network connectivity")
+        Sahha.log("[Network Monitor] Stopped monitoring network connectivity")
     }
     
     /// Handle path updates from NWPathMonitor
@@ -68,9 +68,9 @@ actor NetworkMonitor: Disposable {
         if wasConnected != isConnected {
             if isConnected {
                 let typeString = connectionType.map { "\($0)" } ?? "unknown"
-                print("[Network Monitor] Connected via \(typeString)")
+                Sahha.log("[Network Monitor] Connected via \(typeString)")
             } else {
-                print("[Network Monitor] Disconnected")
+                Sahha.log("[Network Monitor] Disconnected")
             }
             
             // Notify callbacks
@@ -107,7 +107,7 @@ actor NetworkMonitor: Disposable {
     func waitForConnectivity(timeout: TimeInterval = 30) async throws {
         guard !isConnected else { return }
         
-        print("[Network Monitor] Waiting for connectivity...")
+        Sahha.log("[Network Monitor] Waiting for connectivity...")
         
         let startTime = Date()
         while !isConnected {
@@ -117,7 +117,7 @@ actor NetworkMonitor: Disposable {
             try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
         }
         
-        print("[Network Monitor] Connectivity restored")
+        Sahha.log("[Network Monitor] Connectivity restored")
     }
     
     /// Check if we should attempt upload based on connection type
@@ -133,7 +133,7 @@ actor NetworkMonitor: Disposable {
     func dispose() async {
         stopMonitoring()
         stateChangeCallbacks.removeAll()
-        print("[Network Monitor] Disposed and cleaned up all callbacks")
+        Sahha.log("[Network Monitor] Disposed and cleaned up all callbacks")
     }
 }
 

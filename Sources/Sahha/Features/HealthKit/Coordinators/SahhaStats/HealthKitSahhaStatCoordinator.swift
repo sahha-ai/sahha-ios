@@ -67,7 +67,6 @@ final class HealthKitSahhaStatCoordinator: HealthKitSahhaStatCoordinatorProtocol
                 sortDescriptors: nil
             ).compactMap { $0 as? HKCategorySample }
         } catch {
-            logger.postError(error)
             throw error
         }
 
@@ -156,7 +155,6 @@ final class HealthKitSahhaStatCoordinator: HealthKitSahhaStatCoordinatorProtocol
                 sortDescriptors: nil
             ).compactMap { $0 as? HKWorkout }
         } catch {
-            logger.postError(error)
             throw error
         }
 
@@ -251,7 +249,6 @@ final class HealthKitSahhaStatCoordinator: HealthKitSahhaStatCoordinatorProtocol
                 interval: dateComponents
             )
         } catch {
-            logger.postError(error)
             throw error
         }
 

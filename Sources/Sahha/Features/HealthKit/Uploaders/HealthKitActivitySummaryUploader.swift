@@ -70,7 +70,6 @@ final class HealthKitActivitySummaryUploader: HealthKitActivitySummaryUploaderPr
                 throw error
             }
         } catch {
-            logger.postError(error)
         }
     }
 
