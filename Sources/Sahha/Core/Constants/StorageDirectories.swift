@@ -24,7 +24,7 @@ enum StorageDirectories {
             return true
         } catch {
             #if DEBUG
-                print("[\(SDK.name)] - ERROR: Failed to exclude \(dir.path) from backup: \(error)")
+                Sahha.log("[\(SDK.name)] - ERROR: Failed to exclude \(dir.path) from backup: \(error)")
             #endif
             return false
         }

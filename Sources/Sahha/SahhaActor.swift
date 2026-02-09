@@ -33,7 +33,7 @@ actor SahhaActor {
             await AuthDI.registerDependencies(container: container)
             await DataLogDI.registerDependencies(container: container)
             await HealthKitDI.registerDependencies(container: container)
-            await BackgroundDI.registerDependencies(container: container)
+            await BackgroundDI.registerDependencies(container: container, settings: settings)
             await ScoreDI.registerDependencies(container: container)
             await BiomarkerDI.registerDependencies(container: container)
             await DemographicDI.registerDependencies(container: container)
@@ -93,10 +93,16 @@ actor SahhaActor {
             let deviceInfoSyncListener = try await container.resolve(DeviceInfoSyncLifecycleListener.self)
             let postInsightsListener = try await container.resolve(PostInsightsLifecycleListener.self)
             let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
+            let dataLogRetryListener = try await container.resolve(DataLogRetryLifecycleListener.self)
 
             await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
             await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
             await deviceLogListener.setAuthenticated(true)
+            
+            // Retry pending uploads on resume, foreground, and unlock events.
+            // This ensures data queued during background delivery (but not uploaded
+            // before suspension) gets sent when the app next wakes.
+            await lifecycleObserver.registerListener(dataLogRetryListener, for: [.app_resume, .app_foreground, .app_unlocked])
         } catch {
             await log(error: error, message: "setupLifecycleListeners failed")
         }
@@ -185,7 +191,16 @@ actor SahhaActor {
         if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
             logger.postError(error)
         } else {
-            print("\(message): \(error)")
+            Sahha.log("\(message): \(error)")
+        }
+    }
+    
+    /// Log an error through the DI-resolved ErrorLogger (for public API error logging)
+    func logError(_ error: Error) async {
+        if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
+            logger.postError(error)
+        } else {
+            Sahha.log("[Sahha] Error (logger unavailable): \(error)")
         }
     }
 
@@ -199,11 +214,19 @@ actor SahhaActor {
     // MARK: - Post Error
 
     func postError(framework: SahhaFramework = .ios_swift, message: String, path: String, method: String, body: String) async {
-        let baseURL = settings?.environment.baseURL ?? SahhaEnvironment.sandbox.baseURL
-        let apiClient = APIClient(baseURL: baseURL)
+        // Use DI-resolved API client if available (includes auth interceptor)
+        let apiClient: APIClientProtocol
+        if let resolvedClient = try? await container?.resolve(APIClientProtocol.self) {
+            apiClient = resolvedClient
+        } else {
+            // Fallback to basic client without auth (for pre-configuration errors)
+            let baseURL = settings?.environment.baseURL ?? SahhaEnvironment.sandbox.baseURL
+            apiClient = APIClient(baseURL: baseURL)
+        }
+        
         let deviceIdProvider = DeviceIdProvider(storage: UserDefaultsStorage())
         let deviceInfo = await DeviceInfoBuilder(sdkId: framework.rawValue, deviceIdProvider: deviceIdProvider).build()
-        let error = ErrorLogRequest(
+        let errorLog = ErrorLogRequest(
             sdkId: deviceInfo.sdkId,
             sdkVersion: deviceInfo.sdkVersion,
             appId: deviceInfo.appId,
@@ -223,8 +246,14 @@ actor SahhaActor {
         let request = APIRequest(
             endpoint: APIEndpoints.error,
             method: .POST,
-            body: error
+            body: errorLog,
+            requiresAuth: true
         )
-        try? await apiClient.send(request)
+        do {
+            try await apiClient.send(request)
+            Sahha.log("[Sahha] Error log sent successfully")
+        } catch {
+            Sahha.log("[Sahha] Failed to send error log: \(error.localizedDescription)")
+        }
     }
 }

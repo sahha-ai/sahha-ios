@@ -49,14 +49,20 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
     func startDataLogCollection(for sensors: Set<SahhaSensor>) async throws {
         try await observerService.startObservers(for: sensors) { [weak self] sensor, sampleType in
             guard let self else {
-                print("[HealthKitDataLogCoordinator] Observer fired but coordinator was deallocated for sensor: \(sensor.rawValue)")
+                Sahha.log("[HealthKitDataLogCoordinator] Observer fired but coordinator was deallocated for sensor: \(sensor.rawValue)")
                 return
             }
             let result = await self.runSensorQuery(for: sensor, sampleType: sampleType)
-            print("[HealthKitDataLogCoordinator] Background observer query completed for \(sensor.rawValue): \(result.status.rawValue), samples: \(result.samplesFetched), logs: \(result.logsProduced)")
+            Sahha.log("[HealthKitDataLogCoordinator] Background observer query completed for \(sensor.rawValue): \(result.status.rawValue), samples: \(result.samplesFetched), logs: \(result.logsProduced)")
             
             if result.status == .failed, let error = result.errorDescription {
-                print("[HealthKitDataLogCoordinator] Background query error for \(sensor.rawValue): \(error)")
+                Sahha.log("[HealthKitDataLogCoordinator] Background query error for \(sensor.rawValue): \(error)")
+                // Schedule background refresh to retry failed queries
+                Sahha.scheduleBackgroundRefreshIfNeeded(timeInterval: 300) // 5 minutes
+            } else if result.logsProduced > 0 {
+                // Data was queued for upload - schedule background refresh as safety net
+                // in case uploads don't complete before app is suspended
+                Sahha.scheduleBackgroundRefreshIfNeeded(timeInterval: 900) // 15 minutes
             }
         }
         try await observerService.enableBackgroundDelivery(for: sensors)
@@ -122,7 +128,7 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                 if !isHealthy {
                     let (state, _) = await circuitBreaker.getState()
                     let message = "Circuit breaker is \(state)"
-                    print("[HealthKitDataLogCoordinator] Skipping query for \(sensor.rawValue) - \(message)")
+                    Sahha.log("[HealthKitDataLogCoordinator] Skipping query for \(sensor.rawValue) - \(message)")
                     return SensorQueryResult(
                         sensor: sensor,
                         status: .skippedCircuitOpen,
@@ -155,7 +161,7 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                     let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? now.addingTimeInterval(-30 * 24 * 3600)
                     startDate = thirtyDaysAgo
                     endDate = now
-                    print("[HealthKitDataLogCoordinator] Initial sync for \(sensor.rawValue). Limiting to 30 days history.")
+                    Sahha.log("[HealthKitDataLogCoordinator] Initial sync for \(sensor.rawValue). Limiting to 30 days history.")
                 }
 
                 while !Task.isCancelled {
@@ -183,19 +189,13 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                             anchor = newAnchor
                             anchorUpdated = true
                         } catch {
-                            let anchorError = NSError(
-                                domain: "HealthKitDataLogCoordinator",
-                                code: -1,
-                                userInfo: [NSLocalizedDescriptionKey: "Failed to save anchor for \(sensor.rawValue): \(error.localizedDescription)"]
-                            )
-                            self.logger.postError(anchorError)
+                            // Non-critical: silent failure
                         }
                     }
                 }
             } catch {
                 status = .failed
                 errorDescription = error.localizedDescription
-                self.logger.postError(error)
             }
 
             if status == .success {

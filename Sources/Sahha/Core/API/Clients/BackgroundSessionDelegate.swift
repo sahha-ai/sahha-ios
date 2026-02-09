@@ -48,17 +48,17 @@ final class BackgroundSessionDelegate: NSObject, @unchecked Sendable, URLSession
             
             if let error = error {
                 // Task failed
-                print("[Background Upload] Task failed: \(error.localizedDescription)")
+                Sahha.log("[Background Upload] Task failed: \(error.localizedDescription)")
                 await self.circuitBreaker?.recordFailure()
                 self.logger?.postError(error)
             } else if let httpResponse = task.response as? HTTPURLResponse {
                 // Task completed - check status code
                 switch httpResponse.statusCode {
                 case 200...299:
-                    print("[Background Upload] Task succeeded with status \(httpResponse.statusCode)")
+                    Sahha.log("[Background Upload] Task succeeded with status \(httpResponse.statusCode)")
                     await self.circuitBreaker?.recordSuccess()
                 default:
-                    print("[Background Upload] Task failed with status \(httpResponse.statusCode)")
+                    Sahha.log("[Background Upload] Task failed with status \(httpResponse.statusCode)")
                     await self.circuitBreaker?.recordFailure()
                 }
             }
@@ -81,7 +81,7 @@ final class BackgroundSessionDelegate: NSObject, @unchecked Sendable, URLSession
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         // Background tasks receive data in chunks
         // For now, we just log it since we don't need to decode responses for uploads
-        print("[Background Upload] Received \(data.count) bytes")
+        Sahha.log("[Background Upload] Received \(data.count) bytes")
     }
 }
 
