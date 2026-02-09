@@ -95,7 +95,7 @@ actor SentLogStore {
         saveToStorage()
         
         let totalTracked = sentIds?.count ?? 0
-        print("[SentLogStore] Marked \(ids.count) logs as sent (total tracked: \(totalTracked))")
+        Sahha.log("[SentLogStore] Marked \(ids.count) logs as sent (total tracked: \(totalTracked))")
     }
     
     func filterUnsent<T>(_ items: [T], idExtractor: @escaping @Sendable (T) -> String) -> [T] {
@@ -148,7 +148,7 @@ actor SentLogStore {
         ensureLoaded()
         sentIds?.removeAll()
         storage.removeObject(forKey: storageKey)
-        print("[SentLogStore] Cleared all tracked sent logs")
+        Sahha.log("[SentLogStore] Cleared all tracked sent logs")
     }
     
     func evictExpired() {
@@ -162,7 +162,7 @@ actor SentLogStore {
         
         if evicted > 0 {
             saveToStorage()
-            print("[SentLogStore] Evicted \(evicted) expired entries")
+            Sahha.log("[SentLogStore] Evicted \(evicted) expired entries")
         }
     }
     

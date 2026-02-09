@@ -26,7 +26,7 @@ struct URLSessionFactory {
         config.urlCache = nil  // Disable caching for API requests
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         
-        print("[URLSession] Configured optimized session (HTTP/2, 6 connections/host, pooling enabled)")
+        Sahha.log("[URLSession] Configured optimized session (HTTP/2, 6 connections/host, pooling enabled)")
         
         return URLSession(configuration: config)
     }
@@ -55,7 +55,7 @@ struct URLSessionFactory {
         config.isDiscretionary = false  // Upload even on cellular
         config.sessionSendsLaunchEvents = true
         
-        print("[URLSession] Configured background session: \(identifier)")
+        Sahha.log("[URLSession] Configured background session: \(identifier)")
         
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 1

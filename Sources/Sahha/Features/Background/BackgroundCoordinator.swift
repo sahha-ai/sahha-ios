@@ -29,17 +29,17 @@ actor BackgroundCoordinator: BackgroundCoordinatorProtocol, BackgroundTriggerDel
         if enableMotionTrigger {
             await startMotionTrigger()
         } else {
-            print("[Sahha] Motion trigger disabled by configuration")
+            Sahha.log("[Sahha] Motion trigger disabled by configuration")
         }
         
-        print("[Sahha] Background Coordinator started")
+        Sahha.log("[Sahha] Background Coordinator started")
     }
 
     func stop() async {
         if enableMotionTrigger {
             await stopMotionTrigger()
         }
-        print("[Sahha] Background Coordinator stopped")
+        Sahha.log("[Sahha] Background Coordinator stopped")
     }
     
     func dispose() async {
@@ -47,7 +47,7 @@ actor BackgroundCoordinator: BackgroundCoordinatorProtocol, BackgroundTriggerDel
     }
     
     func triggerDidFire(source: String, fallbackData: [DataLog]?) async {
-        print("[Sahha] Background trigger fired: \(source)")
+        Sahha.log("[Sahha] Background trigger fired: \(source)")
         
         // Check for protected data availability
         let isProtected = await MainActor.run {
@@ -55,14 +55,14 @@ actor BackgroundCoordinator: BackgroundCoordinatorProtocol, BackgroundTriggerDel
         }
         
         if isProtected {
-            print("[Sahha] Device is locked. Attempting fetch anyway.")
+            Sahha.log("[Sahha] Device is locked. Attempting fetch anyway.")
         }
         
         let result = await healthKitManager.querySensors()
         
         // Fallback Logic - only if HealthKit yields NO logs
         if isProtected, result.totalLogs == 0, let fallbackData, !fallbackData.isEmpty {
-             print("[Sahha] Using fallback Motion data (\(fallbackData.count) logs) as HK failed/empty.")
+             Sahha.log("[Sahha] Using fallback Motion data (\(fallbackData.count) logs) as HK failed/empty.")
              await dataLogPipeline.ingest(fallbackData)
         }
     }

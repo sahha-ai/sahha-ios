@@ -47,7 +47,6 @@ final class HealthKitSahhaSampleCoordinator: HealthKitSahhaSampleCoordinatorProt
 
             return samples.flatMap(normaliser.normalise)
         } catch {
-            logger.postError(error)
             throw error
         }
 

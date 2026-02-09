@@ -1,21 +1,18 @@
-import HealthKit
+import Foundation
 
 final class ErrorLogger: ErrorLoggerProtocol {
     private let errorLoggingService: ErrorLoggingServiceProtocol
     private let deviceInfoBuilder: DeviceInfoBuilderProtocol
     private let circuitBreaker: CircuitBreaker?
-    private let environment: SahhaEnvironment
 
     init(
         errorLoggingService: ErrorLoggingServiceProtocol,
         deviceInfoBuilder: DeviceInfoBuilderProtocol,
-        circuitBreaker: CircuitBreaker? = nil,
-        environment: SahhaEnvironment
+        circuitBreaker: CircuitBreaker? = nil
     ) {
         self.errorLoggingService = errorLoggingService
         self.deviceInfoBuilder = deviceInfoBuilder
         self.circuitBreaker = circuitBreaker
-        self.environment = environment
     }
 
     func postError(_ error: any Error, file: StaticString, function: StaticString, line: UInt) {
@@ -28,9 +25,7 @@ final class ErrorLogger: ErrorLoggerProtocol {
             if let circuitBreaker = self.circuitBreaker {
                 let isHealthy = await circuitBreaker.isHealthy()
                 if !isHealthy {
-                    #if DEBUG
-                        print("[\(SDK.name)] - ERROR: Skipping error log - circuit breaker is open")
-                    #endif
+                    Sahha.log("[\(SDK.name)] - ERROR: Skipping error log - circuit breaker is open")
                     return
                 }
             }
@@ -47,50 +42,33 @@ final class ErrorLogger: ErrorLoggerProtocol {
             do {
                 try await self.errorLoggingService.postError(errorLog)
             } catch {
-                #if DEBUG
-                    print("[\(SDK.name)] - ERROR: Failed to post error log: \(error)")
-                #endif
+                Sahha.log("[\(SDK.name)] - ERROR: Failed to post error log: \(error)")
             }
 
         }
     }
 
     private func shouldPostError(_ error: Error) -> Bool {
-        // In sandbox/development, send ALL errors for debugging visibility
-        let isDebugEnvironment = environment == .sandbox || environment == .development
-        
+        // Skip cancellation errors - these are expected during task cancellation
         if error is CancellationError {
             return false
         }
         
+        // Skip "Protected health data is inaccessible" - expected when device is locked
+        let desc = error.localizedDescription
+        if desc.localizedCaseInsensitiveContains("protected health data") {
+            return false
+        }
+        
+        // Unwrap SahhaError to check underlying error
         if let sahhaError = error as? SahhaError {
             if let underlying = sahhaError.error {
                 return shouldPostError(underlying)
             }
-            // Send SahhaErrors in debug environments for visibility
-            return isDebugEnvironment
+            return true
         }
 
-        // HealthKit-specific error filtering
-        let nsError = error as NSError
-        if nsError.domain == HKErrorDomain {
-            switch HKError.Code(rawValue: nsError.code) {
-            case .errorAuthorizationDenied,
-                .errorAuthorizationNotDetermined,
-                .errorDatabaseInaccessible,
-                .errorHealthDataRestricted,
-                .errorHealthDataUnavailable,
-                .errorNoData,
-                .errorUserCanceled:
-                // In production: filter out common user-expected errors
-                // In sandbox/development: send all for debugging
-                return isDebugEnvironment
-            default:
-                return true  // Unexpected HealthKit error - always send
-            }
-        }
-
-        // Default: send all other errors
+        // Send all errors to server for visibility across all environments
         return true
     }
 

@@ -28,7 +28,7 @@ actor SahhaActor {
             await StorageDI.registerDependencies(container: container)
             await DeviceInfoDI.registerDependencies(container: container, settings: settings)
             await NetworkingDI.registerDependencies(container: container, settings: settings)
-            await LoggingDI.registerDependencies(container: container, settings: settings)
+            await LoggingDI.registerDependencies(container: container)
             await SensorDI.registerDependencies(container: container)
             await AuthDI.registerDependencies(container: container)
             await DataLogDI.registerDependencies(container: container)
@@ -93,10 +93,16 @@ actor SahhaActor {
             let deviceInfoSyncListener = try await container.resolve(DeviceInfoSyncLifecycleListener.self)
             let postInsightsListener = try await container.resolve(PostInsightsLifecycleListener.self)
             let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
+            let dataLogRetryListener = try await container.resolve(DataLogRetryLifecycleListener.self)
 
             await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
             await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
             await deviceLogListener.setAuthenticated(true)
+            
+            // Retry pending uploads on resume, foreground, and unlock events.
+            // This ensures data queued during background delivery (but not uploaded
+            // before suspension) gets sent when the app next wakes.
+            await lifecycleObserver.registerListener(dataLogRetryListener, for: [.app_resume, .app_foreground, .app_unlocked])
         } catch {
             await log(error: error, message: "setupLifecycleListeners failed")
         }
@@ -185,7 +191,7 @@ actor SahhaActor {
         if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
             logger.postError(error)
         } else {
-            print("\(message): \(error)")
+            Sahha.log("\(message): \(error)")
         }
     }
     
@@ -194,7 +200,7 @@ actor SahhaActor {
         if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
             logger.postError(error)
         } else {
-            print("[Sahha] Error (logger unavailable): \(error)")
+            Sahha.log("[Sahha] Error (logger unavailable): \(error)")
         }
     }
 
@@ -245,9 +251,9 @@ actor SahhaActor {
         )
         do {
             try await apiClient.send(request)
-            print("[Sahha] Error log sent successfully")
+            Sahha.log("[Sahha] Error log sent successfully")
         } catch {
-            print("[Sahha] Failed to send error log: \(error.localizedDescription)")
+            Sahha.log("[Sahha] Failed to send error log: \(error.localizedDescription)")
         }
     }
 }

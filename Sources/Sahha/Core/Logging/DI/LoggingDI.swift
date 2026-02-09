@@ -1,5 +1,5 @@
 enum LoggingDI {
-    static func registerDependencies(container: DIContainer, settings: SahhaSettings) async {
+    static func registerDependencies(container: DIContainer) async {
         await container.register(ErrorLoggingServiceProtocol.self) { container in
             ErrorLoggingService(
                 apiClient: try await container.resolve(APIClientProtocol.self)
@@ -9,8 +9,7 @@ enum LoggingDI {
             ErrorLogger(
                 errorLoggingService: try await container.resolve(ErrorLoggingServiceProtocol.self),
                 deviceInfoBuilder: try await container.resolve(DeviceInfoBuilderProtocol.self),
-                circuitBreaker: try? await container.resolve(CircuitBreaker.self),
-                environment: settings.environment
+                circuitBreaker: try? await container.resolve(CircuitBreaker.self)
             )
         }
     }
