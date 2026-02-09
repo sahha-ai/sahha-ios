@@ -25,9 +25,7 @@ final class ErrorLogger: ErrorLoggerProtocol {
             if let circuitBreaker = self.circuitBreaker {
                 let isHealthy = await circuitBreaker.isHealthy()
                 if !isHealthy {
-                    #if DEBUG
-                        print("[\(SDK.name)] - ERROR: Skipping error log - circuit breaker is open")
-                    #endif
+                    Sahha.log("[\(SDK.name)] - ERROR: Skipping error log - circuit breaker is open")
                     return
                 }
             }
@@ -44,9 +42,7 @@ final class ErrorLogger: ErrorLoggerProtocol {
             do {
                 try await self.errorLoggingService.postError(errorLog)
             } catch {
-                #if DEBUG
-                    print("[\(SDK.name)] - ERROR: Failed to post error log: \(error)")
-                #endif
+                Sahha.log("[\(SDK.name)] - ERROR: Failed to post error log: \(error)")
             }
 
         }
@@ -55,6 +51,12 @@ final class ErrorLogger: ErrorLoggerProtocol {
     private func shouldPostError(_ error: Error) -> Bool {
         // Skip cancellation errors - these are expected during task cancellation
         if error is CancellationError {
+            return false
+        }
+        
+        // Skip "Protected health data is inaccessible" - expected when device is locked
+        let desc = error.localizedDescription
+        if desc.localizedCaseInsensitiveContains("protected health data") {
             return false
         }
         

@@ -29,7 +29,7 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol {
             let value = CachedDeviceInfo(hash: hash, lastSync: Date())
             try storage.setObject(value, forKey: key)
         } catch {
-            logger.postError(error)
+            // Non-critical: silent failure
         }
     }
 
@@ -42,7 +42,7 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol {
             
             return cached.hash != newHash || cacheExpired
         } catch {
-            logger.postError(error)
+            // Non-critical: silent failure
             return true
         }
     }
