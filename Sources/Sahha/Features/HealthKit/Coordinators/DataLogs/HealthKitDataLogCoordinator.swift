@@ -189,11 +189,6 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                             anchor = newAnchor
                             anchorUpdated = true
                         } catch {
-                            let anchorError = NSError(
-                                domain: "HealthKitDataLogCoordinator",
-                                code: -1,
-                                userInfo: [NSLocalizedDescriptionKey: "Failed to save anchor for \(sensor.rawValue): \(error.localizedDescription)"]
-                            )
                             // Non-critical: silent failure
                         }
                     }
@@ -201,7 +196,6 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
             } catch {
                 status = .failed
                 errorDescription = error.localizedDescription
-                // Non-critical: silent failure
             }
 
             if status == .success {

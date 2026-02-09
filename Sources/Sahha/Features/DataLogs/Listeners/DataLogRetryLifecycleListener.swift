@@ -4,7 +4,7 @@
 /// and ingested but the upload may not complete before iOS suspends the app.
 /// This listener re-triggers the upload loop on app resume and unlock events,
 /// ensuring persisted batches are retried.
-final class DataLogRetryLifecycleListener: LifecycleListener {
+final class DataLogRetryLifecycleListener: LifecycleListener, @unchecked Sendable {
     private let uploader: DataLogUploaderProtocol
 
     init(uploader: DataLogUploaderProtocol) {
