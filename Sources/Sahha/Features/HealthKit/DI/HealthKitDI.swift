@@ -60,7 +60,7 @@ enum HealthKitDI {
             FallbackHKSampleToDataLogNormaliser()
         }
         await container.register(HKSampleToSahhaSampleNormaliserProtocol.self) { _ in
-            FallbackHKSampleToSahhaSampleNormaliser()
+            HKSampleToSahhaSampleNormaliserRegistry()
         }
         await container.register(FallbackHKSampleToSahhaSampleNormaliser.self) { _ in
             FallbackHKSampleToSahhaSampleNormaliser()

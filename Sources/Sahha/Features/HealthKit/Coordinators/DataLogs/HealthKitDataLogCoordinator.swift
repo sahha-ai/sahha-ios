@@ -189,7 +189,7 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                             anchor = newAnchor
                             anchorUpdated = true
                         } catch {
-                            // Non-critical: silent failure
+                            
                         }
                     }
                 }
