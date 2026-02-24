@@ -42,7 +42,6 @@ final class HealthKitManager: HealthKitManagerProtocol {
             // Overwrite store with newly enabled sensors
             try await sensorStore.setSensors(sensors)
         } catch {
-            // Non-critical: silent failure
         }
     
         // Request permissions and start data collection
@@ -55,7 +54,6 @@ final class HealthKitManager: HealthKitManagerProtocol {
             let sensors = try await sensorStore.getSensors()
             try await dataLogCoordinator.startDataLogCollection(for: sensors)
         } catch {
-            // Non-critical: silent failure
         }
     }
     
@@ -65,7 +63,6 @@ final class HealthKitManager: HealthKitManagerProtocol {
             let results = await dataLogCoordinator.querySensors(sensors)
             return PostSensorDataResult(sensorResults: results)
         } catch {
-            // Non-critical: silent failure
             return PostSensorDataResult(sensorResults: [], errorDescription: error.localizedDescription)
         }
     }
@@ -97,7 +94,6 @@ final class HealthKitManager: HealthKitManagerProtocol {
                 default: break
                 }
             } catch {
-                // Non-critical: silent failure
             }
         }
         if await sensorStore.hasSensor(.date_of_birth) {
@@ -106,7 +102,6 @@ final class HealthKitManager: HealthKitManagerProtocol {
                     demographic.birthDate = dateOfBirth.isoDate
                 }
             } catch {
-                // Non-critical: silent failure
             }
         }
         return demographic

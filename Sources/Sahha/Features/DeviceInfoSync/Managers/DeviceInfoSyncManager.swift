@@ -28,7 +28,6 @@ final class DeviceInfoSyncManager: DeviceInfoSyncManagerProtocol, Disposable {
                     await self.deviceInfoCache.cacheDeviceInfo(deviceInfo)
                 }
             } catch {
-                // Non-critical: silent failure
             }
         }
     }
@@ -40,7 +39,6 @@ final class DeviceInfoSyncManager: DeviceInfoSyncManagerProtocol, Disposable {
                 try await self.performSync(deviceInfo)
                 await self.deviceInfoCache.cacheDeviceInfo(deviceInfo)
             } catch {
-                // Non-critical: silent failure
             }
         }
     }

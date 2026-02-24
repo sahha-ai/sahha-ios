@@ -16,7 +16,6 @@ actor TokenStore: TokenStoreProtocol {
             self.cached = try self.storage.object(forKey: key)
             Sahha.authSnapshot.profileToken = cached?.profileToken
         } catch {
-            // Non-critical: silent failure
         }
     }
 
@@ -44,7 +43,6 @@ actor TokenStore: TokenStoreProtocol {
         do {
             try storage.removeObject(forKey: key)
         } catch {
-            // Non-critical: silent failure
         }
     }
 }
