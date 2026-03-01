@@ -54,6 +54,12 @@ extension SahhaSensor {
              .runny_nose, .sinus_congestion, .skipped_heartbeat, .sleep_changes,
              .sore_throat, .vaginal_dryness, .vomiting:
             return .reproductive
+
+        // MARK: - Umbrella
+        case .nutrition:
+            return .nutrition
+        case .reproductive:
+            return .reproductive
         }
     }
 }

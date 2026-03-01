@@ -75,6 +75,10 @@ extension SahhaSensor {
              .runny_nose, .sinus_congestion, .skipped_heartbeat, .sleep_changes,
              .sore_throat, .vaginal_dryness, .vomiting:
             "category"
+
+        // MARK: - Umbrella (not used for samples; expanded before query)
+        case .nutrition, .reproductive:
+            ""
         }
     }
 }

@@ -163,4 +163,23 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case sore_throat
     case vaginal_dryness
     case vomiting
+
+    // MARK: - Umbrella (blanket terms for permissions; expand to granular sensors internally)
+    case nutrition   // All dietary/nutrition HealthKit types
+    case reproductive // All reproductive health HealthKit types
+}
+
+extension SahhaSensor {
+    /// Replaces umbrella sensors (.nutrition, .reproductive) with all underlying granular sensors.
+    /// Use at API entry points so the app can pass [.nutrition] instead of 38+ individual types.
+    static func expanded(_ sensors: Set<SahhaSensor>) -> Set<SahhaSensor> {
+        var result = sensors
+        if result.remove(.nutrition) != nil {
+            result.formUnion(SahhaSensor.allCases.filter { $0 != .nutrition && $0.category == .nutrition })
+        }
+        if result.remove(.reproductive) != nil {
+            result.formUnion(SahhaSensor.allCases.filter { $0 != .reproductive && $0.category == .reproductive })
+        }
+        return result
+    }
 }

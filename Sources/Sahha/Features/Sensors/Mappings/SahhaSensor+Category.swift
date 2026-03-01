@@ -49,6 +49,12 @@ extension SahhaSensor {
              .runny_nose, .sinus_congestion, .skipped_heartbeat, .sleep_changes,
              .sore_throat, .vaginal_dryness, .vomiting:
             .reproductive
+
+        // MARK: - Umbrella (same category as their granular sensors)
+        case .nutrition:
+            .nutrition
+        case .reproductive:
+            .reproductive
         }
     }
 }

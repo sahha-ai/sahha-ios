@@ -31,7 +31,7 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     private func startObserver(for sensor: SahhaSensor, handler: @escaping HealthKitObserverHandler) async throws {
         if let sampleType = sensor.hkSampleType, try await permissions.hasPermissions(for: sensor) {
             let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { [weak self] _, completion, error in
-                if let error {
+                if error != nil {
                     completion()
                 } else {
                     // Check circuit breaker state before triggering query

@@ -128,6 +128,10 @@ extension SahhaSensor {
              .rapid_pounding_or_fluttering_heartbeat, .runny_nose, .sinus_congestion,
              .skipped_heartbeat, .sleep_changes, .sore_throat, .vaginal_dryness, .vomiting:
             return nil // Category types don't have units
+
+        // MARK: - Umbrella (no single unit; expanded before use)
+        case .nutrition, .reproductive:
+            return nil
         }
     }
 }

@@ -391,6 +391,10 @@ extension SahhaSensor {
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .vomiting)
             } else { return nil }
+
+        // MARK: - Umbrella (no single HK type; expanded to granular sensors before use)
+        case .nutrition, .reproductive:
+            return nil
         }
     }
 }
