@@ -31,22 +31,23 @@ final class HealthKitManager: HealthKitManagerProtocol {
     }
     
     func enableSensors(_ sensors: Set<SahhaSensor>) async throws {
+        let expanded = SahhaSensor.expanded(sensors)
         do {
             // Get exsiting sensors and overwrite storage
             let enabledSensors = try await sensorStore.getSensors()
             // Extract previously enabled sensors and stop data collection
-            let sensorsToStop = enabledSensors.subtracting(sensors)
+            let sensorsToStop = enabledSensors.subtracting(expanded)
             if !sensorsToStop.isEmpty {
                 try await dataLogCoordinator.stopDataLogCollection(for: sensorsToStop)
             }
-            // Overwrite store with newly enabled sensors
-            try await sensorStore.setSensors(sensors)
+            // Overwrite store with newly enabled sensors (granular list for observers/queries)
+            try await sensorStore.setSensors(expanded)
         } catch {
         }
     
-        // Request permissions and start data collection
-        try await permissions.requestPermissions(for: sensors)
-        try await dataLogCoordinator.startDataLogCollection(for: sensors)
+        // Request permissions and start data collection (one dialog for all nutrition/reproductive types)
+        try await permissions.requestPermissions(for: expanded)
+        try await dataLogCoordinator.startDataLogCollection(for: expanded)
     }
     
     func resumeSensors() async {
@@ -68,18 +69,52 @@ final class HealthKitManager: HealthKitManagerProtocol {
     }
 
     func getSensorStatus(_ sensors: Set<SahhaSensor>) async throws -> SahhaSensorStatus {
+        let expanded = SahhaSensor.expanded(sensors)
         guard HKHealthStore.isHealthDataAvailable() else { return .unavailable }
-        let status = try await permissions.getPermissionsStatus(for: sensors)
-        if case .unnecessary = status { return .enabled }
-        return .pending
+        let status = try await permissions.getPermissionsStatus(for: expanded)
+        guard case .unnecessary = status else { return .pending }
+        let enabledSensors: Set<SahhaSensor>
+        do {
+            enabledSensors = try await sensorStore.getSensors()
+        } catch {
+            return .pending
+        }
+        guard expanded.isSubset(of: enabledSensors) else { return .pending }
+        return .enabled
     }
 
     func getStats(for sensor: SahhaSensor, startDateTime: Date, endDateTime: Date) async throws -> [SahhaStat] {
-        try await statCoordinator.getStats(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
+        let sensors = SahhaSensor.expanded([sensor])
+        var allStats: [SahhaStat] = []
+        for sensor in sensors {
+            do {
+                let stats = try await statCoordinator.getStats(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
+                allStats.append(contentsOf: stats)
+            } catch {
+                // Individual sensor failures are non-critical; continue collecting from others
+            }
+        }
+        guard !allStats.isEmpty else {
+            throw SahhaError(message: "No stats were found for the given date range.")
+        }
+        return allStats
     }
 
     func getSamples(for sensor: SahhaSensor, startDateTime: Date, endDateTime: Date) async throws -> [SahhaSample] {
-        try await sampleCoordinator.getSamples(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
+        let sensors = SahhaSensor.expanded([sensor])
+        var allSamples: [SahhaSample] = []
+        for sensor in sensors {
+            do {
+                let samples = try await sampleCoordinator.getSamples(for: sensor, startDateTime: startDateTime, endDateTime: endDateTime)
+                allSamples.append(contentsOf: samples)
+            } catch {
+                // Individual sensor failures are non-critical; continue collecting from others
+            }
+        }
+        guard !allSamples.isEmpty else {
+            throw SahhaError(message: "No samples were found for the given date range.")
+        }
+        return allSamples
     }
 
     func getDemographic() async throws -> SahhaDemographic {
