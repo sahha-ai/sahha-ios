@@ -27,7 +27,6 @@ actor DemographicCache: DemographicCacheProtocol {
         do {
             self.cachedDemographic = try storage.object(forKey: key)
         } catch {
-            // Non-critical: silent failure
         }
     }
     
@@ -49,7 +48,6 @@ actor DemographicCache: DemographicCacheProtocol {
                 return nil
             }
         } catch {
-            // Non-critical: silent failure
             return nil
         }
     }
@@ -60,7 +58,6 @@ actor DemographicCache: DemographicCacheProtocol {
         do {
             try storage.setObject(value, forKey: key)
         } catch {
-            // Non-critical: silent failure
         }
     }
     
@@ -77,7 +74,6 @@ actor DemographicCache: DemographicCacheProtocol {
                 return true
             }
         } catch {
-            // Non-critical: silent failure
             return true
         }
     }
@@ -87,7 +83,6 @@ actor DemographicCache: DemographicCacheProtocol {
         do {
             try storage.removeObject(forKey: key)
         } catch {
-            // Non-critical: silent failure
         }
     }
 }

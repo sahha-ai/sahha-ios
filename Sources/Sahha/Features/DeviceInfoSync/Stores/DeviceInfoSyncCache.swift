@@ -29,7 +29,6 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol {
             let value = CachedDeviceInfo(hash: hash, lastSync: Date())
             try storage.setObject(value, forKey: key)
         } catch {
-            // Non-critical: silent failure
         }
     }
 
@@ -42,7 +41,6 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol {
             
             return cached.hash != newHash || cacheExpired
         } catch {
-            // Non-critical: silent failure
             return true
         }
     }

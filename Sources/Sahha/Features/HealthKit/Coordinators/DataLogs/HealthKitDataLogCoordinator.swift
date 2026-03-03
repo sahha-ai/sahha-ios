@@ -196,7 +196,6 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
             } catch {
                 status = .failed
                 errorDescription = error.localizedDescription
-                // Non-critical: silent failure
             }
 
             if status == .success {
