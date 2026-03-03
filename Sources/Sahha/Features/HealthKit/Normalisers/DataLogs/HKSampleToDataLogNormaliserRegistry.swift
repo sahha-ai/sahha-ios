@@ -17,11 +17,22 @@ final class HKSampleToDataLogNormaliserRegistry: HKSampleToDataLogNormaliserProt
         HKWorkoutTypeIdentifier: HKWorkoutToDataLogNormaliser()
     ]
 
-    private static let fallback = FallbackHKSampleToDataLogNormaliser()
+    private static let quantityFallback = FallbackHKSampleToDataLogNormaliser()
+    private static let categoryFallback = HKCategoryToDataLogNormaliser()
 
     func normalise(_ sample: HKSample) -> [DataLog] {
         let key = sample.sampleType.identifier
-        let normaliser = Self.normalisers[key] ?? Self.fallback
-        return normaliser.normalise(sample)
+        
+        // Check registered normalisers first
+        if let normaliser = Self.normalisers[key] {
+            return normaliser.normalise(sample)
+        }
+        
+        // Use appropriate fallback based on sample type
+        if sample is HKCategorySample {
+            return Self.categoryFallback.normalise(sample)
+        } else {
+            return Self.quantityFallback.normalise(sample)
+        }
     }
 }

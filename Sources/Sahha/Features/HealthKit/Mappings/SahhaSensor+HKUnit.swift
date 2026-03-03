@@ -82,6 +82,56 @@ extension SahhaSensor {
         // MARK: - Device
         case .device_lock:
             return nil
+            
+        // MARK: - Nutrition - Macronutrients (grams)
+        case .dietary_protein, .dietary_fat_total, .dietary_fat_saturated,
+             .dietary_fat_monounsaturated, .dietary_fat_polyunsaturated,
+             .dietary_carbohydrates, .dietary_sugar, .dietary_fiber:
+            return .gram()
+            
+        // MARK: - Nutrition - Cholesterol (milligrams)
+        case .dietary_cholesterol:
+            return .gramUnit(with: .milli)
+            
+        // MARK: - Nutrition - Vitamins (mixed units)
+        case .dietary_vitamin_a, .dietary_vitamin_d, .dietary_vitamin_k,
+             .dietary_vitamin_b12, .dietary_folate, .dietary_biotin:
+            return .gramUnit(with: .micro) // micrograms
+        case .dietary_vitamin_e, .dietary_vitamin_c, .dietary_vitamin_b6,
+             .dietary_thiamin, .dietary_riboflavin, .dietary_niacin,
+             .dietary_pantothenic_acid:
+            return .gramUnit(with: .milli) // milligrams
+            
+        // MARK: - Nutrition - Minerals (mostly milligrams)
+        case .dietary_calcium, .dietary_iron, .dietary_magnesium,
+             .dietary_phosphorus, .dietary_potassium, .dietary_sodium,
+             .dietary_zinc, .dietary_chloride, .dietary_copper,
+             .dietary_manganese, .dietary_caffeine:
+            return .gramUnit(with: .milli)
+        case .dietary_chromium, .dietary_molybdenum, .dietary_selenium, .dietary_iodine:
+            return .gramUnit(with: .micro) // micrograms
+            
+        // MARK: - Nutrition - Water (liters)
+        case .dietary_water:
+            return .liter()
+            
+        // MARK: - Reproductive Health (Category types - no units)
+        case .menstrual_flow, .intermenstrual_bleeding, .infrequent_menstrual_cycles,
+             .irregular_menstrual_cycles, .persistent_intermenstrual_bleeding,
+             .prolonged_menstrual_periods, .ovulation_test_result, .cervical_mucus_quality,
+             .sexual_activity, .contraceptive, .pregnancy, .pregnancy_test_result,
+             .progesterone_test_result, .lactation, .abdominal_cramps, .acne,
+             .appetite_changes, .bladder_incontinence, .bloating, .breast_pain,
+             .chills, .constipation, .diarrhea, .dizziness, .dry_skin, .fatigue,
+             .hair_loss, .headache, .hot_flashes, .lower_back_pain, .memory_lapse,
+             .mood_changes, .nausea, .night_sweats, .pelvic_pain,
+             .rapid_pounding_or_fluttering_heartbeat, .runny_nose, .sinus_congestion,
+             .skipped_heartbeat, .sleep_changes, .sore_throat, .vaginal_dryness, .vomiting:
+            return nil // Category types don't have units
+
+        // MARK: - Umbrella (no single unit; expanded before use)
+        case .nutrition, .reproductive:
+            return nil
         }
     }
 }

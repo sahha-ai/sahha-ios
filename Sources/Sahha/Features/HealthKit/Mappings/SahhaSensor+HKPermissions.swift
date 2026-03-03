@@ -8,6 +8,10 @@ extension SahhaSensor {
             let diastolic = HKQuantityType.quantityType(forIdentifier: .bloodPressureDiastolic)
             let systolic  = HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic)
             return Set([diastolic, systolic].compactMap { $0 })
+        case .nutrition:
+            return Set(SahhaSensor.allCases.filter { $0 != .nutrition && $0.category == .nutrition }.flatMap(\.hkPermissions))
+        case .reproductive:
+            return Set(SahhaSensor.allCases.filter { $0 != .reproductive && $0.category == .reproductive }.flatMap(\.hkPermissions))
         default:
             if let primary = self.hkObjectType {
                 return [primary]

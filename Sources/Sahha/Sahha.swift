@@ -16,7 +16,8 @@ public class Sahha {
     static let authSnapshot = AuthSnapshot()
 
     /// Controls whether internal SDK logs are logged. Off by default.
-    nonisolated(unsafe) public static var debugLogging = false
+    nonisolated(unsafe) static var debugLogging = false
+
 
     static func log(_ message: @autoclosure () -> String) {
         guard debugLogging else { return }

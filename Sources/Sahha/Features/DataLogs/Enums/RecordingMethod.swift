@@ -5,9 +5,9 @@ enum RecordingMethod: Int, Codable, Sendable {
 
     var stringValue: String {
         switch self {
-        case .unknown: return "RECORDING_METHOD_UNKNOWN"
-        case .manual: return "RECORDING_METHOD_MANUAL"
-        case .automatic: return "RECORDING_METHOD_AUTOMATICALLY_RECORDED"
+        case .unknown: return "unknown"
+        case .manual: return "manual_entry"
+        case .automatic: return "automatically_recorded"
         }
     }
 }
