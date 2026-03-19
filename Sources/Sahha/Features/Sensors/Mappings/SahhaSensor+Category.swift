@@ -24,16 +24,16 @@ extension SahhaSensor {
             .exercise
             
         // MARK: - Nutrition (38 types)
-        case .energy_consumed, .dietary_protein, .dietary_fat_total, .dietary_fat_saturated,
-             .dietary_fat_monounsaturated, .dietary_fat_polyunsaturated, .dietary_cholesterol,
-             .dietary_carbohydrates, .dietary_sugar, .dietary_fiber, .dietary_vitamin_a,
-             .dietary_vitamin_d, .dietary_vitamin_e, .dietary_vitamin_k, .dietary_vitamin_c,
-             .dietary_vitamin_b6, .dietary_vitamin_b12, .dietary_thiamin, .dietary_riboflavin,
-             .dietary_niacin, .dietary_pantothenic_acid, .dietary_folate, .dietary_biotin,
-             .dietary_calcium, .dietary_iron, .dietary_magnesium, .dietary_phosphorus,
-             .dietary_potassium, .dietary_sodium, .dietary_zinc, .dietary_chloride,
-             .dietary_copper, .dietary_manganese, .dietary_chromium, .dietary_molybdenum,
-             .dietary_selenium, .dietary_iodine, .dietary_caffeine, .dietary_water:
+        case .energy_consumed, .protein_intake, .fat_intake, .fat_saturated_intake,
+             .fat_monounsaturated_intake, .fat_polyunsaturated_intake, .cholesterol_intake,
+             .carbohydrate_intake, .sugar_intake, .fiber_intake, .vitamin_a_intake,
+             .vitamin_d_intake, .vitamin_e_intake, .vitamin_k_intake, .vitamin_c_intake,
+             .vitamin_b6_intake, .vitamin_b12_intake, .vitamin_b1_intake, .vitamin_b2_intake,
+             .vitamin_b3_intake, .vitamin_b5_intake, .viatmin_b9_intake, .vitamin_b7_intake,
+             .calcium_intake, .iron_intake, .magnesium_intake, .phosphorus_intake,
+             .potassium_intake, .sodium_intake, .zinc_intake, .chloride_intake,
+             .copper_intake, .manganese_intake, .chromium_intake, .molybdenum_intake,
+             .selenium_intake, .iodine_intake, .caffeine_intake, .water_intake:
             .nutrition
             
         // MARK: - Reproductive Health (43 types)

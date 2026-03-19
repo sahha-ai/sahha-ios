@@ -84,35 +84,35 @@ extension SahhaSensor {
             return nil
             
         // MARK: - Nutrition - Macronutrients (grams)
-        case .dietary_protein, .dietary_fat_total, .dietary_fat_saturated,
-             .dietary_fat_monounsaturated, .dietary_fat_polyunsaturated,
-             .dietary_carbohydrates, .dietary_sugar, .dietary_fiber:
+        case .protein_intake, .fat_intake, .fat_saturated_intake,
+             .fat_monounsaturated_intake, .fat_polyunsaturated_intake,
+             .carbohydrate_intake, .sugar_intake, .fiber_intake:
             return .gram()
             
         // MARK: - Nutrition - Cholesterol (milligrams)
-        case .dietary_cholesterol:
+        case .cholesterol_intake:
             return .gramUnit(with: .milli)
             
         // MARK: - Nutrition - Vitamins (mixed units)
-        case .dietary_vitamin_a, .dietary_vitamin_d, .dietary_vitamin_k,
-             .dietary_vitamin_b12, .dietary_folate, .dietary_biotin:
+        case .vitamin_a_intake, .vitamin_d_intake, .vitamin_k_intake,
+             .vitamin_b12_intake, .viatmin_b9_intake, .vitamin_b7_intake:
             return .gramUnit(with: .micro) // micrograms
-        case .dietary_vitamin_e, .dietary_vitamin_c, .dietary_vitamin_b6,
-             .dietary_thiamin, .dietary_riboflavin, .dietary_niacin,
-             .dietary_pantothenic_acid:
+        case .vitamin_e_intake, .vitamin_c_intake, .vitamin_b6_intake,
+             .vitamin_b1_intake, .vitamin_b2_intake, .vitamin_b3_intake,
+             .vitamin_b5_intake:
             return .gramUnit(with: .milli) // milligrams
             
         // MARK: - Nutrition - Minerals (mostly milligrams)
-        case .dietary_calcium, .dietary_iron, .dietary_magnesium,
-             .dietary_phosphorus, .dietary_potassium, .dietary_sodium,
-             .dietary_zinc, .dietary_chloride, .dietary_copper,
-             .dietary_manganese, .dietary_caffeine:
+        case .calcium_intake, .iron_intake, .magnesium_intake,
+             .phosphorus_intake, .potassium_intake, .sodium_intake,
+             .zinc_intake, .chloride_intake, .copper_intake,
+             .manganese_intake, .caffeine_intake:
             return .gramUnit(with: .milli)
-        case .dietary_chromium, .dietary_molybdenum, .dietary_selenium, .dietary_iodine:
+        case .chromium_intake, .molybdenum_intake, .selenium_intake, .iodine_intake:
             return .gramUnit(with: .micro) // micrograms
             
         // MARK: - Nutrition - Water (liters)
-        case .dietary_water:
+        case .water_intake:
             return .liter()
             
         // MARK: - Reproductive Health (Category types - no units)
