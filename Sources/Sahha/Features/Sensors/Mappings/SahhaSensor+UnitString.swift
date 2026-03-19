@@ -58,11 +58,11 @@ extension SahhaSensor {
              .chromium_intake, .molybdenum_intake, .selenium_intake, .iodine_intake:
             "mcg"
             
-        // MARK: - Nutrition - Liters
+        // MARK: - Hydration - Liters
         case .water_intake:
             "L"
             
-        // MARK: - Reproductive Health (Category values - no units, value is enum index)
+        // MARK: - Reproductive Health
         case .menstrual_flow, .intermenstrual_bleeding, .infrequent_menstrual_cycles,
              .irregular_menstrual_cycles, .persistent_intermenstrual_bleeding,
              .prolonged_menstrual_periods, .ovulation_test_result, .cervical_mucus_quality,
@@ -74,7 +74,7 @@ extension SahhaSensor {
              .nausea, .night_sweats, .pelvic_pain, .rapid_pounding_or_fluttering_heartbeat,
              .runny_nose, .sinus_congestion, .skipped_heartbeat, .sleep_changes,
              .sore_throat, .vaginal_dryness, .vomiting:
-            "category"
+            ""
 
         // MARK: - Umbrella (not used for samples; expanded before query)
         case .nutrition, .reproductive:
