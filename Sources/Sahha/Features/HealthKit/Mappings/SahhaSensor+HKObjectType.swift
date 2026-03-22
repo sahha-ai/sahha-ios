@@ -243,9 +243,9 @@ extension SahhaSensor {
             } else { return nil }
             
         // MARK: - Reproductive Health - Fertility
-        case .ovulation_test_result:
+        case .ovulation_test:
             return HKCategoryType.categoryType(forIdentifier: .ovulationTestResult)
-        case .cervical_mucus_quality:
+        case .cervical_mucus:
             return HKCategoryType.categoryType(forIdentifier: .cervicalMucusQuality)
             
         // MARK: - Reproductive Health - Sexual Activity
@@ -261,11 +261,11 @@ extension SahhaSensor {
             if #available(iOS 14.3, *) {
                 return HKCategoryType.categoryType(forIdentifier: .pregnancy)
             } else { return nil }
-        case .pregnancy_test_result:
+        case .pregnancy_test:
             if #available(iOS 15.0, *) {
                 return HKCategoryType.categoryType(forIdentifier: .pregnancyTestResult)
             } else { return nil }
-        case .progesterone_test_result:
+        case .progesterone_test:
             if #available(iOS 15.0, *) {
                 return HKCategoryType.categoryType(forIdentifier: .progesteroneTestResult)
             } else { return nil }

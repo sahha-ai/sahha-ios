@@ -120,8 +120,8 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case prolonged_menstrual_periods
     
     // MARK: - Reproductive Health - Fertility (2 types)
-    case ovulation_test_result
-    case cervical_mucus_quality
+    case ovulation_test
+    case cervical_mucus
     
     // MARK: - Reproductive Health - Sexual Activity (2 types)
     case sexual_activity
@@ -129,8 +129,8 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     
     // MARK: - Reproductive Health - Pregnancy (4 types)
     case pregnancy
-    case pregnancy_test_result
-    case progesterone_test_result
+    case pregnancy_test
+    case progesterone_test
     case lactation
     
     // MARK: - Reproductive Health - Symptoms (29 types)

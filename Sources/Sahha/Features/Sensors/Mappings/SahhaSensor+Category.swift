@@ -39,9 +39,9 @@ extension SahhaSensor {
         // MARK: - Reproductive Health (43 types)
         case .menstrual_flow, .intermenstrual_bleeding, .infrequent_menstrual_cycles,
              .irregular_menstrual_cycles, .persistent_intermenstrual_bleeding,
-             .prolonged_menstrual_periods, .ovulation_test_result, .cervical_mucus_quality,
-             .sexual_activity, .contraceptive, .pregnancy, .pregnancy_test_result,
-             .progesterone_test_result, .lactation, .abdominal_cramps, .acne,
+             .prolonged_menstrual_periods, .ovulation_test, .cervical_mucus,
+             .sexual_activity, .contraceptive, .pregnancy, .pregnancy_test,
+             .progesterone_test, .lactation, .abdominal_cramps, .acne,
              .appetite_changes, .bladder_incontinence, .bloating, .breast_pain, .chills,
              .constipation, .diarrhea, .dizziness, .dry_skin, .fatigue, .hair_loss,
              .headache, .hot_flashes, .lower_back_pain, .memory_lapse, .mood_changes,
