@@ -32,6 +32,7 @@ actor SahhaActor {
             await SensorDI.registerDependencies(container: container)
             await AuthDI.registerDependencies(container: container)
             await DataLogDI.registerDependencies(container: container)
+            await TagDI.registerDependencies(container: container)
             await HealthKitDI.registerDependencies(container: container)
             await BackgroundDI.registerDependencies(container: container, settings: settings)
             await ScoreDI.registerDependencies(container: container)
@@ -94,15 +95,17 @@ actor SahhaActor {
             let postInsightsListener = try await container.resolve(PostInsightsLifecycleListener.self)
             let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
             let dataLogRetryListener = try await container.resolve(DataLogRetryLifecycleListener.self)
+            let tagRetryListener = try await container.resolve(TagRetryLifecycleListener.self)
 
             await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
             await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
             await deviceLogListener.setAuthenticated(true)
-            
+
             // Retry pending uploads on resume, foreground, and unlock events.
             // This ensures data queued during background delivery (but not uploaded
             // before suspension) gets sent when the app next wakes.
             await lifecycleObserver.registerListener(dataLogRetryListener, for: [.app_resume, .app_foreground, .app_unlocked])
+            await lifecycleObserver.registerListener(tagRetryListener, for: [.app_resume, .app_foreground, .app_unlocked])
         } catch {
             await log(error: error, message: "setupLifecycleListeners failed")
         }
@@ -179,6 +182,10 @@ actor SahhaActor {
 
     func demographicManager() async throws -> DemographicManagerProtocol {
         try await resolve(DemographicManagerProtocol.self)
+    }
+
+    func tagPipeline() async throws -> TagPipelineProtocol {
+        try await resolve(TagPipelineProtocol.self)
     }
     
     func backgroundDelegate() async throws -> BackgroundSessionDelegate {

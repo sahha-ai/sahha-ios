@@ -6,5 +6,6 @@ enum APIEndpoints {
     static let score = "v1/profile/score"
     static let biomarker = "v1/profile/biomarker"
     static let dataLog = "v2/profile/data/log"
+    static let tags = "v1/profile/tags"
     static let error = "v1/error"
 }
