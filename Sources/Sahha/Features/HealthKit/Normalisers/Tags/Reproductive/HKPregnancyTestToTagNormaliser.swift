@@ -2,10 +2,10 @@ import HealthKit
 
 /// Normaliser for HKCategoryTypeIdentifier.pregnancyTestResult → Tag.
 ///
-/// value maps to the platform-agnostic PregnancyTestEnum ordinal (aligned with Android):
-///   0.0 = INCONCLUSIVE  (HK: indeterminate)
-///   1.0 = NEGATIVE
-///   2.0 = POSITIVE
+/// value maps to the platform-agnostic PregnancyTestEnum snake_case string (aligned with Android):
+///   "inconclusive"  (HK: indeterminate)
+///   "negative"
+///   "positive"
 final class HKPregnancyTestToTagNormaliser: HKSampleToTagNormaliserProtocol {
     func normalise(_ sample: HKSample) -> [Tag] {
         guard let sample = sample as? HKCategorySample,
@@ -20,7 +20,7 @@ final class HKPregnancyTestToTagNormaliser: HKSampleToTagNormaliserProtocol {
                 startDateTime: sample.startDate,
                 name: sensor.rawValue,
                 category: "reproductive",
-                value: String(value),
+                value: value,
                 source: sample.sourceId
             )
         ]

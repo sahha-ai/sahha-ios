@@ -2,83 +2,83 @@ import HealthKit
 
 // ─── Reproductive Enums ───────────────────────────────────────────────────────
 //
-// Ordinal values are shared across iOS (HealthKit) and Android (Health Connect)
+// String values are shared across iOS (HealthKit) and Android (Health Connect)
 // so that the normalised value is platform-agnostic.
 //
-// Do not reorder or remove entries — ordinals are part of the data contract.
+// Do not remove entries — values are part of the data contract.
 // Append new entries at the end of each enum only.
 
-enum OvulationTestEnum: Double {
-    case inconclusive = 0   // HC: RESULT_INCONCLUSIVE / HK: indeterminate
-    case negative     = 1   // HC: RESULT_NEGATIVE     / HK: negative
-    case high         = 2   // HC: RESULT_HIGH         / HK: estrogenSurge
-    case positive     = 3   // HC: RESULT_POSITIVE     / HK: luteinizingHormoneSurge
+enum OvulationTestEnum: String {
+    case inconclusive = "inconclusive"   // HC: RESULT_INCONCLUSIVE / HK: indeterminate
+    case negative     = "negative"       // HC: RESULT_NEGATIVE     / HK: negative
+    case high         = "high"           // HC: RESULT_HIGH         / HK: estrogenSurge
+    case positive     = "positive"       // HC: RESULT_POSITIVE     / HK: luteinizingHormoneSurge
 
-    var value: Double { rawValue }
+    var value: String { rawValue }
 }
 
-enum MenstrualFlowEnum: Double {
-    case unknown = 0    // HK: unspecified
-    case none    = 1    // HK: notPresent
-    case light   = 2
-    case medium  = 3
-    case heavy   = 4
+enum MenstrualFlowEnum: String {
+    case unknown = "unknown"    // HK: unspecified
+    case none    = "none"       // HK: notPresent
+    case light   = "light"
+    case medium  = "medium"
+    case heavy   = "heavy"
 
-    var value: Double { rawValue }
+    var value: String { rawValue }
 }
 
-enum CervicalMucusEnum: Double {
-    case unknown   = 0
-    case dry       = 1
-    case sticky    = 2
-    case creamy    = 3
-    case watery    = 4
-    case eggWhite  = 5
-    case unusual   = 6  // Android Health Connect only — no HealthKit equivalent
+enum CervicalMucusEnum: String {
+    case unknown   = "unknown"
+    case dry       = "dry"
+    case sticky    = "sticky"
+    case creamy    = "creamy"
+    case watery    = "watery"
+    case eggWhite  = "egg_white"
+    case unusual   = "unusual"  // Android Health Connect only — no HealthKit equivalent
 
-    var value: Double { rawValue }
+    var value: String { rawValue }
 }
 
-enum SexualActivityEnum: Double {
-    case unknown     = 0
-    case protected_  = 1    // `protected` is a Swift keyword, so suffixed with _
-    case unprotected = 2
+enum SexualActivityEnum: String {
+    case unknown     = "unknown"
+    case protected_  = "protected"    // `protected` is a Swift keyword, so suffixed with _
+    case unprotected = "unprotected"
 
-    var value: Double { rawValue }
+    var value: String { rawValue }
 }
 
-enum PregnancyTestEnum: Double {
-    case inconclusive = 0   // HK: indeterminate
-    case negative     = 1
-    case positive     = 2
+enum PregnancyTestEnum: String {
+    case inconclusive = "inconclusive"   // HK: indeterminate
+    case negative     = "negative"
+    case positive     = "positive"
 
-    var value: Double { rawValue }
+    var value: String { rawValue }
 }
 
-enum ProgesteroneTestEnum: Double {
-    case inconclusive = 0
-    case negative     = 1
-    case positive     = 2
+enum ProgesteroneTestEnum: String {
+    case inconclusive = "inconclusive"
+    case negative     = "negative"
+    case positive     = "positive"
 
-    var value: Double { rawValue }
+    var value: String { rawValue }
 }
 
-enum ContraceptiveEnum: Double {
-    case unknown          = 0
-    case implant          = 1
-    case injection        = 2
-    case intravaginalRing = 3
-    case iud              = 4
-    case oral             = 5
-    case patch            = 6
+enum ContraceptiveEnum: String {
+    case unknown          = "unknown"
+    case implant          = "implant"
+    case injection        = "injection"
+    case intravaginalRing = "intravaginal_ring"
+    case iud              = "iud"
+    case oral             = "oral"
+    case patch            = "patch"
 
-    var value: Double { rawValue }
+    var value: String { rawValue }
 }
 
 // ─── HealthKit → Platform-Agnostic Mappings ──────────────────────────────────
 
 extension HKCategoryValueMenstrualFlow {
-    var menstrualFlowValue: Double {
+    var menstrualFlowValue: String {
         switch rawValue {
         case 1: return MenstrualFlowEnum.unknown.value    // unspecified
         case 5: return MenstrualFlowEnum.none.value       // none (flow explicitly absent)
@@ -91,7 +91,7 @@ extension HKCategoryValueMenstrualFlow {
 }
 
 extension HKCategoryValueOvulationTestResult {
-    var ovulationTestValue: Double {
+    var ovulationTestValue: String {
         switch self {
         case .indeterminate:           return OvulationTestEnum.inconclusive.value
         case .negative:                return OvulationTestEnum.negative.value
@@ -103,7 +103,7 @@ extension HKCategoryValueOvulationTestResult {
 }
 
 extension HKCategoryValueCervicalMucusQuality {
-    var cervicalMucusValue: Double {
+    var cervicalMucusValue: String {
         switch self {
         case .dry:            return CervicalMucusEnum.dry.value
         case .sticky:         return CervicalMucusEnum.sticky.value
@@ -116,7 +116,7 @@ extension HKCategoryValueCervicalMucusQuality {
 }
 
 extension HKCategoryValuePregnancyTestResult {
-    var pregnancyTestValue: Double {
+    var pregnancyTestValue: String {
         switch self {
         case .indeterminate: return PregnancyTestEnum.inconclusive.value
         case .negative:      return PregnancyTestEnum.negative.value
@@ -125,3 +125,4 @@ extension HKCategoryValuePregnancyTestResult {
         }
     }
 }
+

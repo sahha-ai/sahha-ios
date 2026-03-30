@@ -36,25 +36,30 @@ extension SahhaSensor {
              .selenium_intake, .iodine_intake, .caffeine_intake, .water_intake:
             .nutrition
             
-        // MARK: - Reproductive Health (43 types)
+        // MARK: - Reproductive Health (14 types)
         case .menstrual_flow, .intermenstrual_bleeding, .infrequent_menstrual_cycles,
              .irregular_menstrual_cycles, .persistent_intermenstrual_bleeding,
              .prolonged_menstrual_periods, .ovulation_test, .cervical_mucus,
              .sexual_activity, .contraceptive, .pregnancy, .pregnancy_test,
-             .progesterone_test, .lactation, .abdominal_cramps, .acne,
-             .appetite_changes, .bladder_incontinence, .bloating, .breast_pain, .chills,
-             .constipation, .diarrhea, .dizziness, .dry_skin, .fatigue, .hair_loss,
-             .headache, .hot_flashes, .lower_back_pain, .memory_lapse, .mood_changes,
-             .nausea, .night_sweats, .pelvic_pain, .rapid_pounding_or_fluttering_heartbeat,
-             .runny_nose, .sinus_congestion, .skipped_heartbeat, .sleep_changes,
-             .sore_throat, .vaginal_dryness, .vomiting:
+             .progesterone_test, .lactation:
             .reproductive
+
+        // MARK: - Symptoms (29 types)
+        case .abdominal_cramps, .acne, .appetite_changes, .bladder_incontinence,
+             .bloating, .breast_pain, .chills, .constipation, .diarrhea, .dizziness,
+             .dry_skin, .fatigue, .hair_loss, .headache, .hot_flashes, .lower_back_pain,
+             .memory_lapse, .mood_changes, .nausea, .night_sweats, .pelvic_pain,
+             .rapid_pounding_or_fluttering_heartbeat, .runny_nose, .sinus_congestion,
+             .skipped_heartbeat, .sleep_changes, .sore_throat, .vaginal_dryness, .vomiting:
+            .symptom
 
         // MARK: - Umbrella (same category as their granular sensors)
         case .nutrition:
             .nutrition
         case .reproductive:
             .reproductive
+        case .symptom:
+            .symptom
         }
     }
 }

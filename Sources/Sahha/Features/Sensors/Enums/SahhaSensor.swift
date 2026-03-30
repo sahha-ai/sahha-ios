@@ -133,7 +133,7 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case progesterone_test
     case lactation
     
-    // MARK: - Reproductive Health - Symptoms (29 types)
+    // MARK: - Symptoms (29 types)
     case abdominal_cramps
     case acne
     case appetite_changes
@@ -167,6 +167,7 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     // MARK: - Umbrella (blanket terms for permissions; expand to granular sensors internally)
     case nutrition   // All dietary/nutrition HealthKit types
     case reproductive // All reproductive health HealthKit types
+    case symptom     // All symptom HealthKit types
 }
 
 extension SahhaSensor {
@@ -179,6 +180,9 @@ extension SahhaSensor {
         }
         if result.remove(.reproductive) != nil {
             result.formUnion(SahhaSensor.allCases.filter { $0 != .reproductive && $0.category == .reproductive })
+        }
+        if result.remove(.symptom) != nil {
+            result.formUnion(SahhaSensor.allCases.filter { $0 != .symptom && $0.category == .symptom })
         }
         return result
     }

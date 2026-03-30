@@ -8,4 +8,5 @@ public enum SahhaBiomarkerCategory: String, Sendable {
     case exercise
     case device
     case nutrition
+    case symptom
 }

@@ -12,6 +12,7 @@ enum DataLogType: Int, Codable {
     case exercise
     case nutrition
     case reproductive
+    case symptom
 
     var stringValue: String { String(describing: self) }
 }

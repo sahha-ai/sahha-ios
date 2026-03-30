@@ -2,12 +2,12 @@ import HealthKit
 
 /// Normaliser for HKCategoryTypeIdentifier.menstrualFlow → Tag.
 ///
-/// value maps to the platform-agnostic MenstrualFlowEnum ordinal (aligned with Android):
-///   0.0 = UNKNOWN    (HK: unspecified)
-///   1.0 = NONE       (HK: notPresent — flow explicitly recorded as absent)
-///   2.0 = LIGHT
-///   3.0 = MEDIUM
-///   4.0 = HEAVY
+/// value maps to the platform-agnostic MenstrualFlowEnum snake_case string (aligned with Android):
+///   "unknown"  (HK: unspecified)
+///   "none"     (HK: notPresent — flow explicitly recorded as absent)
+///   "light"
+///   "medium"
+///   "heavy"
 ///
 /// additionalProperties["cycle_start"] — true if this sample marks the
 /// start of a new menstrual cycle (HKMetadataKeyMenstrualCycleStart).
@@ -32,7 +32,7 @@ final class HKMenstrualFlowToTagNormaliser: HKSampleToTagNormaliserProtocol {
                 startDateTime: sample.startDate,
                 name: sensor.rawValue,
                 category: "reproductive",
-                value: String(value),
+                value: value,
                 source: sample.sourceId,
                 additionalProperties: additionalProperties
             )

@@ -11,7 +11,7 @@ import HealthKit
 ///
 /// These types use HKCategoryValue.notApplicable as their only value — the presence
 /// of a sample records that the condition was observed during the sample's time window.
-/// value is always "1.0" to indicate presence (consistent with Android's event-marker pattern).
+/// value is nil since the tag's presence alone is sufficient.
 ///
 /// pregnancy and lactation use `.state` type (preserving endDate for duration),
 /// all others use `.event`.
@@ -36,7 +36,7 @@ final class HKReproductiveFlagToTagNormaliser: HKSampleToTagNormaliserProtocol {
                 endDateTime: isState ? sample.endDate : nil,
                 name: sensor.rawValue,
                 category: "reproductive",
-                value: String(1.0),
+                value: nil,
                 source: sample.sourceId
             )
         ]

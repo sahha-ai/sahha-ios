@@ -130,7 +130,7 @@ extension SahhaSensor {
             return nil // Category types don't have units
 
         // MARK: - Umbrella (no single unit; expanded before use)
-        case .nutrition, .reproductive:
+        case .nutrition, .reproductive, .symptom:
             return nil
         }
     }

@@ -77,7 +77,7 @@ extension SahhaSensor {
             ""
 
         // MARK: - Umbrella (not used for samples; expanded before query)
-        case .nutrition, .reproductive:
+        case .nutrition, .reproductive, .symptom:
             ""
         }
     }

@@ -393,7 +393,7 @@ extension SahhaSensor {
             } else { return nil }
 
         // MARK: - Umbrella (no single HK type; expanded to granular sensors before use)
-        case .nutrition, .reproductive:
+        case .nutrition, .reproductive, .symptom:
             return nil
         }
     }

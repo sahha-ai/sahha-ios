@@ -1,13 +1,13 @@
 import HealthKit
 
-/// Normaliser for all 29 reproductive health symptom category types → Tag.
+/// Normaliser for all 29 health symptom category types → Tag.
 ///
-/// value is the raw HKCategoryValueSeverity ordinal — symptoms carry meaningful severity:
-///   0 = unspecified
-///   1 = notPresent
-///   2 = mild
-///   3 = moderate
-///   4 = severe
+/// value is the HKCategoryValueSeverity mapped to a snake_case string:
+///   "unspecified"
+///   "not_present"
+///   "mild"
+///   "moderate"
+///   "severe"
 ///
 /// Covered sensors:
 ///   abdominal_cramps, acne, appetite_changes, bladder_incontinence, bloating,
@@ -56,13 +56,17 @@ final class HKReproductiveSymptomToTagNormaliser: HKSampleToTagNormaliserProtoco
               Self.SYMPTOM_SENSORS.contains(sensor)
         else { return [] }
 
+        let severity = HKCategoryValueSeverity(rawValue: sample.value)
+        let value = severity?.severityValue ?? SeverityEnum.unknown.value
+        let name = severity == .notPresent ? "no_\(sensor.rawValue)" : sensor.rawValue
+
         return [
             Tag(
                 type: .event,
                 startDateTime: sample.startDate,
-                name: sensor.rawValue,
-                category: "reproductive",
-                value: String(Double(sample.value)),
+                name: name,
+                category: "symptom",
+                value: value,
                 source: sample.sourceId
             )
         ]

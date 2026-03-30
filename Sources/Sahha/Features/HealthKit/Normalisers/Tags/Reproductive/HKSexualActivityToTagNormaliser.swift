@@ -8,11 +8,11 @@ import HealthKit
 ///
 /// Unified cross-platform value mapping (matches Android Health Connect):
 ///
-/// | Metadata value | Unified value | Meaning     |
-/// |----------------|---------------|-------------|
-/// | `nil` / absent |     0.0       | UNKNOWN     |
-/// | `true`         |     1.0       | PROTECTED   |
-/// | `false`        |     2.0       | UNPROTECTED |
+/// | Metadata value | Unified value   | Meaning     |
+/// |----------------|-----------------|-------------|
+/// | `nil` / absent | "unknown"       | UNKNOWN     |
+/// | `true`         | "protected"     | PROTECTED   |
+/// | `false`        | "unprotected"   | UNPROTECTED |
 final class HKSexualActivityToTagNormaliser: HKSampleToTagNormaliserProtocol {
     func normalise(_ sample: HKSample) -> [Tag] {
         guard let sample = sample as? HKCategorySample,
@@ -20,7 +20,7 @@ final class HKSexualActivityToTagNormaliser: HKSampleToTagNormaliserProtocol {
         else { return [] }
 
         let protectionUsed = sample.metadata?[HKMetadataKeySexualActivityProtectionUsed] as? Bool
-        let value: Double
+        let value: String
         switch protectionUsed {
         case true:  value = SexualActivityEnum.protected_.value
         case false: value = SexualActivityEnum.unprotected.value
@@ -33,7 +33,7 @@ final class HKSexualActivityToTagNormaliser: HKSampleToTagNormaliserProtocol {
                 startDateTime: sample.startDate,
                 name: sensor.rawValue,
                 category: "reproductive",
-                value: String(value),
+                value: value,
                 source: sample.sourceId
             )
         ]

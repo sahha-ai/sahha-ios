@@ -2,15 +2,15 @@ import HealthKit
 
 /// Normaliser for HKCategoryTypeIdentifier.cervicalMucusQuality → Tag.
 ///
-/// value maps to the platform-agnostic CervicalMucusEnum ordinal (aligned with Android):
-///   0.0 = UNKNOWN
-///   1.0 = DRY
-///   2.0 = STICKY
-///   3.0 = CREAMY
-///   4.0 = WATERY
-///   5.0 = EGG_WHITE
+/// value maps to the platform-agnostic CervicalMucusEnum snake_case string (aligned with Android):
+///   "unknown"
+///   "dry"
+///   "sticky"
+///   "creamy"
+///   "watery"
+///   "egg_white"
 ///
-/// Note: Android defines 6.0 = UNUSUAL (Health Connect only — no HealthKit equivalent).
+/// Note: Android defines "unusual" (Health Connect only — no HealthKit equivalent).
 final class HKCervicalMucusToTagNormaliser: HKSampleToTagNormaliserProtocol {
     func normalise(_ sample: HKSample) -> [Tag] {
         guard let sample = sample as? HKCategorySample,
@@ -25,7 +25,7 @@ final class HKCervicalMucusToTagNormaliser: HKSampleToTagNormaliserProtocol {
                 startDateTime: sample.startDate,
                 name: sensor.rawValue,
                 category: "reproductive",
-                value: String(value),
+                value: value,
                 source: sample.sourceId
             )
         ]
