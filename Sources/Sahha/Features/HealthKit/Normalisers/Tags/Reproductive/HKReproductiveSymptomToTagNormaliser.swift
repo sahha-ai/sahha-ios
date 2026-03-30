@@ -1,6 +1,6 @@
 import HealthKit
 
-/// Normaliser for all 29 reproductive health symptom category types.
+/// Normaliser for all 29 reproductive health symptom category types → Tag.
 ///
 /// value is the raw HKCategoryValueSeverity ordinal — symptoms carry meaningful severity:
 ///   0 = unspecified
@@ -9,8 +9,6 @@ import HealthKit
 ///   3 = moderate
 ///   4 = severe
 ///
-/// No Android equivalents yet — raw HK values preserved for future cross-platform mapping.
-///
 /// Covered sensors:
 ///   abdominal_cramps, acne, appetite_changes, bladder_incontinence, bloating,
 ///   breast_pain, chills, constipation, diarrhea, dizziness, dry_skin, fatigue,
@@ -18,7 +16,7 @@ import HealthKit
 ///   nausea, night_sweats, pelvic_pain, rapid_pounding_or_fluttering_heartbeat,
 ///   runny_nose, sinus_congestion, skipped_heartbeat, sleep_changes, sore_throat,
 ///   vaginal_dryness, vomiting
-final class HKReproductiveSymptomToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
+final class HKReproductiveSymptomToTagNormaliser: HKSampleToTagNormaliserProtocol {
 
     private static let SYMPTOM_SENSORS: Set<SahhaSensor> = [
         .abdominal_cramps,
@@ -52,23 +50,20 @@ final class HKReproductiveSymptomToDataLogNormaliser: HKSampleToDataLogNormalise
         .vomiting,
     ]
 
-    func normalise(_ sample: HKSample) -> [DataLog] {
+    func normalise(_ sample: HKSample) -> [Tag] {
         guard let sample = sample as? HKCategorySample,
               let sensor = sample.categoryType.sahhaSensor,
               Self.SYMPTOM_SENSORS.contains(sensor)
         else { return [] }
 
         return [
-            DataLog(
-                logType: sensor.dataLogType,
-                dataType: sensor.rawValue,
-                value: Double(sample.value),
-                unit: sensor.unitString,
-                source: sample.sourceId,
-                recordingMethod: sample.recordingMethod,
-                deviceType: sample.deviceType,
-                startDate: sample.startDate,
-                endDate: sample.endDate
+            Tag(
+                type: .event,
+                startDateTime: sample.startDate,
+                name: sensor.rawValue,
+                category: "reproductive",
+                value: String(Double(sample.value)),
+                source: sample.sourceId
             )
         ]
     }

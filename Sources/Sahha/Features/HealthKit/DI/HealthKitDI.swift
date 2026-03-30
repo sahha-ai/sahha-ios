@@ -65,6 +65,9 @@ enum HealthKitDI {
         await container.register(FallbackHKSampleToSahhaSampleNormaliser.self) { _ in
             FallbackHKSampleToSahhaSampleNormaliser()
         }
+        await container.register(HKSampleToTagNormaliserProtocol.self) { _ in
+            HKSampleToTagNormaliserRegistry()
+        }
     }
 
     // MARK: - Stores
@@ -105,6 +108,17 @@ enum HealthKitDI {
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
         }
+        await container.register(HealthKitTagCoordinatorProtocol.self) { container in
+            HealthKitTagCoordinator(
+                observerService: try await container.resolve(HealthKitObserverServiceProtocol.self),
+                anchorQueryService: try await container.resolve(HealthKitAnchorQueryServiceProtocol.self),
+                anchorStore: try await container.resolve(HealthKitAnchorStoreProtocol.self),
+                normaliser: try await container.resolve(HKSampleToTagNormaliserProtocol.self),
+                tagPipeline: try await container.resolve(TagPipelineProtocol.self),
+                circuitBreaker: try? await container.resolve(CircuitBreaker.self),
+                logger: try await container.resolve(ErrorLoggerProtocol.self)
+            )
+        }
         await container.register(HealthKitSahhaStatCoordinatorProtocol.self) { container in
             HealthKitSahhaStatCoordinator(
                 statsQueryService: try await container.resolve(HealthKitStatsQueryServiceProtocol.self),
@@ -136,6 +150,7 @@ enum HealthKitDI {
                 permissions: try await container.resolve(HealthKitPermissionsServiceProtocol.self),
                 sensorStore: try await container.resolve(SensorStoreProtocol.self),
                 dataLogCoordinator: try await container.resolve(HealthKitDataLogCoordinatorProtocol.self),
+                tagCoordinator: try await container.resolve(HealthKitTagCoordinatorProtocol.self),
                 statCoordinator: try await container.resolve(HealthKitSahhaStatCoordinatorProtocol.self),
                 sampleCoordinator: try await container.resolve(HealthKitSahhaSampleCoordinatorProtocol.self),
                 demographicService: try await container.resolve(HealthKitDemographicServiceProtocol.self),

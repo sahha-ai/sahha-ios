@@ -7,7 +7,7 @@ final class TagService: TagServiceProtocol {
 
     func postTags(_ tags: [TagRequest]) async throws {
         let request = APIRequest(
-            endpoint: APIEndpoints.tags,
+            endpoint: APIEndpoints.tag,
             method: .POST,
             body: tags,
             requiresAuth: true

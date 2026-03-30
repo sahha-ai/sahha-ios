@@ -38,7 +38,9 @@ extension SahhaError {
         }
         
         if let apiError = error as? APIErrorResponse {
-            return SahhaError(message: apiError.title, error: error)
+            let details = apiError.errors.flatMap { $0.errors }.joined(separator: ", ")
+            let message = details.isEmpty ? apiError.title : "\(apiError.title): \(details)"
+            return SahhaError(message: message, error: error)
         }
 
         // Fallback: generic error

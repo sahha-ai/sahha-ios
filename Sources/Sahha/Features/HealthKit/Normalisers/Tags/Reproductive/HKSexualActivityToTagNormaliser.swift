@@ -1,6 +1,6 @@
 import HealthKit
 
-/// Normaliser for `sexualActivity` HKCategorySamples.
+/// Normaliser for `sexualActivity` HKCategorySamples → Tag.
 ///
 /// HealthKit stores sexual activity as a presence-only event (`sample.value`
 /// is always `HKCategoryValue.notApplicable`). Whether protection was used is
@@ -13,8 +13,8 @@ import HealthKit
 /// | `nil` / absent |     0.0       | UNKNOWN     |
 /// | `true`         |     1.0       | PROTECTED   |
 /// | `false`        |     2.0       | UNPROTECTED |
-final class HKSexualActivityToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
-    func normalise(_ sample: HKSample) -> [DataLog] {
+final class HKSexualActivityToTagNormaliser: HKSampleToTagNormaliserProtocol {
+    func normalise(_ sample: HKSample) -> [Tag] {
         guard let sample = sample as? HKCategorySample,
               let sensor = sample.categoryType.sahhaSensor
         else { return [] }
@@ -28,16 +28,13 @@ final class HKSexualActivityToDataLogNormaliser: HKSampleToDataLogNormaliserProt
         }
 
         return [
-            DataLog(
-                logType: sensor.dataLogType,
-                dataType: sensor.rawValue,
-                value: value,
-                unit: sensor.unitString,
-                source: sample.sourceId,
-                recordingMethod: sample.recordingMethod,
-                deviceType: sample.deviceType,
-                startDate: sample.startDate,
-                endDate: sample.endDate
+            Tag(
+                type: .event,
+                startDateTime: sample.startDate,
+                name: sensor.rawValue,
+                category: "reproductive",
+                value: String(value),
+                source: sample.sourceId
             )
         ]
     }

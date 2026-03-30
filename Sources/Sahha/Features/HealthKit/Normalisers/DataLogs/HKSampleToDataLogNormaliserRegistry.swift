@@ -15,9 +15,6 @@ final class HKSampleToDataLogNormaliserRegistry: HKSampleToDataLogNormaliserProt
         HKCategoryTypeIdentifier.sleepAnalysis.rawValue: HKSleepAnalysisToDataLogNormaliser(),
         // Exercise
         HKWorkoutTypeIdentifier: HKWorkoutToDataLogNormaliser()
-        // Reproductive
-        
-        
     ]
 
     private static let quantityFallback = FallbackHKSampleToDataLogNormaliser()
