@@ -21,7 +21,7 @@ final class HKMenstrualFlowToTagNormaliser: HKSampleToTagNormaliserProtocol {
 
         var properties: [String: AnyCodable] = [:]
         if let isCycleStart = sample.metadata?[HKMetadataKeyMenstrualCycleStart] as? Bool {
-            properties["cycle_start"] = AnyCodable(isCycleStart)
+            properties["cycle_start"] = AnyCodable(String(isCycleStart))
         }
 
         let additionalProperties: [String: AnyCodable]? = properties.isEmpty ? nil : properties
