@@ -1,7 +1,7 @@
 import HealthKit
 
 final class HKSleepAnalysisToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
-    func normalise(_ sample: HKSample) -> [DataLog] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [DataLog] {
         guard let sample = sample as? HKCategorySample,
             let sensor = sample.categoryType.sahhaSensor,
             sensor == .sleep
@@ -13,6 +13,7 @@ final class HKSleepAnalysisToDataLogNormaliser: HKSampleToDataLogNormaliserProto
 
         return [
             DataLog(
+                profileId: profileId,
                 logType: sensor.dataLogType,
                 dataType: "sleep_stage_\(sleepStage)",
                 value: value,

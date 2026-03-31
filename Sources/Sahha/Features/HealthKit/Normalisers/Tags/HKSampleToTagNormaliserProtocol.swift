@@ -1,5 +1,5 @@
 import HealthKit
 
 protocol HKSampleToTagNormaliserProtocol: Sendable {
-    func normalise(_ sample: HKSample) -> [Tag]
+    func normalise(_ sample: HKSample, profileId: String?) -> [Tag]
 }

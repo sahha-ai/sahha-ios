@@ -9,18 +9,21 @@ protocol BackgroundCoordinatorProtocol: Sendable, Disposable {
 actor BackgroundCoordinator: BackgroundCoordinatorProtocol, BackgroundTriggerDelegate {
     private let healthKitManager: HealthKitManagerProtocol
     private let dataLogPipeline: DataLogPipelineProtocol
+    private let profileIdProvider: ProfileIdProviderProtocol
     private var motionTrigger: MotionTrigger?
     private let logger: ErrorLoggerProtocol
     private let enableMotionTrigger: Bool
-    
+
     init(
         healthKitManager: HealthKitManagerProtocol,
         dataLogPipeline: DataLogPipelineProtocol,
+        profileIdProvider: ProfileIdProviderProtocol,
         logger: ErrorLoggerProtocol,
         enableMotionTrigger: Bool = false
     ) {
         self.healthKitManager = healthKitManager
         self.dataLogPipeline = dataLogPipeline
+        self.profileIdProvider = profileIdProvider
         self.logger = logger
         self.enableMotionTrigger = enableMotionTrigger
     }
@@ -69,7 +72,7 @@ actor BackgroundCoordinator: BackgroundCoordinatorProtocol, BackgroundTriggerDel
 
     private func startMotionTrigger() async {
         if motionTrigger == nil {
-            motionTrigger = MotionTrigger(delegate: self)
+            motionTrigger = MotionTrigger(delegate: self, profileIdProvider: profileIdProvider)
         }
         await motionTrigger?.start()
     }

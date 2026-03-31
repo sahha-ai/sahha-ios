@@ -6,5 +6,8 @@ enum StorageDI {
         await container.register(UserDefaultsStorageProtocol.self) { _ in
             UserDefaultsStorage()
         }
+        await container.register(ProfileIdProviderProtocol.self) { _ in
+            ProfileIdProvider()
+        }
     }
 }

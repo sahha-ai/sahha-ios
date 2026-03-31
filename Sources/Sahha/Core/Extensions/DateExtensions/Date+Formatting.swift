@@ -9,6 +9,10 @@ extension Date {
         DateFormatter.isoDateTime.string(from: self)
     }
     
+    var uuidDateTime: String {
+        DateFormatter.uuidDateTime.string(from: self)
+    }
+
     var utcOffset: String {
         DateFormatter.utcOffset.string(from: self)
     }

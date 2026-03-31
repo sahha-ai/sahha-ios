@@ -22,7 +22,7 @@ final class HKReproductiveFlagToTagNormaliser: HKSampleToTagNormaliserProtocol {
         .lactation,
     ]
 
-    func normalise(_ sample: HKSample) -> [Tag] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [Tag] {
         guard let sample = sample as? HKCategorySample,
             let sensor = sample.categoryType.sahhaSensor
         else { return [] }
@@ -31,6 +31,7 @@ final class HKReproductiveFlagToTagNormaliser: HKSampleToTagNormaliserProtocol {
 
         return [
             Tag(
+                profileId: profileId,
                 type: isState ? .state : .event,
                 startDateTime: sample.startDate,
                 endDateTime: isState ? sample.endDate : nil,

@@ -1,7 +1,7 @@
 import HealthKit
 
 final class FallbackHKSampleToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
-    func normalise(_ sample: HKSample) -> [DataLog] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [DataLog] {
         guard let sample = sample as? HKQuantitySample,
             let sensor = sample.quantityType.sahhaSensor,
             let unit = sensor.hkUnit
@@ -9,6 +9,7 @@ final class FallbackHKSampleToDataLogNormaliser: HKSampleToDataLogNormaliserProt
 
         return [
             DataLog(
+                profileId: profileId,
                 logType: sensor.dataLogType,
                 dataType: sensor.rawValue,
                 value: sample.quantity.doubleValue(for: unit).rounded(toPlaces: 4),

@@ -16,6 +16,7 @@ actor HealthKitTagCoordinator: HealthKitTagCoordinatorProtocol, Disposable {
     private let anchorQueryService: HealthKitAnchorQueryServiceProtocol
     private let anchorStore: HealthKitAnchorStoreProtocol
     private let normaliser: HKSampleToTagNormaliserProtocol
+    private let profileIdProvider: ProfileIdProviderProtocol
     private let tagPipeline: TagPipelineProtocol
     private let circuitBreaker: CircuitBreaker?
     private let logger: ErrorLoggerProtocol
@@ -29,6 +30,7 @@ actor HealthKitTagCoordinator: HealthKitTagCoordinatorProtocol, Disposable {
         anchorQueryService: HealthKitAnchorQueryServiceProtocol,
         anchorStore: HealthKitAnchorStoreProtocol,
         normaliser: HKSampleToTagNormaliserProtocol,
+        profileIdProvider: ProfileIdProviderProtocol,
         tagPipeline: TagPipelineProtocol,
         circuitBreaker: CircuitBreaker? = nil,
         logger: ErrorLoggerProtocol,
@@ -39,6 +41,7 @@ actor HealthKitTagCoordinator: HealthKitTagCoordinatorProtocol, Disposable {
         self.anchorQueryService = anchorQueryService
         self.anchorStore = anchorStore
         self.normaliser = normaliser
+        self.profileIdProvider = profileIdProvider
         self.tagPipeline = tagPipeline
         self.circuitBreaker = circuitBreaker
         self.logger = logger
@@ -171,7 +174,8 @@ actor HealthKitTagCoordinator: HealthKitTagCoordinatorProtocol, Disposable {
 
                     totalSamples += samples.count
 
-                    let tags = samples.flatMap { self.normaliser.normalise($0) }
+                    let profileId = self.profileIdProvider.profileId()
+                    let tags = samples.flatMap { self.normaliser.normalise($0, profileId: profileId) }
                     totalTags += tags.count
 
                     guard !Task.isCancelled else { break }

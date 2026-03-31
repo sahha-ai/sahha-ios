@@ -83,8 +83,8 @@ final class HKSampleToTagNormaliserRegistry: HKSampleToTagNormaliserProtocol {
         return map
     }()
 
-    func normalise(_ sample: HKSample) -> [Tag] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [Tag] {
         let key = sample.sampleType.identifier
-        return Self.normalisers[key]?.normalise(sample) ?? []
+        return Self.normalisers[key]?.normalise(sample, profileId: profileId) ?? []
     }
 }

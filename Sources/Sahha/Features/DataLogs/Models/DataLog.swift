@@ -16,6 +16,7 @@ open class DataLog: Codable, @unchecked Sendable {
     let additionalProperties: AdditionalProperties?
 
     init(
+        profileId: String? = nil,
         id: String? = nil,
         parentId: String? = nil,
         logType: DataLogType,
@@ -32,16 +33,12 @@ open class DataLog: Codable, @unchecked Sendable {
         if let id {
             self.id = id
         } else {
-            // Include value in ID generation to ensure uniqueness even if same sample is updated
-            // Also include logType for completeness
             let components: [Any] = [
+                profileId ?? "",
                 logType.rawValue,
                 dataType,
-                value,
                 source,
-                deviceType,
-                startDate.isoDateTime,
-                endDate.isoDateTime
+                endDate.uuidDateTime
             ]
             self.id = UUIDFactory.v5(from: components).uuidString
         }

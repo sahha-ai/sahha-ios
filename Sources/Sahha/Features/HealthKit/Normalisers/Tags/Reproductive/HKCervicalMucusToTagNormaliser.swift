@@ -12,7 +12,7 @@ import HealthKit
 ///
 /// Note: Android defines "unusual" (Health Connect only — no HealthKit equivalent).
 final class HKCervicalMucusToTagNormaliser: HKSampleToTagNormaliserProtocol {
-    func normalise(_ sample: HKSample) -> [Tag] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [Tag] {
         guard let sample = sample as? HKCategorySample,
             let sensor = sample.categoryType.sahhaSensor
         else { return [] }
@@ -21,6 +21,7 @@ final class HKCervicalMucusToTagNormaliser: HKSampleToTagNormaliserProtocol {
 
         return [
             Tag(
+                profileId: profileId,
                 type: .event,
                 startDateTime: sample.startDate,
                 name: sensor.rawValue,

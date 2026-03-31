@@ -12,7 +12,7 @@ import HealthKit
 /// additionalProperties["cycle_start"] — true if this sample marks the
 /// start of a new menstrual cycle (HKMetadataKeyMenstrualCycleStart).
 final class HKMenstrualFlowToTagNormaliser: HKSampleToTagNormaliserProtocol {
-    func normalise(_ sample: HKSample) -> [Tag] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [Tag] {
         guard let sample = sample as? HKCategorySample,
             let sensor = sample.categoryType.sahhaSensor
         else { return [] }
@@ -28,6 +28,7 @@ final class HKMenstrualFlowToTagNormaliser: HKSampleToTagNormaliserProtocol {
 
         return [
             Tag(
+                profileId: profileId,
                 type: .event,
                 startDateTime: sample.startDate,
                 name: sensor.rawValue,

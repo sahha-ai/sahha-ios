@@ -13,6 +13,7 @@ struct Tag: Codable, Sendable {
     let additionalProperties: [String: AnyCodable]?
 
     init(
+        profileId: String? = nil,
         id: String? = nil,
         type: TagType,
         startDateTime: Date,
@@ -32,10 +33,12 @@ struct Tag: Codable, Sendable {
             self.id = id
         } else {
             let components: [Any] = [
+                profileId ?? "",
                 type.rawValue,
+                category ?? "",
                 name,
                 source,
-                startDateTime.isoDateTime
+                startDateTime.uuidDateTime
             ]
             self.id = UUIDFactory.v5(from: components).uuidString
         }

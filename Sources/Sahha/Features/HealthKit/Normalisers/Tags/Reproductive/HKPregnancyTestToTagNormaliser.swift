@@ -7,7 +7,7 @@ import HealthKit
 ///   "negative"
 ///   "positive"
 final class HKPregnancyTestToTagNormaliser: HKSampleToTagNormaliserProtocol {
-    func normalise(_ sample: HKSample) -> [Tag] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [Tag] {
         guard let sample = sample as? HKCategorySample,
             let sensor = sample.categoryType.sahhaSensor
         else { return [] }
@@ -16,6 +16,7 @@ final class HKPregnancyTestToTagNormaliser: HKSampleToTagNormaliserProtocol {
 
         return [
             Tag(
+                profileId: profileId,
                 type: .event,
                 startDateTime: sample.startDate,
                 name: sensor.rawValue,

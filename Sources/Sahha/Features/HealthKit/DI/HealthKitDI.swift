@@ -95,6 +95,7 @@ enum HealthKitDI {
                 anchorQueryService: try await container.resolve(HealthKitAnchorQueryServiceProtocol.self),
                 anchorStore: try await container.resolve(HealthKitAnchorStoreProtocol.self),
                 normaliser: try await container.resolve(HKSampleToDataLogNormaliserProtocol.self),
+                profileIdProvider: try await container.resolve(ProfileIdProviderProtocol.self),
                 dataLogPipeline: try await container.resolve(DataLogPipelineProtocol.self),
                 circuitBreaker: try? await container.resolve(CircuitBreaker.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
@@ -114,6 +115,7 @@ enum HealthKitDI {
                 anchorQueryService: try await container.resolve(HealthKitAnchorQueryServiceProtocol.self),
                 anchorStore: try await container.resolve(HealthKitAnchorStoreProtocol.self),
                 normaliser: try await container.resolve(HKSampleToTagNormaliserProtocol.self),
+                profileIdProvider: try await container.resolve(ProfileIdProviderProtocol.self),
                 tagPipeline: try await container.resolve(TagPipelineProtocol.self),
                 circuitBreaker: try? await container.resolve(CircuitBreaker.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
@@ -137,6 +139,7 @@ enum HealthKitDI {
                 anchorStore: try await container.resolve(HealthKitAnchorDateStoreProtocol.self),
                 queryService: try await container.resolve(HealthKitAnchorQueryServiceProtocol.self),
                 normaliserRegistry: try await container.resolve(HKSampleToDataLogNormaliserProtocol.self),
+                profileIdProvider: try await container.resolve(ProfileIdProviderProtocol.self),
                 dataLogPipeline: try await container.resolve(DataLogPipelineProtocol.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
             )

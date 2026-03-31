@@ -20,19 +20,19 @@ final class HKSampleToDataLogNormaliserRegistry: HKSampleToDataLogNormaliserProt
     private static let quantityFallback = FallbackHKSampleToDataLogNormaliser()
     private static let categoryFallback = HKCategoryToDataLogNormaliser()
 
-    func normalise(_ sample: HKSample) -> [DataLog] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [DataLog] {
         let key = sample.sampleType.identifier
-        
+
         // Check registered normalisers first
         if let normaliser = Self.normalisers[key] {
-            return normaliser.normalise(sample)
+            return normaliser.normalise(sample, profileId: profileId)
         }
-        
+
         // Use appropriate fallback based on sample type
         if sample is HKCategorySample {
-            return Self.categoryFallback.normalise(sample)
+            return Self.categoryFallback.normalise(sample, profileId: profileId)
         } else {
-            return Self.quantityFallback.normalise(sample)
+            return Self.quantityFallback.normalise(sample, profileId: profileId)
         }
     }
 }

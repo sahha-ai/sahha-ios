@@ -1,13 +1,14 @@
 import HealthKit
 
 final class HKCategoryToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
-    func normalise(_ sample: HKSample) -> [DataLog] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [DataLog] {
         guard let sample = sample as? HKCategorySample,
               let sensor = sample.categoryType.sahhaSensor
         else { return [] }
-        
+
         return [
             DataLog(
+                profileId: profileId,
                 logType: sensor.dataLogType,
                 dataType: sensor.rawValue,
                 value: Double(sample.value),
