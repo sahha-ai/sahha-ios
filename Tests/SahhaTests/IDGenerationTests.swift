@@ -222,7 +222,7 @@ func testDataLogIDNilProfileId() {
 func testDataLogIDMatchesManualComputation() {
     let date = Date(timeIntervalSince1970: 1700000000)
     let expectedDateStr = date.uuidDateTime
-    let components: [Any] = ["profile-test", DataLogType.sleep.rawValue, "sleep_stage_light", "HealthKit", expectedDateStr]
+    let components: [Any] = ["profile-test", DataLogType.sleep.stringValue, "sleep_stage_light", "HealthKit", expectedDateStr]
     let expectedId = UUIDFactory.v5(from: components).uuidString
 
     let log = DataLog(
@@ -327,4 +327,78 @@ func testDataLogParentChildConsistency() {
     #expect(UUID(uuidString: parent.id) != nil)
     #expect(UUID(uuidString: child.id) != nil)
     #expect(child.id != parent.id)
+}
+
+// MARK: - Cross-Platform UUID5 Vector Tests
+
+/// These UUIDs are generated using the Go server logic:
+/// uuid.NewSHA1(uuid.NameSpaceDNS, []byte(strings.Join(parts, "")))
+/// The existing testUUID5CrossPlatformMatch test proves the core algorithm matches Go.
+/// These vectors verify the full DataLog concatenation produces correct UUIDs.
+
+@Test("Cross-platform: DataLog UUID5 vectors match Go server output")
+func testCrossPlatformDataLogVectors() {
+    let vectors: [(profileId: String, logType: String, dataType: String, source: String, endDate: String, expectedUUID: String)] = [
+        ("profile-123", "sleep", "sleep_stage_light", "HealthKit", "2024-01-15 10:30:00", "A47CB00D-186A-56E2-A752-361A4A42A9D1"),
+        ("profile-123", "heart", "heart_rate", "HealthKit", "2024-01-15 10:30:00", "2A18BB66-CA2B-5B68-BE07-951A192EAC39"),
+        ("profile-123", "activity", "step_count", "HealthKit", "2024-01-15 10:30:00", "55F2DA24-0075-56F8-9AC7-16E3D5040FDC"),
+        ("", "sleep", "sleep_stage_light", "HealthKit", "2024-01-15 10:30:00", "9C521BBA-2F69-527F-BE8A-22CA4C4CB1FC"),
+        ("profile-123", "exercise", "exercise_session_running", "HealthKit", "2024-06-15 23:59:59", "0B2ED753-5D46-5BC5-8C0D-28D52C4D32CE"),
+    ]
+    for v in vectors {
+        let components: [Any] = [v.profileId, v.logType, v.dataType, v.source, v.endDate]
+        let uuid = UUIDFactory.v5(from: components)
+        #expect(uuid.uuidString == v.expectedUUID, "Mismatch for \(v.profileId)|\(v.logType)|\(v.dataType)|\(v.source)|\(v.endDate)")
+    }
+}
+
+// MARK: - DataLogType String Mapping Tests
+
+@Test("DataLogType: stringValue matches Go log type strings")
+func testDataLogTypeStringValues() {
+    let expected: [(DataLogType, String)] = [
+        (.demographic, "demographic"),
+        (.sleep, "sleep"),
+        (.activity, "activity"),
+        (.device, "device"),
+        (.heart, "heart"),
+        (.blood, "blood"),
+        (.oxygen, "oxygen"),
+        (.energy, "energy"),
+        (.temperature, "temperature"),
+        (.body, "body"),
+        (.exercise, "exercise"),
+        (.nutrition, "nutrition"),
+        (.reproductive, "reproductive"),
+        (.symptom, "symptom"),
+    ]
+    for (logType, goString) in expected {
+        #expect(logType.stringValue == goString, "DataLogType.\(logType) stringValue is \"\(logType.stringValue)\" but Go expects \"\(goString)\"")
+    }
+}
+
+// MARK: - Date Formatting Edge Cases
+
+@Test("uuidDateTime: Midnight formats as 00:00:00")
+func testMidnightFormat() {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone.current
+    let date = calendar.date(from: DateComponents(year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0))!
+    #expect(date.uuidDateTime == "2024-01-01 00:00:00")
+}
+
+@Test("uuidDateTime: End of day formats correctly")
+func testEndOfDayFormat() {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone.current
+    let date = calendar.date(from: DateComponents(year: 2024, month: 12, day: 31, hour: 23, minute: 59, second: 59))!
+    #expect(date.uuidDateTime == "2024-12-31 23:59:59")
+}
+
+@Test("uuidDateTime: Single-digit months and days are zero-padded")
+func testZeroPadding() {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone.current
+    let date = calendar.date(from: DateComponents(year: 2024, month: 3, day: 5, hour: 8, minute: 3, second: 7))!
+    #expect(date.uuidDateTime == "2024-03-05 08:03:07")
 }

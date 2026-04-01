@@ -18,6 +18,7 @@ final class KeychainStorage: KeychainStorageProtocol {
         // Add new
         var item = query
         item[kSecValueData as String] = value
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         let status = SecItemAdd(item as CFDictionary, nil)
         guard status == errSecSuccess else {
             let message = SecCopyErrorMessageString(status, nil) as String? ?? "Unknown Keychain error"

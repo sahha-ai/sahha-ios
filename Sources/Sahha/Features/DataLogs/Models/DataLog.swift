@@ -35,7 +35,7 @@ open class DataLog: Codable, @unchecked Sendable {
         } else {
             let components: [Any] = [
                 profileId ?? "",
-                logType.rawValue,
+                logType.stringValue,
                 dataType,
                 source,
                 endDate.uuidDateTime
