@@ -10,37 +10,41 @@ enum TagDI {
                 deviceId: try await container.resolve(DeviceIdProviderProtocol.self).deviceId()
             )
         }
-        await container.register(TagDeadLetterQueue.self) { _ in
-            TagDeadLetterQueue(
-                baseDirectory: StorageDirectories.tags,
-                maxStoredBatches: 500
-            )
-        }
-        await container.register(SentTagStore.self) { container in
-            SentTagStore(
-                storage: try await container.resolve(UserDefaultsStorageProtocol.self)
-            )
-        }
-        await container.register(TagPriorityAssignerProtocol.self) { _ in
-            DefaultTagPriorityAssigner()
-        }
+
+        // Unified upload infrastructure for Tags
+        let tagCircuitBreaker = CircuitBreaker()
+        let tagNetworkMonitor = NetworkMonitor()
 
         await container.register(TagUploaderProtocol.self) { container in
-            TagUploader(
-                tagService: try await container.resolve(TagServiceProtocol.self),
-                requestMapper: try await container.resolve(TagRequestMapperProtocol.self),
+            let service = try await container.resolve(TagServiceProtocol.self)
+            let mapper = try await container.resolve(TagRequestMapperProtocol.self)
+
+            return UnifiedUploader<Tag, TagRequest>(
+                uploadService: { requests in
+                    try await service.postTags(requests)
+                },
                 logger: try await container.resolve(ErrorLoggerProtocol.self),
-                circuitBreaker: CircuitBreaker(),
-                networkMonitor: NetworkMonitor(),
-                persistentQueue: try await container.resolve(TagDeadLetterQueue.self),
-                streamingProcessor: StreamingTagBatchProcessor(
-                    requestMapper: try await container.resolve(TagRequestMapperProtocol.self),
-                    priorityAssigner: try await container.resolve(TagPriorityAssignerProtocol.self),
+                circuitBreaker: tagCircuitBreaker,
+                networkMonitor: tagNetworkMonitor,
+                persistentQueue: UnifiedDeadLetterQueue<TagRequest>(
+                    baseDirectory: StorageDirectories.tags,
+                    maxStoredBatches: 500,
+                    logLabel: "Tag Persistent Queue"
+                ),
+                streamingProcessor: StreamingChunkProcessor<Tag, TagRequest>(
+                    mapItem: { tag in mapper.map(tag) },
+                    assignPriority: { _ in .normal },
                     config: .default
                 ),
-                sentTagStore: try await container.resolve(SentTagStore.self)
+                sentStore: SentItemStore(
+                    storage: try await container.resolve(UserDefaultsStorageProtocol.self),
+                    storageKey: StorageKeys.UserDefaults.sentTagIds,
+                    logLabel: "SentTagStore"
+                ),
+                logLabel: "TagUploader"
             )
         }
+
         await container.register(TagPipelineProtocol.self) { container in
             TagPipeline(
                 uploader: try await container.resolve(TagUploaderProtocol.self)
@@ -52,11 +56,5 @@ enum TagDI {
                 uploader: try await container.resolve(TagUploaderProtocol.self)
             )
         }
-    }
-}
-
-final class DefaultTagPriorityAssigner: TagPriorityAssignerProtocol {
-    func assignPriority(to tag: Tag) -> TagPriority {
-        .normal
     }
 }
