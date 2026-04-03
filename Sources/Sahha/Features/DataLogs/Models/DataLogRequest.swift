@@ -1,7 +1,7 @@
 import Foundation
 
 /// Immutable request payload - all fields are constants after creation for thread safety
-open class DataLogRequest: Codable, @unchecked Sendable {
+open class DataLogRequest: Codable, UploadableRequest, @unchecked Sendable {
     let id: String
     let parentId: String?
     let logType: String
