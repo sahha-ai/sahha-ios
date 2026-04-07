@@ -1,6 +1,11 @@
 protocol TagUploaderProtocol: Actor {
-    func enqueue(_ chunk: TagChunk) async
     func enqueueTags(_ tags: [Tag]) async
     func retryPendingUploads() async
     func dispose() async
+}
+
+extension UnifiedUploader: TagUploaderProtocol where Item == Tag, Request == TagRequest {
+    func enqueueTags(_ tags: [Tag]) async {
+        await enqueueItems(tags)
+    }
 }

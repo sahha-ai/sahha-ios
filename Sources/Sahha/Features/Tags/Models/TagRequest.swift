@@ -1,7 +1,7 @@
 import Foundation
 
 /// Immutable request payload for tag delivery - all fields are constants after creation
-open class TagRequest: Codable, @unchecked Sendable {
+open class TagRequest: Codable, UploadableRequest, @unchecked Sendable {
     let id: String
     let type: String
     let startDateTime: String

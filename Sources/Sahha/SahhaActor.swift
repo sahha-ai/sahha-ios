@@ -41,6 +41,10 @@ actor SahhaActor {
             await DeviceInfoSyncDI.registerDependencies(container: container)
             await DeviceLogDI.registerDependencies(container: container)
 
+            // Validate and clean up legacy DLQ files from before the unified pipeline
+            let userDefaultsStorage = try await container.resolve(UserDefaultsStorageProtocol.self)
+            await DLQMigrator.migrateIfNeeded(storage: userDefaultsStorage)
+
             // Device log listener
             let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
             await self.lifecycleObserver.registerListener(deviceLogListener)
