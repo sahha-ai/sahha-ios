@@ -81,6 +81,10 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
         await startUploadLoopIfNeeded()
     }
 
+    func getDLQStatistics() async -> PersistenceStatistics {
+        await persistentQueue.getStatistics()
+    }
+
     func dispose() async {
         uploadTask?.cancel()
         uploadTask = nil

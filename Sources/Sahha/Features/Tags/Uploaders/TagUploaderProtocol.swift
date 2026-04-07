@@ -1,6 +1,7 @@
 protocol TagUploaderProtocol: Actor {
     func enqueueTags(_ tags: [Tag]) async
     func retryPendingUploads() async
+    func getDLQStatistics() async -> PersistenceStatistics
     func dispose() async
 }
 
