@@ -101,6 +101,7 @@ actor SahhaActor {
             let dataLogRetryListener = try await container.resolve(DataLogRetryLifecycleListener.self)
             let tagRetryListener = try await container.resolve(TagRetryLifecycleListener.self)
             let sensorHealthCheckListener = try await container.resolve(SensorHealthCheckLifecycleListener.self)
+            let sensorProbeListener = try await container.resolve(SensorProbeLifecycleListener.self)
 
             await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
             await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
@@ -115,6 +116,9 @@ actor SahhaActor {
             // Verify observer health on every foreground event — re-registers any
             // observers silently dropped by iOS (memory pressure, OS updates, etc.)
             await lifecycleObserver.registerListener(sensorHealthCheckListener, for: [.app_foreground])
+
+            // Probe each sensor for data to detect potentially denied permissions
+            await lifecycleObserver.registerListener(sensorProbeListener, for: [.app_foreground])
         } catch {
             await log(error: error, message: "setupLifecycleListeners failed")
         }
