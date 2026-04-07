@@ -1,6 +1,7 @@
 protocol DataLogUploaderProtocol: Actor {
     func enqueueLogs(_ logs: [DataLog]) async
     func retryPendingUploads() async
+    func getDLQStatistics() async -> PersistenceStatistics
     func dispose() async
 }
 

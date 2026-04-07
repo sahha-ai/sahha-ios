@@ -5,6 +5,7 @@ final class SensorHealthCheckLifecycleListener: LifecycleListener, @unchecked Se
     private let observerStore: HealthKitObserverStoreProtocol
     private let healthKitManager: HealthKitManagerProtocol
     private let logger: ErrorLoggerProtocol
+    private var diagnosticReportBuilder: DiagnosticReportBuilderProtocol?
 
     private let _latestResult = LatestResultHolder()
 
@@ -20,6 +21,10 @@ final class SensorHealthCheckLifecycleListener: LifecycleListener, @unchecked Se
         self.logger = logger
     }
 
+    func setDiagnosticReportBuilder(_ builder: DiagnosticReportBuilderProtocol) {
+        self.diagnosticReportBuilder = builder
+    }
+
     func handleLifecycleEvent(_ event: LifecycleEvent) async {
         let result = await runHealthCheck()
         await _latestResult.set(result)
@@ -27,6 +32,9 @@ final class SensorHealthCheckLifecycleListener: LifecycleListener, @unchecked Se
         if !result.allHealthy {
             Sahha.log("[SensorHealthCheck] Re-registered \(result.sensorsReRegistered.count) observer(s), \(result.failures.count) failure(s)")
         }
+
+        // Upsert diagnostic snapshot after each health check
+        _ = await diagnosticReportBuilder?.buildReport()
     }
 
     func getLatestResult() async -> SensorHealthCheckResult? {

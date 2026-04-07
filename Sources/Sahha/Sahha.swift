@@ -361,6 +361,18 @@ public class Sahha {
         }
     }
 
+    // MARK: - Diagnostics
+    public static func getDiagnosticReport(callback: @escaping (String?, DiagnosticReport?) -> Void) {
+        runAsyncWithCallback(
+            callback: callback,
+            requiresAuth: true,
+            task: {
+                let builder = try await actor.diagnosticReportBuilder()
+                return await builder.buildReport()
+            }
+        )
+    }
+
     // MARK: - Errors
     public static func postError(framework: SahhaFramework = .ios_swift, message: String, path: String, method: String, body: String) {
         Task {

@@ -40,6 +40,7 @@ actor SahhaActor {
             await DemographicDI.registerDependencies(container: container)
             await DeviceInfoSyncDI.registerDependencies(container: container)
             await DeviceLogDI.registerDependencies(container: container)
+            await DiagnosticsDI.registerDependencies(container: container)
 
             // Validate and clean up legacy DLQ files from before the unified pipeline
             let userDefaultsStorage = try await container.resolve(UserDefaultsStorageProtocol.self)
@@ -102,6 +103,10 @@ actor SahhaActor {
             let tagRetryListener = try await container.resolve(TagRetryLifecycleListener.self)
             let sensorHealthCheckListener = try await container.resolve(SensorHealthCheckLifecycleListener.self)
             let sensorProbeListener = try await container.resolve(SensorProbeLifecycleListener.self)
+            let diagnosticReportBuilder = try await container.resolve(DiagnosticReportBuilderProtocol.self)
+
+            // Connect diagnostic report builder to health check listener
+            sensorHealthCheckListener.setDiagnosticReportBuilder(diagnosticReportBuilder)
 
             await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
             await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
@@ -195,6 +200,10 @@ actor SahhaActor {
 
     func demographicManager() async throws -> DemographicManagerProtocol {
         try await resolve(DemographicManagerProtocol.self)
+    }
+
+    func diagnosticReportBuilder() async throws -> DiagnosticReportBuilderProtocol {
+        try await resolve(DiagnosticReportBuilderProtocol.self)
     }
 
     func tagPipeline() async throws -> TagPipelineProtocol {
