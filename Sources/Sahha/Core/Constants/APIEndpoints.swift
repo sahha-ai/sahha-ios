@@ -8,4 +8,6 @@ enum APIEndpoints {
     static let dataLog = "v2/profile/data/log"
     static let tag = "v1/profile/tag"
     static let error = "v1/error"
+    static let config = "v1/profile/config"
+    static let diagnostic = "v1/profile/diagnostic"
 }

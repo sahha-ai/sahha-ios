@@ -104,6 +104,7 @@ actor SahhaActor {
             let sensorHealthCheckListener = try await container.resolve(SensorHealthCheckLifecycleListener.self)
             let sensorProbeListener = try await container.resolve(SensorProbeLifecycleListener.self)
             let diagnosticReportBuilder = try await container.resolve(DiagnosticReportBuilderProtocol.self)
+            let diagnosticConfigListener = try await container.resolve(DiagnosticConfigLifecycleListener.self)
 
             // Connect diagnostic report builder to health check listener
             sensorHealthCheckListener.setDiagnosticReportBuilder(diagnosticReportBuilder)
@@ -124,6 +125,9 @@ actor SahhaActor {
 
             // Probe each sensor for data to detect potentially denied permissions
             await lifecycleObserver.registerListener(sensorProbeListener, for: [.app_foreground])
+
+            // Check server config for diagnostic report requests
+            await lifecycleObserver.registerListener(diagnosticConfigListener, for: [.app_foreground])
         } catch {
             await log(error: error, message: "setupLifecycleListeners failed")
         }
@@ -204,6 +208,10 @@ actor SahhaActor {
 
     func diagnosticReportBuilder() async throws -> DiagnosticReportBuilderProtocol {
         try await resolve(DiagnosticReportBuilderProtocol.self)
+    }
+
+    func diagnosticUploadService() async throws -> DiagnosticUploadServiceProtocol {
+        try await resolve(DiagnosticUploadServiceProtocol.self)
     }
 
     func tagPipeline() async throws -> TagPipelineProtocol {

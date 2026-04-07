@@ -12,5 +12,17 @@ enum DiagnosticsDI {
                 storage: try await container.resolve(UserDefaultsStorageProtocol.self)
             )
         }
+        await container.register(DiagnosticUploadServiceProtocol.self) { container in
+            DiagnosticUploadService(
+                apiClient: try await container.resolve(APIClientProtocol.self),
+                reportBuilder: try await container.resolve(DiagnosticReportBuilderProtocol.self),
+                logger: try await container.resolve(ErrorLoggerProtocol.self)
+            )
+        }
+        await container.register(DiagnosticConfigLifecycleListener.self) { container in
+            DiagnosticConfigLifecycleListener(
+                uploadService: try await container.resolve(DiagnosticUploadServiceProtocol.self)
+            )
+        }
     }
 }
