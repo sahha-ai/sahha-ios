@@ -100,6 +100,7 @@ actor SahhaActor {
             let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
             let dataLogRetryListener = try await container.resolve(DataLogRetryLifecycleListener.self)
             let tagRetryListener = try await container.resolve(TagRetryLifecycleListener.self)
+            let sensorHealthCheckListener = try await container.resolve(SensorHealthCheckLifecycleListener.self)
 
             await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
             await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
@@ -110,6 +111,10 @@ actor SahhaActor {
             // before suspension) gets sent when the app next wakes.
             await lifecycleObserver.registerListener(dataLogRetryListener, for: [.app_resume, .app_foreground, .app_unlocked])
             await lifecycleObserver.registerListener(tagRetryListener, for: [.app_resume, .app_foreground, .app_unlocked])
+
+            // Verify observer health on every foreground event — re-registers any
+            // observers silently dropped by iOS (memory pressure, OS updates, etc.)
+            await lifecycleObserver.registerListener(sensorHealthCheckListener, for: [.app_foreground])
         } catch {
             await log(error: error, message: "setupLifecycleListeners failed")
         }

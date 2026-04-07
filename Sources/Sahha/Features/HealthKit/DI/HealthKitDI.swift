@@ -169,5 +169,13 @@ enum HealthKitDI {
                 healthKitManager: try await container.resolve(HealthKitManagerProtocol.self)
             )
         }
+        await container.register(SensorHealthCheckLifecycleListener.self) { container in
+            SensorHealthCheckLifecycleListener(
+                sensorStore: try await container.resolve(SensorStoreProtocol.self),
+                observerStore: try await container.resolve(HealthKitObserverStoreProtocol.self),
+                healthKitManager: try await container.resolve(HealthKitManagerProtocol.self),
+                logger: try await container.resolve(ErrorLoggerProtocol.self)
+            )
+        }
     }
 }
