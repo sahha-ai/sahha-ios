@@ -157,39 +157,39 @@ func testNetworkMonitorWaitForConnectivityTimeout() async throws {
     }
 }
 
-@Test("DeadLetterQueue: Persist and load batch")
+@Test("UnifiedDeadLetterQueue: Persist and load batch")
 func testDeadLetterQueuePersistAndLoad() async throws {
     let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    let queue = DeadLetterQueue(baseDirectory: tempDir)
-    
-    let testChunk = DataLogChunk(requests: [], priority: .high)
+    let queue = UnifiedDeadLetterQueue<DataLogRequest>(baseDirectory: tempDir)
+
+    let testChunk = UploadChunk<DataLogRequest>(requests: [], sizeInBytes: 0, priority: .high)
     let id = await queue.persistBatch(testChunk)
     #expect(id != nil)
-    
+
     let batches = await queue.loadAllBatches()
     #expect(batches.count == 1)
-    
+
     await queue.removeBatch(withId: id!)
     let emptyBatches = await queue.loadAllBatches()
     #expect(emptyBatches.isEmpty)
-    
+
     try? FileManager.default.removeItem(at: tempDir)
 }
 
-@Test("DeadLetterQueue: Cleanup exceeds max batches")
+@Test("UnifiedDeadLetterQueue: Cleanup exceeds max batches")
 func testDeadLetterQueueCleanup() async throws {
     let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    let queue = DeadLetterQueue(baseDirectory: tempDir, maxStoredBatches: 2)
-    
+    let queue = UnifiedDeadLetterQueue<DataLogRequest>(baseDirectory: tempDir, maxStoredBatches: 2)
+
     for _ in 0..<4 {
-        let chunk = DataLogChunk(requests: [], priority: .normal)
+        let chunk = UploadChunk<DataLogRequest>(requests: [], sizeInBytes: 0, priority: .normal)
         await queue.persistBatch(chunk)
         try await Task.sleep(for: .milliseconds(10))  // Ensure different timestamps
     }
-    
+
     let count = await queue.getCount()
     #expect(count == 2)  // Oldest 2 removed
-    
+
     try? FileManager.default.removeItem(at: tempDir)
 }
 
@@ -226,35 +226,34 @@ func testSDKHealthKitObserver() async throws {
     #expect(handlerCalled == true)
 }
 
-@Test("SDK: Data upload with circuit breaker open")
+@Test("SDK: Circuit breaker opens after failures")
 func testSDKDataUploadCircuitOpen() async throws {
     let breaker = CircuitBreaker(failureThreshold: 1)
-    await breaker.recordFailure()  // Open it
-    
-    let uploader = DataLogUploader(/* inject deps with breaker */)
-    let chunk = DataLogChunk(requests: [], priority: .high)
-    await uploader.enqueue(chunk)
-    
-    // Verify no upload attempted (check mocks or logs)
+    await breaker.recordFailure()
+
+    // Circuit breaker should be open and reject requests
+    #expect(await breaker.shouldAllowRequest() == false)
 }
 
-@Test("SDK: Offline data persistence and recovery")
+@Test("SDK: Offline data persistence via UnifiedDeadLetterQueue")
 func testSDKOfflineRecovery() async throws {
-    let mockMonitor = MockNetworkMonitor()
-    mockMonitor.setConnected(false)
-    
-    let uploader = DataLogUploader(/* inject with mockMonitor and test queue */)
-    let chunk = DataLogChunk(requests: [], priority: .high)
-    await uploader.enqueue(chunk)
-    
+    let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let queue = UnifiedDeadLetterQueue<DataLogRequest>(baseDirectory: tempDir)
+
+    let chunk = UploadChunk<DataLogRequest>(requests: [], sizeInBytes: 0, priority: .high)
+    let id = await queue.persistBatch(chunk)
+    #expect(id != nil)
+
     // Verify persisted
-    let batches = await uploader.persistentQueue.loadAllBatches()  // Assuming accessible
+    let batches = await queue.loadAllBatches()
     #expect(batches.count == 1)
-    
-    // Simulate online
-    mockMonitor.setConnected(true)
-    // Trigger recovery (e.g., via lifecycle or manual call)
-    // Verify uploaded and removed
+
+    // Simulate recovery: remove after upload
+    await queue.removeBatch(withId: id!)
+    let emptyBatches = await queue.loadAllBatches()
+    #expect(emptyBatches.isEmpty)
+
+    try? FileManager.default.removeItem(at: tempDir)
 }
 
 @Test func example() async throws {
