@@ -6,6 +6,10 @@ final class DiagnosticConfigLifecycleListener: LifecycleListener, @unchecked Sen
     }
 
     func handleLifecycleEvent(_ event: LifecycleEvent) async {
-        await uploadService.checkConfigAndUploadIfRequested()
+        do {
+            try await uploadService.uploadDiagnosticReport()
+        } catch {
+            Sahha.log("[Diagnostics] Foreground upload failed: \(error.localizedDescription)")
+        }
     }
 }

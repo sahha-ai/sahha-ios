@@ -1,7 +1,6 @@
 import Foundation
 
 protocol DiagnosticUploadServiceProtocol: Sendable {
-    func checkConfigAndUploadIfRequested() async
     func uploadDiagnosticReport() async throws
 }
 
@@ -20,32 +19,16 @@ final class DiagnosticUploadService: DiagnosticUploadServiceProtocol, @unchecked
         self.logger = logger
     }
 
-    func checkConfigAndUploadIfRequested() async {
-        do {
-            let request = APIRequest(
-                endpoint: APIEndpoints.config,
-                method: .GET,
-                requiresAuth: true
-            )
-            let config: ProfileConfig = try await apiClient.send(request)
-            guard config.diagnosticRequested == true else { return }
-
-            Sahha.log("[Diagnostics] Server requested diagnostic report — collecting and uploading")
-            try await uploadDiagnosticReport()
-        } catch {
-            // Silently ignore config check failures — best effort only
-            Sahha.log("[Diagnostics] Config check failed: \(error.localizedDescription)")
-        }
-    }
-
     func uploadDiagnosticReport() async throws {
         let report = await reportBuilder.buildReport()
-        let request = APIRequest(
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var request = APIRequest(
             endpoint: APIEndpoints.diagnostic,
             method: .POST,
-            body: report,
             requiresAuth: true
         )
+        request.body = try encoder.encode(report)
         try await apiClient.send(request)
         Sahha.log("[Diagnostics] Diagnostic report uploaded successfully")
     }

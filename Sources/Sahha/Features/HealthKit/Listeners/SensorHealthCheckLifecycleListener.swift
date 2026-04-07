@@ -81,6 +81,7 @@ final class SensorHealthCheckLifecycleListener: LifecycleListener, @unchecked Se
 
             // Verify which sensors were successfully re-registered
             let updatedKeys = await observerStore.getRegisteredKeys()
+
             for sensor in missingSensors {
                 if updatedKeys.contains(sensor.rawValue) {
                     reRegistered.insert(sensor)
