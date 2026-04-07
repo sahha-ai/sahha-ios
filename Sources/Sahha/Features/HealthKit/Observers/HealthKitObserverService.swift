@@ -3,20 +3,17 @@ import UIKit
 
 final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     private let healthStore: HKHealthStore
-    private let permissions: HealthKitPermissionsServiceProtocol
     private let observerStore: HealthKitObserverStoreProtocol
     private let circuitBreaker: CircuitBreaker?
     private let logger: ErrorLoggerProtocol
-    
+
     init(
         healthStore: HKHealthStore = .init(),
-        permissions: HealthKitPermissionsServiceProtocol,
         observerStore: HealthKitObserverStoreProtocol,
         circuitBreaker: CircuitBreaker? = nil,
         logger: ErrorLoggerProtocol
     ) {
         self.healthStore = healthStore
-        self.permissions = permissions
         self.observerStore = observerStore
         self.circuitBreaker = circuitBreaker
         self.logger = logger
@@ -24,53 +21,62 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     
     func startObservers(for sensors: Set<SahhaSensor>, handler: @escaping HealthKitObserverHandler) async throws {
         for sensor in sensors {
-            try await startObserver(for: sensor, handler: handler)
+            // Per-sensor isolation: a failure for one sensor does not prevent others from registering
+            do {
+                try await startObserver(for: sensor, handler: handler)
+            } catch {
+                Sahha.log("[HealthKitObserver] Failed to register observer for \(sensor.rawValue): \(error.localizedDescription)")
+                logger.postError(error)
+            }
         }
     }
-    
+
     private func startObserver(for sensor: SahhaSensor, handler: @escaping HealthKitObserverHandler) async throws {
-        if let sampleType = sensor.hkSampleType, try await permissions.hasPermissions(for: sensor) {
-            let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { [weak self] _, completion, error in
-                if error != nil {
-                    completion()
-                } else {
-                    // Check circuit breaker state before triggering query
-                    let wrappedCompletion = SendableCompletion(run: completion)
-                    
-                    Task {
-                        guard let self else {
-                            wrappedCompletion.run()
+        // Register observers for ALL enabled sensors regardless of permission status.
+        // An idle observer for a denied sensor has negligible resource cost and
+        // automatically catches late permission grants via iOS Settings > Health.
+        guard let sampleType = sensor.hkSampleType else { return }
+
+        let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { [weak self] _, completion, error in
+            if error != nil {
+                completion()
+            } else {
+                // Check circuit breaker state before triggering query
+                let wrappedCompletion = SendableCompletion(run: completion)
+
+                Task {
+                    guard let self else {
+                        wrappedCompletion.run()
+                        return
+                    }
+
+                    // Request background execution time to ensure query + upload completes
+                    let backgroundTaskId = await self.beginBackgroundTask(for: sensor)
+
+                    defer {
+                        wrappedCompletion.run()
+                        self.endBackgroundTask(backgroundTaskId)
+                    }
+
+                    // If circuit breaker exists, check if system is healthy
+                    if let circuitBreaker = self.circuitBreaker {
+                        let isHealthy = await circuitBreaker.isHealthy()
+                        if !isHealthy {
+                            let (state, _) = await circuitBreaker.getState()
+                            Sahha.log("[HealthKitObserver] Skipping query for \(sensor.rawValue) - circuit breaker is \(state)")
                             return
                         }
-                        
-                        // Request background execution time to ensure query + upload completes
-                        let backgroundTaskId = await self.beginBackgroundTask(for: sensor)
-                        
-                        defer {
-                            wrappedCompletion.run()
-                            self.endBackgroundTask(backgroundTaskId)
-                        }
-                        
-                        // If circuit breaker exists, check if system is healthy
-                        if let circuitBreaker = self.circuitBreaker {
-                            let isHealthy = await circuitBreaker.isHealthy()
-                            if !isHealthy {
-                                let (state, _) = await circuitBreaker.getState()
-                                Sahha.log("[HealthKitObserver] Skipping query for \(sensor.rawValue) - circuit breaker is \(state)")
-                                return
-                            }
-                        }
-                        
-                        // Circuit is healthy or doesn't exist - proceed with query
-                        Sahha.log("[HealthKitObserver] Background delivery triggered for \(sensor.rawValue)")
-                        await handler(sensor, sampleType)
-                        Sahha.log("[HealthKitObserver] Background delivery completed for \(sensor.rawValue)")
                     }
+
+                    // Circuit is healthy or doesn't exist - proceed with query
+                    Sahha.log("[HealthKitObserver] Background delivery triggered for \(sensor.rawValue)")
+                    await handler(sensor, sampleType)
+                    Sahha.log("[HealthKitObserver] Background delivery completed for \(sensor.rawValue)")
                 }
             }
-            await observerStore.addObserver(query, for: sensor)
-            healthStore.execute(query)
         }
+        await observerStore.addObserver(query, for: sensor)
+        healthStore.execute(query)
     }
     
     /// Request additional background execution time from iOS

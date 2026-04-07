@@ -43,7 +43,6 @@ enum HealthKitDI {
     private static func registerObservers(container: DIContainer) async {
         await container.register(HealthKitObserverServiceProtocol.self) { container in
             HealthKitObserverService(
-                permissions: try await container.resolve(HealthKitPermissionsServiceProtocol.self),
                 observerStore: try await container.resolve(HealthKitObserverStoreProtocol.self),
                 circuitBreaker: try? await container.resolve(CircuitBreaker.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
