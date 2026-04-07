@@ -4,6 +4,7 @@ protocol HealthKitObserverStoreProtocol: Actor {
     func addObserver(_ observer: HKObserverQuery, forKey key: String)
     func removeObserver(forKey key: String) -> HKObserverQuery?
     func removeAllObservers() -> [HKObserverQuery]
+    func getRegisteredKeys() -> Set<String>
 }
 
 extension HealthKitObserverStoreProtocol {

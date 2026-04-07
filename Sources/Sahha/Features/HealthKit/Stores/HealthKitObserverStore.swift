@@ -15,4 +15,8 @@ actor HealthKitObserverStore: HealthKitObserverStoreProtocol {
         defer { observers.removeAll() }
         return Array(observers.values)
     }
+
+    func getRegisteredKeys() -> Set<String> {
+        Set(observers.keys)
+    }
 }
