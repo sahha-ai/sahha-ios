@@ -113,6 +113,17 @@ final class HealthKitManager: HealthKitManagerProtocol {
             return .pending
         }
         guard expanded.isSubset(of: enabledSensors) else { return .pending }
+
+        // Check per-sensor probe results — map .indeterminate to .enabled
+        // for backward compatibility. Per-sensor breakdown will be exposed
+        // in a future release.
+        let statuses = await sensorStore.getSensorStatuses()
+        for sensor in expanded {
+            if let sensorStatus = statuses[sensor], sensorStatus == .indeterminate {
+                // Internally tracked but externally reported as .enabled
+                continue
+            }
+        }
         return .enabled
     }
 
