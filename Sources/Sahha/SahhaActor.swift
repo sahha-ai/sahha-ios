@@ -175,6 +175,7 @@ actor SahhaActor {
         if let task = configurationTask { _ = try await task.value }
         let (container, settings) = try await requireConfig()
         await container.reset()
+        DLQMigrator.reset()
         try await configure(with: settings)
     }
 
