@@ -1,4 +1,4 @@
-actor SensorStore: SensorStoreProtocol {
+actor SensorStore: SensorStoreProtocol, Disposable {
     private let storage: UserDefaultsStorageProtocol
     private let key: String
 
@@ -36,5 +36,11 @@ actor SensorStore: SensorStoreProtocol {
 
     func getSensorStatuses() -> [SahhaSensor: SahhaSensorStatus] {
         sensorStatuses
+    }
+
+    func dispose() {
+        storage.removeObject(forKey: key)
+        sensors = nil
+        sensorStatuses = [:]
     }
 }
