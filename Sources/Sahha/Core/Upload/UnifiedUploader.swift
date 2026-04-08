@@ -89,6 +89,7 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
         uploadTask?.cancel()
         uploadTask = nil
         await chunkQueue.clear()
+        await persistentQueue.clearAll()
         await networkMonitor.stopMonitoring()
     }
 
