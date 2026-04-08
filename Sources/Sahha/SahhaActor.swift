@@ -17,8 +17,10 @@ actor SahhaActor {
 
     func configure(with settings: SahhaSettings) async throws {
         if let configurationTask {
+            Sahha.log("[SahhaActor] configure() called but already in progress, awaiting existing task")
             return try await configurationTask.value
         }
+        Sahha.log("[SahhaActor] configure() starting fresh (container exists: \(container != nil))")
 
         self.settings = settings
 

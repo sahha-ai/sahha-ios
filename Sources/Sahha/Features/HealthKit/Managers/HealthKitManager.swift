@@ -80,6 +80,7 @@ final class HealthKitManager: HealthKitManagerProtocol {
                 try await tagCoordinator.startTagCollection(for: tagSensors)
             }
         } catch {
+            Sahha.log("[HealthKitManager] resumeSensors failed: \(error)")
         }
     }
     

@@ -140,6 +140,7 @@ actor SentItemStore: Disposable {
 
     func dispose() async {
         sentIds?.removeAll()
+        storage.removeObject(forKey: storageKey)
     }
 
     // MARK: - Private Helpers

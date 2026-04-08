@@ -20,6 +20,7 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     }
     
     func startObservers(for sensors: Set<SahhaSensor>, handler: @escaping HealthKitObserverHandler) async throws {
+        Sahha.log("[HealthKitObserver] startObservers called for \(sensors.count) sensors: \(sensors.map(\.rawValue).sorted())")
         for sensor in sensors {
             // Per-sensor isolation: a failure for one sensor does not prevent others from registering
             do {
@@ -29,6 +30,8 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
                 logger.postError(error)
             }
         }
+        let keys = await observerStore.getRegisteredKeys()
+        Sahha.log("[HealthKitObserver] After startObservers, registered keys: \(keys.sorted())")
     }
 
     private func startObserver(for sensor: SahhaSensor, handler: @escaping HealthKitObserverHandler) async throws {
@@ -129,6 +132,8 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     }
     
     func dispose() async {
+        Sahha.log("[HealthKitObserverService] dispose() called")
+        Thread.callStackSymbols.prefix(10).forEach { Sahha.log("  \($0)") }
         await stopAllObservers()
         await disableAllBackgroundDeliveries()
     }
