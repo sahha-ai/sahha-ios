@@ -14,6 +14,11 @@ import Foundation
 enum DLQMigrator {
     private static let migrationKey = "dlq_migration_v1_complete"
 
+    /// Removes the migration flag so the validation can re-run on the next session.
+    static func reset() {
+        UserDefaults.standard.removeObject(forKey: migrationKey)
+    }
+
     /// Run migration validation once. Safe to call multiple times — no-ops after first run.
     static func migrateIfNeeded(
         storage: UserDefaultsStorageProtocol
