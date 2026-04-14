@@ -264,11 +264,6 @@ func testSDKOfflineRecovery() async throws {
 func testDiagnosticReportQueuesEncoding() throws {
     let report = DiagnosticReport(
         timestamp: Date(timeIntervalSince1970: 1_000_000_000),
-        sdkVersion: "1.0.0",
-        deviceModel: "iPhone",
-        system: "iOS",
-        systemVersion: "17.0",
-        appId: "com.sahha.test",
         enabledSensors: [],
         sensorStatuses: [:],
         queues: .init(
@@ -306,11 +301,6 @@ func testDiagnosticReportQueuesEncoding() throws {
 func testDiagnosticReportOmitsObserverStatuses() throws {
     let report = DiagnosticReport(
         timestamp: Date(timeIntervalSince1970: 1_000_000_000),
-        sdkVersion: "1.0.0",
-        deviceModel: "iPhone",
-        system: "iOS",
-        systemVersion: "17.0",
-        appId: "com.sahha.test",
         enabledSensors: [],
         sensorStatuses: [:],
         queues: .init(
@@ -329,11 +319,6 @@ func testDiagnosticReportOmitsObserverStatuses() throws {
 func testDiagnosticReportOmitsTransientStateFields() throws {
     let report = DiagnosticReport(
         timestamp: Date(timeIntervalSince1970: 1_000_000_000),
-        sdkVersion: "1.0.0",
-        deviceModel: "iPhone",
-        system: "iOS",
-        systemVersion: "17.0",
-        appId: "com.sahha.test",
         enabledSensors: [],
         sensorStatuses: [:],
         queues: .init(
@@ -349,6 +334,31 @@ func testDiagnosticReportOmitsTransientStateFields() throws {
     #expect(topLevelKeys.contains("circuitBreakerState") == false)
     #expect(topLevelKeys.contains("circuitBreakerFailures") == false)
     #expect(topLevelKeys.contains("isNetworkConnected") == false)
+}
+
+@Test("DiagnosticReport: device identity fields are absent from encoded payload")
+func testDiagnosticReportOmitsDeviceIdentityFields() throws {
+    let report = DiagnosticReport(
+        timestamp: Date(timeIntervalSince1970: 1_000_000_000),
+        enabledSensors: [],
+        sensorStatuses: [:],
+        queues: .init(
+            dataLog: .init(totalBatches: 0, totalItems: 0, failedBatches: 0, oldestBatchAge: nil),
+            tag: .init(totalBatches: 0, totalItems: 0, failedBatches: 0, oldestBatchAge: nil)
+        )
+    )
+
+    let data = try JSONEncoder().encode(report)
+    let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+    // Device identity flows via DeviceInfoSyncService → v1/profile/deviceInformation,
+    // not through the diagnostic payload.
+    let topLevelKeys = Set(json.keys)
+    #expect(topLevelKeys.contains("sdkVersion") == false)
+    #expect(topLevelKeys.contains("deviceModel") == false)
+    #expect(topLevelKeys.contains("system") == false)
+    #expect(topLevelKeys.contains("systemVersion") == false)
+    #expect(topLevelKeys.contains("appId") == false)
 }
 
 @Test("DiagnosticReportBuilder: backfill marks enabled-but-unprobed sensors as .pending")
