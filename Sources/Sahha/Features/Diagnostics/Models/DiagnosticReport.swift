@@ -3,11 +3,6 @@ import Foundation
 /// Pipeline health metadata snapshot — contains NO health data values by design (HIPAA/GDPR).
 public struct DiagnosticReport: Codable, Sendable {
     public let timestamp: Date
-    public let sdkVersion: String
-    public let deviceModel: String
-    public let system: String
-    public let systemVersion: String
-    public let appId: String
 
     public let enabledSensors: [String]
     public let sensorStatuses: [String: String]

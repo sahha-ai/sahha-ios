@@ -9,7 +9,6 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
     private let sensorStore: SensorStoreProtocol
     private let dataLogUploader: DataLogUploaderProtocol
     private let tagUploader: TagUploaderProtocol
-    private let deviceInfoBuilder: DeviceInfoBuilderProtocol
     private let storage: UserDefaultsStorageProtocol
 
     private let storageKey = "com.sahha.diagnostic_report"
@@ -18,19 +17,15 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
         sensorStore: SensorStoreProtocol,
         dataLogUploader: DataLogUploaderProtocol,
         tagUploader: TagUploaderProtocol,
-        deviceInfoBuilder: DeviceInfoBuilderProtocol,
         storage: UserDefaultsStorageProtocol
     ) {
         self.sensorStore = sensorStore
         self.dataLogUploader = dataLogUploader
         self.tagUploader = tagUploader
-        self.deviceInfoBuilder = deviceInfoBuilder
         self.storage = storage
     }
 
     func buildReport() async -> DiagnosticReport {
-        let deviceInfo = await deviceInfoBuilder.build()
-
         let enabledSensors: Set<SahhaSensor> = (try? await sensorStore.getSensors()) ?? []
         let storedStatuses = await sensorStore.getSensorStatuses()
         let sensorStatuses = Self.backfillStatuses(enabled: enabledSensors, statuses: storedStatuses)
@@ -40,11 +35,6 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
 
         let report = DiagnosticReport(
             timestamp: Date(),
-            sdkVersion: SDK.version,
-            deviceModel: deviceInfo.deviceModel,
-            system: deviceInfo.system,
-            systemVersion: deviceInfo.systemVersion,
-            appId: deviceInfo.appId,
             enabledSensors: enabledSensors.map(\.rawValue).sorted(),
             sensorStatuses: Dictionary(
                 uniqueKeysWithValues: sensorStatuses.map { ($0.key.rawValue, $0.value.rawValue) }
