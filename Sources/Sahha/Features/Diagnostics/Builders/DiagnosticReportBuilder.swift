@@ -41,7 +41,8 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
         let deviceInfo = await deviceInfoBuilder.build()
 
         let enabledSensors: Set<SahhaSensor> = (try? await sensorStore.getSensors()) ?? []
-        let sensorStatuses = await sensorStore.getSensorStatuses()
+        let storedStatuses = await sensorStore.getSensorStatuses()
+        let sensorStatuses = Self.backfillStatuses(enabled: enabledSensors, statuses: storedStatuses)
 
         let healthCheck = await healthCheckListener.getLatestResult()
 
@@ -91,6 +92,19 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
 
     func getLatestReport() async -> DiagnosticReport? {
         try? storage.object(forKey: storageKey)
+    }
+
+    /// Pure transformation: every sensor in `enabled` gets an entry in the returned map,
+    /// backfilled as `.pending` when absent from `statuses`. Existing entries are preserved.
+    static func backfillStatuses(
+        enabled: Set<SahhaSensor>,
+        statuses: [SahhaSensor: SahhaSensorStatus]
+    ) -> [SahhaSensor: SahhaSensorStatus] {
+        var result = statuses
+        for sensor in enabled where result[sensor] == nil {
+            result[sensor] = .pending
+        }
+        return result
     }
 
     private func queueSnapshot(from stats: PersistenceStatistics) -> DiagnosticReport.QueueSnapshot {

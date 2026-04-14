@@ -310,3 +310,39 @@ func testDiagnosticReportQueuesEncoding() throws {
     #expect(tag["failedBatches"] as? Int == 0)
     #expect(Set(tag.keys).contains("oldestBatchAge") == false)
 }
+
+@Test("DiagnosticReportBuilder: backfill marks enabled-but-unprobed sensors as .pending")
+func testBackfillMarksMissingStatusesAsPending() throws {
+    let enabled: Set<SahhaSensor> = [.heart_rate, .steps]
+    let partial: [SahhaSensor: SahhaSensorStatus] = [.heart_rate: .enabled]
+
+    let result = DiagnosticReportBuilder.backfillStatuses(enabled: enabled, statuses: partial)
+
+    #expect(result.count == 2)
+    #expect(result[.heart_rate] == .enabled)   // preserved
+    #expect(result[.steps] == .pending)        // backfilled
+}
+
+@Test("DiagnosticReportBuilder: backfill yields empty map when enabled set is empty")
+func testBackfillEmptyEnabledGivesEmptyMap() throws {
+    let result = DiagnosticReportBuilder.backfillStatuses(enabled: [], statuses: [:])
+
+    #expect(result.isEmpty)
+}
+
+@Test("DiagnosticReportBuilder: backfill preserves existing non-pending statuses")
+func testBackfillPreservesExistingStatuses() throws {
+    let enabled: Set<SahhaSensor> = [.heart_rate, .steps, .sleep]
+    let existing: [SahhaSensor: SahhaSensorStatus] = [
+        .heart_rate: .enabled,
+        .steps: .disabled,
+        .sleep: .unavailable,
+    ]
+
+    let result = DiagnosticReportBuilder.backfillStatuses(enabled: enabled, statuses: existing)
+
+    #expect(result[.heart_rate] == .enabled)
+    #expect(result[.steps] == .disabled)
+    #expect(result[.sleep] == .unavailable)
+    #expect(result.count == 3)   // no spurious entries
+}
