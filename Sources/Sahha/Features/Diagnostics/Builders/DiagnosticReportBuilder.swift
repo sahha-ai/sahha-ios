@@ -9,8 +9,6 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
     private let sensorStore: SensorStoreProtocol
     private let dataLogUploader: DataLogUploaderProtocol
     private let tagUploader: TagUploaderProtocol
-    private let circuitBreaker: CircuitBreaker?
-    private let networkMonitor: NetworkMonitor
     private let deviceInfoBuilder: DeviceInfoBuilderProtocol
     private let storage: UserDefaultsStorageProtocol
 
@@ -20,16 +18,12 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
         sensorStore: SensorStoreProtocol,
         dataLogUploader: DataLogUploaderProtocol,
         tagUploader: TagUploaderProtocol,
-        circuitBreaker: CircuitBreaker?,
-        networkMonitor: NetworkMonitor,
         deviceInfoBuilder: DeviceInfoBuilderProtocol,
         storage: UserDefaultsStorageProtocol
     ) {
         self.sensorStore = sensorStore
         self.dataLogUploader = dataLogUploader
         self.tagUploader = tagUploader
-        self.circuitBreaker = circuitBreaker
-        self.networkMonitor = networkMonitor
         self.deviceInfoBuilder = deviceInfoBuilder
         self.storage = storage
     }
@@ -43,15 +37,6 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
 
         let dataLogQueueStats = await dataLogUploader.getDLQStatistics()
         let tagQueueStats = await tagUploader.getDLQStatistics()
-
-        let cbState: (CircuitState, Int)
-        if let circuitBreaker {
-            cbState = await circuitBreaker.getState()
-        } else {
-            cbState = (.closed, 0)
-        }
-
-        let networkConnected = await networkMonitor.isConnected
 
         let report = DiagnosticReport(
             timestamp: Date(),
@@ -67,10 +52,7 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
             queues: DiagnosticReport.Queues(
                 dataLog: queueSnapshot(from: dataLogQueueStats),
                 tag: queueSnapshot(from: tagQueueStats)
-            ),
-            circuitBreakerState: String(describing: cbState.0),
-            circuitBreakerFailures: cbState.1,
-            isNetworkConnected: networkConnected
+            )
         )
 
         try? storage.setObject(report, forKey: storageKey)
