@@ -105,11 +105,7 @@ actor SahhaActor {
             let tagRetryListener = try await container.resolve(TagRetryLifecycleListener.self)
             let sensorHealthCheckListener = try await container.resolve(SensorHealthCheckLifecycleListener.self)
             let sensorProbeListener = try await container.resolve(SensorProbeLifecycleListener.self)
-            let diagnosticReportBuilder = try await container.resolve(DiagnosticReportBuilderProtocol.self)
             let diagnosticConfigListener = try await container.resolve(DiagnosticConfigLifecycleListener.self)
-
-            // Connect diagnostic report builder to health check listener
-            sensorHealthCheckListener.setDiagnosticReportBuilder(diagnosticReportBuilder)
 
             await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
             await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
