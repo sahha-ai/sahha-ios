@@ -259,3 +259,54 @@ func testSDKOfflineRecovery() async throws {
 @Test func example() async throws {
     // Your existing test - keep or expand
 }
+
+@Test("DiagnosticReport: queues field replaces dataLogDLQ and tagDLQ in encoded payload")
+func testDiagnosticReportQueuesEncoding() throws {
+    let report = DiagnosticReport(
+        timestamp: Date(timeIntervalSince1970: 1_000_000_000),
+        sdkVersion: "1.0.0",
+        deviceModel: "iPhone",
+        system: "iOS",
+        systemVersion: "17.0",
+        appId: "com.sahha.test",
+        enabledSensors: [],
+        sensorStatuses: [:],
+        observerStatuses: .init(
+            sensorsChecked: [],
+            sensorsReRegistered: [],
+            failures: [:],
+            lastCheckTimestamp: nil
+        ),
+        queues: .init(
+            dataLog: .init(totalBatches: 2, totalItems: 10, failedBatches: 1, oldestBatchAge: 42),
+            tag: .init(totalBatches: 3, totalItems: 15, failedBatches: 0, oldestBatchAge: nil)
+        ),
+        circuitBreakerState: "closed",
+        circuitBreakerFailures: 0,
+        isNetworkConnected: true
+    )
+
+    let data = try JSONEncoder().encode(report)
+    let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+    // New `queues` key present; old DLQ top-level keys absent.
+    let topLevelKeys = Set(json.keys)
+    #expect(topLevelKeys.contains("queues"))
+    #expect(topLevelKeys.contains("dataLogDLQ") == false)
+    #expect(topLevelKeys.contains("tagDLQ") == false)
+
+    // queues.dataLog contains all expected snapshot fields with values intact.
+    let queues = json["queues"] as! [String: Any]
+    let dataLog = queues["dataLog"] as! [String: Any]
+    #expect(dataLog["totalBatches"] as? Int == 2)
+    #expect(dataLog["totalItems"] as? Int == 10)
+    #expect(dataLog["failedBatches"] as? Int == 1)
+    #expect(dataLog["oldestBatchAge"] as? Double == 42)
+
+    // queues.tag contains all expected snapshot fields; nil oldestBatchAge is omitted.
+    let tag = queues["tag"] as! [String: Any]
+    #expect(tag["totalBatches"] as? Int == 3)
+    #expect(tag["totalItems"] as? Int == 15)
+    #expect(tag["failedBatches"] as? Int == 0)
+    #expect(Set(tag.keys).contains("oldestBatchAge") == false)
+}

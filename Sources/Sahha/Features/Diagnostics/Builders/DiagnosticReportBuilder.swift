@@ -45,8 +45,8 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
 
         let healthCheck = await healthCheckListener.getLatestResult()
 
-        let dataLogDLQStats = await dataLogUploader.getDLQStatistics()
-        let tagDLQStats = await tagUploader.getDLQStatistics()
+        let dataLogQueueStats = await dataLogUploader.getDLQStatistics()
+        let tagQueueStats = await tagUploader.getDLQStatistics()
 
         let cbState: (CircuitState, Int)
         if let circuitBreaker {
@@ -76,8 +76,10 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
                 } ?? [:],
                 lastCheckTimestamp: healthCheck?.timestamp
             ),
-            dataLogDLQ: dlqSnapshot(from: dataLogDLQStats),
-            tagDLQ: dlqSnapshot(from: tagDLQStats),
+            queues: DiagnosticReport.Queues(
+                dataLog: queueSnapshot(from: dataLogQueueStats),
+                tag: queueSnapshot(from: tagQueueStats)
+            ),
             circuitBreakerState: String(describing: cbState.0),
             circuitBreakerFailures: cbState.1,
             isNetworkConnected: networkConnected
@@ -91,14 +93,14 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
         try? storage.object(forKey: storageKey)
     }
 
-    private func dlqSnapshot(from stats: PersistenceStatistics) -> DiagnosticReport.DLQSnapshot {
+    private func queueSnapshot(from stats: PersistenceStatistics) -> DiagnosticReport.QueueSnapshot {
         let oldestAge: TimeInterval?
         if let oldest = stats.oldestTimestamp {
             oldestAge = Date().timeIntervalSince1970 - oldest
         } else {
             oldestAge = nil
         }
-        return DiagnosticReport.DLQSnapshot(
+        return DiagnosticReport.QueueSnapshot(
             totalBatches: stats.totalBatches,
             totalItems: stats.totalItems,
             failedBatches: stats.failedBatches,
