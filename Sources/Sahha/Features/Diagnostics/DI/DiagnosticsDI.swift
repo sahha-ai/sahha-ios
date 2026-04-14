@@ -5,8 +5,6 @@ enum DiagnosticsDI {
                 sensorStore: try await container.resolve(SensorStoreProtocol.self),
                 dataLogUploader: try await container.resolve(DataLogUploaderProtocol.self),
                 tagUploader: try await container.resolve(TagUploaderProtocol.self),
-                circuitBreaker: try? await container.resolve(CircuitBreaker.self),
-                networkMonitor: NetworkMonitor(),
                 deviceInfoBuilder: try await container.resolve(DeviceInfoBuilderProtocol.self),
                 storage: try await container.resolve(UserDefaultsStorageProtocol.self)
             )

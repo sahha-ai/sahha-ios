@@ -274,10 +274,7 @@ func testDiagnosticReportQueuesEncoding() throws {
         queues: .init(
             dataLog: .init(totalBatches: 2, totalItems: 10, failedBatches: 1, oldestBatchAge: 42),
             tag: .init(totalBatches: 3, totalItems: 15, failedBatches: 0, oldestBatchAge: nil)
-        ),
-        circuitBreakerState: "closed",
-        circuitBreakerFailures: 0,
-        isNetworkConnected: true
+        )
     )
 
     let data = try JSONEncoder().encode(report)
@@ -319,16 +316,39 @@ func testDiagnosticReportOmitsObserverStatuses() throws {
         queues: .init(
             dataLog: .init(totalBatches: 0, totalItems: 0, failedBatches: 0, oldestBatchAge: nil),
             tag: .init(totalBatches: 0, totalItems: 0, failedBatches: 0, oldestBatchAge: nil)
-        ),
-        circuitBreakerState: "closed",
-        circuitBreakerFailures: 0,
-        isNetworkConnected: true
+        )
     )
 
     let data = try JSONEncoder().encode(report)
     let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
     #expect(Set(json.keys).contains("observerStatuses") == false)
+}
+
+@Test("DiagnosticReport: circuit breaker and network connectivity fields are absent from encoded payload")
+func testDiagnosticReportOmitsTransientStateFields() throws {
+    let report = DiagnosticReport(
+        timestamp: Date(timeIntervalSince1970: 1_000_000_000),
+        sdkVersion: "1.0.0",
+        deviceModel: "iPhone",
+        system: "iOS",
+        systemVersion: "17.0",
+        appId: "com.sahha.test",
+        enabledSensors: [],
+        sensorStatuses: [:],
+        queues: .init(
+            dataLog: .init(totalBatches: 0, totalItems: 0, failedBatches: 0, oldestBatchAge: nil),
+            tag: .init(totalBatches: 0, totalItems: 0, failedBatches: 0, oldestBatchAge: nil)
+        )
+    )
+
+    let data = try JSONEncoder().encode(report)
+    let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+    let topLevelKeys = Set(json.keys)
+    #expect(topLevelKeys.contains("circuitBreakerState") == false)
+    #expect(topLevelKeys.contains("circuitBreakerFailures") == false)
+    #expect(topLevelKeys.contains("isNetworkConnected") == false)
 }
 
 @Test("DiagnosticReportBuilder: backfill marks enabled-but-unprobed sensors as .pending")
