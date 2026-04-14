@@ -7,7 +7,6 @@ protocol DiagnosticReportBuilderProtocol: Sendable {
 
 actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
     private let sensorStore: SensorStoreProtocol
-    private let healthCheckListener: SensorHealthCheckLifecycleListener
     private let dataLogUploader: DataLogUploaderProtocol
     private let tagUploader: TagUploaderProtocol
     private let circuitBreaker: CircuitBreaker?
@@ -19,7 +18,6 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
 
     init(
         sensorStore: SensorStoreProtocol,
-        healthCheckListener: SensorHealthCheckLifecycleListener,
         dataLogUploader: DataLogUploaderProtocol,
         tagUploader: TagUploaderProtocol,
         circuitBreaker: CircuitBreaker?,
@@ -28,7 +26,6 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
         storage: UserDefaultsStorageProtocol
     ) {
         self.sensorStore = sensorStore
-        self.healthCheckListener = healthCheckListener
         self.dataLogUploader = dataLogUploader
         self.tagUploader = tagUploader
         self.circuitBreaker = circuitBreaker
@@ -43,8 +40,6 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
         let enabledSensors: Set<SahhaSensor> = (try? await sensorStore.getSensors()) ?? []
         let storedStatuses = await sensorStore.getSensorStatuses()
         let sensorStatuses = Self.backfillStatuses(enabled: enabledSensors, statuses: storedStatuses)
-
-        let healthCheck = await healthCheckListener.getLatestResult()
 
         let dataLogQueueStats = await dataLogUploader.getDLQStatistics()
         let tagQueueStats = await tagUploader.getDLQStatistics()
@@ -68,14 +63,6 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
             enabledSensors: enabledSensors.map(\.rawValue).sorted(),
             sensorStatuses: Dictionary(
                 uniqueKeysWithValues: sensorStatuses.map { ($0.key.rawValue, $0.value.rawValue) }
-            ),
-            observerStatuses: DiagnosticReport.ObserverSnapshot(
-                sensorsChecked: healthCheck?.sensorsChecked.map(\.rawValue).sorted() ?? [],
-                sensorsReRegistered: healthCheck?.sensorsReRegistered.map(\.rawValue).sorted() ?? [],
-                failures: healthCheck?.failures.reduce(into: [String: String]()) {
-                    $0[$1.key.rawValue] = $1.value
-                } ?? [:],
-                lastCheckTimestamp: healthCheck?.timestamp
             ),
             queues: DiagnosticReport.Queues(
                 dataLog: queueSnapshot(from: dataLogQueueStats),

@@ -271,12 +271,6 @@ func testDiagnosticReportQueuesEncoding() throws {
         appId: "com.sahha.test",
         enabledSensors: [],
         sensorStatuses: [:],
-        observerStatuses: .init(
-            sensorsChecked: [],
-            sensorsReRegistered: [],
-            failures: [:],
-            lastCheckTimestamp: nil
-        ),
         queues: .init(
             dataLog: .init(totalBatches: 2, totalItems: 10, failedBatches: 1, oldestBatchAge: 42),
             tag: .init(totalBatches: 3, totalItems: 15, failedBatches: 0, oldestBatchAge: nil)
@@ -309,6 +303,32 @@ func testDiagnosticReportQueuesEncoding() throws {
     #expect(tag["totalItems"] as? Int == 15)
     #expect(tag["failedBatches"] as? Int == 0)
     #expect(Set(tag.keys).contains("oldestBatchAge") == false)
+}
+
+@Test("DiagnosticReport: observerStatuses is absent from encoded payload")
+func testDiagnosticReportOmitsObserverStatuses() throws {
+    let report = DiagnosticReport(
+        timestamp: Date(timeIntervalSince1970: 1_000_000_000),
+        sdkVersion: "1.0.0",
+        deviceModel: "iPhone",
+        system: "iOS",
+        systemVersion: "17.0",
+        appId: "com.sahha.test",
+        enabledSensors: [],
+        sensorStatuses: [:],
+        queues: .init(
+            dataLog: .init(totalBatches: 0, totalItems: 0, failedBatches: 0, oldestBatchAge: nil),
+            tag: .init(totalBatches: 0, totalItems: 0, failedBatches: 0, oldestBatchAge: nil)
+        ),
+        circuitBreakerState: "closed",
+        circuitBreakerFailures: 0,
+        isNetworkConnected: true
+    )
+
+    let data = try JSONEncoder().encode(report)
+    let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+    #expect(Set(json.keys).contains("observerStatuses") == false)
 }
 
 @Test("DiagnosticReportBuilder: backfill marks enabled-but-unprobed sensors as .pending")
@@ -345,4 +365,101 @@ func testBackfillPreservesExistingStatuses() throws {
     #expect(result[.steps] == .disabled)
     #expect(result[.sleep] == .unavailable)
     #expect(result.count == 3)   // no spurious entries
+}
+
+// MARK: - SensorHealthCheckLifecycleListener mocks
+
+actor MockSensorStoreForHealthCheck: SensorStoreProtocol {
+    private var sensors: Set<SahhaSensor> = []
+    private var statuses: [SahhaSensor: SahhaSensorStatus] = [:]
+
+    func setSensors(_ sensors: Set<SahhaSensor>) throws { self.sensors = sensors }
+    func getSensors() throws -> Set<SahhaSensor> { sensors }
+    func hasSensor(_ sensor: SahhaSensor) -> Bool { sensors.contains(sensor) }
+    func setSensorStatuses(_ statuses: [SahhaSensor: SahhaSensorStatus]) { self.statuses = statuses }
+    func getSensorStatuses() -> [SahhaSensor: SahhaSensorStatus] { statuses }
+}
+
+actor MockHealthKitObserverStore: HealthKitObserverStoreProtocol {
+    private var registeredKeys: Set<String> = []
+
+    /// Test helper: register a key without needing a real HKObserverQuery.
+    func markRegistered(_ key: String) { registeredKeys.insert(key) }
+
+    func addObserver(_ observer: HKObserverQuery, forKey key: String) { registeredKeys.insert(key) }
+    func removeObserver(forKey key: String) -> HKObserverQuery? {
+        registeredKeys.remove(key)
+        return nil
+    }
+    func removeAllObservers() -> [HKObserverQuery] {
+        registeredKeys.removeAll()
+        return []
+    }
+    func getRegisteredKeys() -> Set<String> { registeredKeys }
+}
+
+final class MockHealthKitManager: HealthKitManagerProtocol, @unchecked Sendable {
+    private let observerStore: MockHealthKitObserverStore
+    private let sensorsToRegister: Set<SahhaSensor>
+
+    /// Records invocations so tests can assert `resumeSensors()` was called.
+    private(set) var resumeSensorsCallCount = 0
+
+    init(observerStore: MockHealthKitObserverStore, sensorsToRegister: Set<SahhaSensor>) {
+        self.observerStore = observerStore
+        self.sensorsToRegister = sensorsToRegister
+    }
+
+    func resumeSensors() async {
+        resumeSensorsCallCount += 1
+        for sensor in sensorsToRegister {
+            await observerStore.markRegistered(sensor.rawValue)
+        }
+    }
+
+    // Unused by these tests — no-op conformance.
+    func enableSensors(_ sensors: Set<SahhaSensor>) async throws {}
+    func querySensors() async -> PostSensorDataResult { PostSensorDataResult(sensorResults: []) }
+    func getSensorStatus(_ sensors: Set<SahhaSensor>) async throws -> SahhaSensorStatus { .pending }
+    func getStats(for sensor: SahhaSensor, startDateTime: Date, endDateTime: Date) async throws -> [SahhaStat] { [] }
+    func getSamples(for sensor: SahhaSensor, startDateTime: Date, endDateTime: Date) async throws -> [SahhaSample] { [] }
+    func getDemographic() async throws -> SahhaDemographic { SahhaDemographic() }
+    func postInsights() async {}
+}
+
+final class NoopErrorLogger: ErrorLoggerProtocol, @unchecked Sendable {
+    func postError(_ error: Error, file: StaticString, function: StaticString, line: UInt) {}
+}
+
+@Test("SensorHealthCheckLifecycleListener: re-registers missing observers on lifecycle event")
+func testHealthCheckListenerRegistersMissingObservers() async throws {
+    let sensorStore = MockSensorStoreForHealthCheck()
+    try await sensorStore.setSensors([.heart_rate])
+
+    let observerStore = MockHealthKitObserverStore()   // starts empty — observer is "missing"
+    let healthKitManager = MockHealthKitManager(
+        observerStore: observerStore,
+        sensorsToRegister: [.heart_rate]   // resumeSensors will re-register it
+    )
+
+    let listener = SensorHealthCheckLifecycleListener(
+        sensorStore: sensorStore,
+        observerStore: observerStore,
+        healthKitManager: healthKitManager,
+        logger: NoopErrorLogger()
+    )
+
+    await listener.handleLifecycleEvent(.app_foreground)
+
+    // HealthKitManager.resumeSensors() was invoked exactly once.
+    #expect(healthKitManager.resumeSensorsCallCount == 1)
+
+    // The missing observer is now registered in the store.
+    let keys = await observerStore.getRegisteredKeys()
+    #expect(keys.contains(SahhaSensor.heart_rate.rawValue))
+
+    // The listener's latest result reflects the re-registration.
+    let result = await listener.getLatestResult()
+    #expect(result?.sensorsReRegistered.contains(.heart_rate) == true)
+    #expect(result?.failures.isEmpty == true)
 }
