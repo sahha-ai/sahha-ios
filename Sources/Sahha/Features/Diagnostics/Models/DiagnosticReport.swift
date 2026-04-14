@@ -11,18 +11,10 @@ public struct DiagnosticReport: Codable, Sendable {
 
     public let enabledSensors: [String]
     public let sensorStatuses: [String: String]
-    public let observerStatuses: ObserverSnapshot
     public let queues: Queues
     public let circuitBreakerState: String
     public let circuitBreakerFailures: Int
     public let isNetworkConnected: Bool
-
-    public struct ObserverSnapshot: Codable, Sendable {
-        public let sensorsChecked: [String]
-        public let sensorsReRegistered: [String]
-        public let failures: [String: String]
-        public let lastCheckTimestamp: Date?
-    }
 
     public struct Queues: Codable, Sendable {
         public let dataLog: QueueSnapshot
