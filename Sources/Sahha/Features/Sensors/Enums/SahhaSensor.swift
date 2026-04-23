@@ -92,7 +92,7 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case vitamin_b2_intake
     case vitamin_b3_intake
     case vitamin_b5_intake
-    case viatmin_b9_intake
+    case vitamin_b9_intake
     case vitamin_b7_intake
     case calcium_intake
     case iron_intake

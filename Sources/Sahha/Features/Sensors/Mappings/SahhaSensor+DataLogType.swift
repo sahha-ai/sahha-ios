@@ -34,7 +34,7 @@ extension SahhaSensor {
              .carbohydrate_intake, .sugar_intake, .fiber_intake, .vitamin_a_intake,
              .vitamin_d_intake, .vitamin_e_intake, .vitamin_k_intake, .vitamin_c_intake,
              .vitamin_b6_intake, .vitamin_b12_intake, .vitamin_b1_intake, .vitamin_b2_intake,
-             .vitamin_b3_intake, .vitamin_b5_intake, .viatmin_b9_intake, .vitamin_b7_intake,
+             .vitamin_b3_intake, .vitamin_b5_intake, .vitamin_b9_intake, .vitamin_b7_intake,
              .calcium_intake, .iron_intake, .magnesium_intake, .phosphorus_intake,
              .potassium_intake, .sodium_intake, .zinc_intake, .chloride_intake,
              .copper_intake, .manganese_intake, .chromium_intake, .molybdenum_intake,

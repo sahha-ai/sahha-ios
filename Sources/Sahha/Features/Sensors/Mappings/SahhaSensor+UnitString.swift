@@ -54,7 +54,7 @@ extension SahhaSensor {
             
         // MARK: - Nutrition - Micrograms
         case .vitamin_a_intake, .vitamin_d_intake, .vitamin_k_intake,
-             .vitamin_b12_intake, .viatmin_b9_intake, .vitamin_b7_intake,
+             .vitamin_b12_intake, .vitamin_b9_intake, .vitamin_b7_intake,
              .chromium_intake, .molybdenum_intake, .selenium_intake, .iodine_intake:
             "mcg"
             

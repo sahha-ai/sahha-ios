@@ -95,7 +95,7 @@ extension SahhaSensor {
             
         // MARK: - Nutrition - Vitamins (mixed units)
         case .vitamin_a_intake, .vitamin_d_intake, .vitamin_k_intake,
-             .vitamin_b12_intake, .viatmin_b9_intake, .vitamin_b7_intake:
+             .vitamin_b12_intake, .vitamin_b9_intake, .vitamin_b7_intake:
             return .gramUnit(with: .micro) // micrograms
         case .vitamin_e_intake, .vitamin_c_intake, .vitamin_b6_intake,
              .vitamin_b1_intake, .vitamin_b2_intake, .vitamin_b3_intake,

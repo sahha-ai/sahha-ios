@@ -183,7 +183,7 @@ extension SahhaSensor {
             return HKQuantityType.quantityType(forIdentifier: .dietaryNiacin)
         case .vitamin_b5_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryPantothenicAcid)
-        case .viatmin_b9_intake:
+        case .vitamin_b9_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryFolate)
         case .vitamin_b7_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryBiotin)
