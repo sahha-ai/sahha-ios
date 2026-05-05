@@ -88,12 +88,12 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case vitamin_c_intake
     case vitamin_b6_intake
     case vitamin_b12_intake
-    case vitamin_b1_intake
-    case vitamin_b2_intake
-    case vitamin_b3_intake
-    case vitamin_b5_intake
-    case vitamin_b9_intake
-    case vitamin_b7_intake
+    case thiamin_intake
+    case riboflavin_intake
+    case niacin_intake
+    case pantothenic_acid_intake
+    case folate_intake
+    case biotin_intake
     case calcium_intake
     case iron_intake
     case magnesium_intake
@@ -133,7 +133,7 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case progesterone_test
     case lactation
     
-    // MARK: - Symptoms (29 types)
+    // MARK: - Symptoms (38 types)
     case abdominal_cramps
     case acne
     case appetite_changes
@@ -142,13 +142,20 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case breast_pain
     case chills
     case constipation
+    case coughing
     case diarrhea
     case dizziness
     case dry_skin
+    case fainting
     case fatigue
+    case fever
+    case generalized_body_ache
     case hair_loss
     case headache
+    case heartburn
     case hot_flashes
+    case loss_of_smell
+    case loss_of_taste
     case lower_back_pain
     case memory_lapse
     case mood_changes
@@ -157,12 +164,14 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case pelvic_pain
     case rapid_pounding_or_fluttering_heartbeat
     case runny_nose
+    case shortness_of_breath
     case sinus_congestion
     case skipped_heartbeat
     case sleep_changes
     case sore_throat
     case vaginal_dryness
     case vomiting
+    case wheezing
 
     // MARK: - Umbrella (blanket terms for permissions; expand to granular sensors internally)
     case nutrition   // All dietary/nutrition HealthKit types

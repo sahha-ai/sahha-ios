@@ -28,8 +28,8 @@ extension SahhaSensor {
              .fat_monounsaturated_intake, .fat_polyunsaturated_intake, .cholesterol_intake,
              .carbohydrate_intake, .sugar_intake, .fiber_intake, .vitamin_a_intake,
              .vitamin_d_intake, .vitamin_e_intake, .vitamin_k_intake, .vitamin_c_intake,
-             .vitamin_b6_intake, .vitamin_b12_intake, .vitamin_b1_intake, .vitamin_b2_intake,
-             .vitamin_b3_intake, .vitamin_b5_intake, .vitamin_b9_intake, .vitamin_b7_intake,
+             .vitamin_b6_intake, .vitamin_b12_intake, .thiamin_intake, .riboflavin_intake,
+             .niacin_intake, .pantothenic_acid_intake, .folate_intake, .biotin_intake,
              .calcium_intake, .iron_intake, .magnesium_intake, .phosphorus_intake,
              .potassium_intake, .sodium_intake, .zinc_intake, .chloride_intake,
              .copper_intake, .manganese_intake, .chromium_intake, .molybdenum_intake,
@@ -44,13 +44,15 @@ extension SahhaSensor {
              .progesterone_test, .lactation:
             .reproductive
 
-        // MARK: - Symptoms (29 types)
+        // MARK: - Symptoms (38 types)
         case .abdominal_cramps, .acne, .appetite_changes, .bladder_incontinence,
-             .bloating, .breast_pain, .chills, .constipation, .diarrhea, .dizziness,
-             .dry_skin, .fatigue, .hair_loss, .headache, .hot_flashes, .lower_back_pain,
-             .memory_lapse, .mood_changes, .nausea, .night_sweats, .pelvic_pain,
-             .rapid_pounding_or_fluttering_heartbeat, .runny_nose, .sinus_congestion,
-             .skipped_heartbeat, .sleep_changes, .sore_throat, .vaginal_dryness, .vomiting:
+             .bloating, .breast_pain, .chills, .constipation, .coughing, .diarrhea,
+             .dizziness, .dry_skin, .fainting, .fatigue, .fever, .generalized_body_ache,
+             .hair_loss, .headache, .heartburn, .hot_flashes, .loss_of_smell,
+             .loss_of_taste, .lower_back_pain, .memory_lapse, .mood_changes, .nausea,
+             .night_sweats, .pelvic_pain, .rapid_pounding_or_fluttering_heartbeat,
+             .runny_nose, .shortness_of_breath, .sinus_congestion, .skipped_heartbeat,
+             .sleep_changes, .sore_throat, .vaginal_dryness, .vomiting, .wheezing:
             .symptom
 
         // MARK: - Umbrella (same category as their granular sensors)

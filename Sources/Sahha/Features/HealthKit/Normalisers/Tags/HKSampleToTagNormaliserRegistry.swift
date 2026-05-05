@@ -7,8 +7,10 @@ final class HKSampleToTagNormaliserRegistry: HKSampleToTagNormaliserProtocol {
     private static let ovulationTest = HKOvulationTestToTagNormaliser()
     private static let sexualActivity = HKSexualActivityToTagNormaliser()
     private static let pregnancyTest = HKPregnancyTestToTagNormaliser()
+    private static let progesteroneTest = HKProgesteroneTestToTagNormaliser()
+    private static let contraceptive = HKContraceptiveToTagNormaliser()
     private static let reproductiveFlag = HKReproductiveFlagToTagNormaliser()
-    private static let reproductiveSymptom = HKReproductiveSymptomToTagNormaliser()
+    private static let symptom = HKSymptomToTagNormaliser()
 
     private static let normalisers: [String: HKSampleToTagNormaliserProtocol] = {
         var map: [String: HKSampleToTagNormaliserProtocol] = [
@@ -24,44 +26,53 @@ final class HKSampleToTagNormaliserRegistry: HKSampleToTagNormaliserProtocol {
             HKCategoryTypeIdentifier.sexualActivity.rawValue: sexualActivity,
 
             // Symptoms
-            HKCategoryTypeIdentifier.abdominalCramps.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.acne.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.appetiteChanges.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.bloating.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.breastPain.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.chills.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.constipation.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.diarrhea.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.dizziness.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.fatigue.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.headache.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.hotFlashes.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.lowerBackPain.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.moodChanges.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.nausea.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.pelvicPain.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.rapidPoundingOrFlutteringHeartbeat.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.sinusCongestion.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.skippedHeartbeat.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.sleepChanges.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.soreThroat.rawValue: reproductiveSymptom,
-            HKCategoryTypeIdentifier.vomiting.rawValue: reproductiveSymptom,
+            HKCategoryTypeIdentifier.abdominalCramps.rawValue: symptom,
+            HKCategoryTypeIdentifier.acne.rawValue: symptom,
+            HKCategoryTypeIdentifier.appetiteChanges.rawValue: symptom,
+            HKCategoryTypeIdentifier.bloating.rawValue: symptom,
+            HKCategoryTypeIdentifier.breastPain.rawValue: symptom,
+            HKCategoryTypeIdentifier.chills.rawValue: symptom,
+            HKCategoryTypeIdentifier.constipation.rawValue: symptom,
+            HKCategoryTypeIdentifier.coughing.rawValue: symptom,
+            HKCategoryTypeIdentifier.diarrhea.rawValue: symptom,
+            HKCategoryTypeIdentifier.dizziness.rawValue: symptom,
+            HKCategoryTypeIdentifier.fainting.rawValue: symptom,
+            HKCategoryTypeIdentifier.fatigue.rawValue: symptom,
+            HKCategoryTypeIdentifier.fever.rawValue: symptom,
+            HKCategoryTypeIdentifier.generalizedBodyAche.rawValue: symptom,
+            HKCategoryTypeIdentifier.headache.rawValue: symptom,
+            HKCategoryTypeIdentifier.heartburn.rawValue: symptom,
+            HKCategoryTypeIdentifier.hotFlashes.rawValue: symptom,
+            HKCategoryTypeIdentifier.lossOfSmell.rawValue: symptom,
+            HKCategoryTypeIdentifier.lossOfTaste.rawValue: symptom,
+            HKCategoryTypeIdentifier.lowerBackPain.rawValue: symptom,
+            HKCategoryTypeIdentifier.moodChanges.rawValue: symptom,
+            HKCategoryTypeIdentifier.nausea.rawValue: symptom,
+            HKCategoryTypeIdentifier.pelvicPain.rawValue: symptom,
+            HKCategoryTypeIdentifier.rapidPoundingOrFlutteringHeartbeat.rawValue: symptom,
+            HKCategoryTypeIdentifier.runnyNose.rawValue: symptom,
+            HKCategoryTypeIdentifier.shortnessOfBreath.rawValue: symptom,
+            HKCategoryTypeIdentifier.sinusCongestion.rawValue: symptom,
+            HKCategoryTypeIdentifier.skippedHeartbeat.rawValue: symptom,
+            HKCategoryTypeIdentifier.sleepChanges.rawValue: symptom,
+            HKCategoryTypeIdentifier.soreThroat.rawValue: symptom,
+            HKCategoryTypeIdentifier.vomiting.rawValue: symptom,
+            HKCategoryTypeIdentifier.wheezing.rawValue: symptom,
         ]
 
         // iOS 14.0+
         if #available(iOS 14.0, *) {
-            map[HKCategoryTypeIdentifier.bladderIncontinence.rawValue] = reproductiveSymptom
-            map[HKCategoryTypeIdentifier.drySkin.rawValue] = reproductiveSymptom
-            map[HKCategoryTypeIdentifier.hairLoss.rawValue] = reproductiveSymptom
-            map[HKCategoryTypeIdentifier.memoryLapse.rawValue] = reproductiveSymptom
-            map[HKCategoryTypeIdentifier.nightSweats.rawValue] = reproductiveSymptom
-            map[HKCategoryTypeIdentifier.runnyNose.rawValue] = reproductiveSymptom
-            map[HKCategoryTypeIdentifier.vaginalDryness.rawValue] = reproductiveSymptom
+            map[HKCategoryTypeIdentifier.bladderIncontinence.rawValue] = symptom
+            map[HKCategoryTypeIdentifier.drySkin.rawValue] = symptom
+            map[HKCategoryTypeIdentifier.hairLoss.rawValue] = symptom
+            map[HKCategoryTypeIdentifier.memoryLapse.rawValue] = symptom
+            map[HKCategoryTypeIdentifier.nightSweats.rawValue] = symptom
+            map[HKCategoryTypeIdentifier.vaginalDryness.rawValue] = symptom
         }
 
         // iOS 14.3+
         if #available(iOS 14.3, *) {
-            map[HKCategoryTypeIdentifier.contraceptive.rawValue] = reproductiveFlag
+            map[HKCategoryTypeIdentifier.contraceptive.rawValue] = contraceptive
             map[HKCategoryTypeIdentifier.pregnancy.rawValue] = reproductiveFlag
             map[HKCategoryTypeIdentifier.lactation.rawValue] = reproductiveFlag
         }
@@ -69,7 +80,7 @@ final class HKSampleToTagNormaliserRegistry: HKSampleToTagNormaliserProtocol {
         // iOS 15.0+
         if #available(iOS 15.0, *) {
             map[HKCategoryTypeIdentifier.pregnancyTestResult.rawValue] = pregnancyTest
-            map[HKCategoryTypeIdentifier.progesteroneTestResult.rawValue] = pregnancyTest
+            map[HKCategoryTypeIdentifier.progesteroneTestResult.rawValue] = progesteroneTest
         }
 
         // iOS 16.0+

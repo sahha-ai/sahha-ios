@@ -18,8 +18,7 @@ enum OvulationTestEnum: String {
 }
 
 enum MenstrualFlowEnum: String {
-    case unknown = "unknown"    // HK: unspecified
-    case none    = "none"       // HK: notPresent
+    case unknown = "unknown"    // HK: unspecified / notPresent
     case light   = "light"
     case medium  = "medium"
     case heavy   = "heavy"
@@ -81,7 +80,7 @@ extension HKCategoryValueMenstrualFlow {
     var menstrualFlowValue: String {
         switch rawValue {
         case 1: return MenstrualFlowEnum.unknown.value    // unspecified
-        case 5: return MenstrualFlowEnum.none.value       // none (flow explicitly absent)
+        case 5: return MenstrualFlowEnum.unknown.value    // notPresent (collapsed to unknown)
         case 2: return MenstrualFlowEnum.light.value      // light
         case 3: return MenstrualFlowEnum.medium.value     // medium
         case 4: return MenstrualFlowEnum.heavy.value      // heavy
@@ -122,6 +121,32 @@ extension HKCategoryValuePregnancyTestResult {
         case .negative:      return PregnancyTestEnum.negative.value
         case .positive:      return PregnancyTestEnum.positive.value
         @unknown default:    return PregnancyTestEnum.inconclusive.value
+        }
+    }
+}
+
+extension HKCategoryValueProgesteroneTestResult {
+    var progesteroneTestValue: String {
+        switch self {
+        case .indeterminate: return ProgesteroneTestEnum.inconclusive.value
+        case .negative:      return ProgesteroneTestEnum.negative.value
+        case .positive:      return ProgesteroneTestEnum.positive.value
+        @unknown default:    return ProgesteroneTestEnum.inconclusive.value
+        }
+    }
+}
+
+extension HKCategoryValueContraceptive {
+    var contraceptiveValue: String {
+        switch self {
+        case .unspecified:      return ContraceptiveEnum.unknown.value
+        case .implant:          return ContraceptiveEnum.implant.value
+        case .injection:        return ContraceptiveEnum.injection.value
+        case .intravaginalRing: return ContraceptiveEnum.intravaginalRing.value
+        case .iud:              return ContraceptiveEnum.iud.value
+        case .oral:             return ContraceptiveEnum.oral.value
+        case .patch:            return ContraceptiveEnum.patch.value
+        @unknown default:       return ContraceptiveEnum.unknown.value
         }
     }
 }
