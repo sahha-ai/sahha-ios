@@ -18,10 +18,11 @@ enum OvulationTestEnum: String {
 }
 
 enum MenstrualFlowEnum: String {
-    case unknown = "unknown"    // HK: unspecified / notPresent
-    case light   = "light"
-    case medium  = "medium"
-    case heavy   = "heavy"
+    case unknown    = "unknown"      // HK: unspecified — flow occurred, level not graded
+    case notPresent = "not_present"  // HK: none — explicitly logged as no flow today
+    case light      = "light"
+    case medium     = "medium"
+    case heavy      = "heavy"
 
     var value: String { rawValue }
 }
@@ -79,11 +80,11 @@ enum ContraceptiveEnum: String {
 extension HKCategoryValueMenstrualFlow {
     var menstrualFlowValue: String {
         switch rawValue {
-        case 1: return MenstrualFlowEnum.unknown.value    // unspecified
-        case 5: return MenstrualFlowEnum.unknown.value    // notPresent (collapsed to unknown)
-        case 2: return MenstrualFlowEnum.light.value      // light
-        case 3: return MenstrualFlowEnum.medium.value     // medium
-        case 4: return MenstrualFlowEnum.heavy.value      // heavy
+        case 1: return MenstrualFlowEnum.unknown.value     // unspecified
+        case 5: return MenstrualFlowEnum.notPresent.value  // none — explicit absence
+        case 2: return MenstrualFlowEnum.light.value       // light
+        case 3: return MenstrualFlowEnum.medium.value      // medium
+        case 4: return MenstrualFlowEnum.heavy.value       // heavy
         default: return MenstrualFlowEnum.unknown.value
         }
     }
