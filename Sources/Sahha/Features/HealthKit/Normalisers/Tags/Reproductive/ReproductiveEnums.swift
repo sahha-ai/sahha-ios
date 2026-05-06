@@ -18,11 +18,11 @@ enum OvulationTestEnum: String {
 }
 
 enum MenstrualFlowEnum: String {
-    case unknown = "unknown"    // HK: unspecified
-    case none    = "none"       // HK: notPresent
-    case light   = "light"
-    case medium  = "medium"
-    case heavy   = "heavy"
+    case unknown    = "unknown"      // HK: unspecified — flow occurred, level not graded
+    case notPresent = "not_present"  // HK: none — explicitly logged as no flow today
+    case light      = "light"
+    case medium     = "medium"
+    case heavy      = "heavy"
 
     var value: String { rawValue }
 }
@@ -80,11 +80,11 @@ enum ContraceptiveEnum: String {
 extension HKCategoryValueMenstrualFlow {
     var menstrualFlowValue: String {
         switch rawValue {
-        case 1: return MenstrualFlowEnum.unknown.value    // unspecified
-        case 5: return MenstrualFlowEnum.none.value       // none (flow explicitly absent)
-        case 2: return MenstrualFlowEnum.light.value      // light
-        case 3: return MenstrualFlowEnum.medium.value     // medium
-        case 4: return MenstrualFlowEnum.heavy.value      // heavy
+        case 1: return MenstrualFlowEnum.unknown.value     // unspecified
+        case 5: return MenstrualFlowEnum.notPresent.value  // none — explicit absence
+        case 2: return MenstrualFlowEnum.light.value       // light
+        case 3: return MenstrualFlowEnum.medium.value      // medium
+        case 4: return MenstrualFlowEnum.heavy.value       // heavy
         default: return MenstrualFlowEnum.unknown.value
         }
     }
@@ -122,6 +122,32 @@ extension HKCategoryValuePregnancyTestResult {
         case .negative:      return PregnancyTestEnum.negative.value
         case .positive:      return PregnancyTestEnum.positive.value
         @unknown default:    return PregnancyTestEnum.inconclusive.value
+        }
+    }
+}
+
+extension HKCategoryValueProgesteroneTestResult {
+    var progesteroneTestValue: String {
+        switch self {
+        case .indeterminate: return ProgesteroneTestEnum.inconclusive.value
+        case .negative:      return ProgesteroneTestEnum.negative.value
+        case .positive:      return ProgesteroneTestEnum.positive.value
+        @unknown default:    return ProgesteroneTestEnum.inconclusive.value
+        }
+    }
+}
+
+extension HKCategoryValueContraceptive {
+    var contraceptiveValue: String {
+        switch self {
+        case .unspecified:      return ContraceptiveEnum.unknown.value
+        case .implant:          return ContraceptiveEnum.implant.value
+        case .injection:        return ContraceptiveEnum.injection.value
+        case .intravaginalRing: return ContraceptiveEnum.intravaginalRing.value
+        case .iud:              return ContraceptiveEnum.iud.value
+        case .oral:             return ContraceptiveEnum.oral.value
+        case .patch:            return ContraceptiveEnum.patch.value
+        @unknown default:       return ContraceptiveEnum.unknown.value
         }
     }
 }

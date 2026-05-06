@@ -3,8 +3,8 @@ import HealthKit
 /// Normaliser for HKCategoryTypeIdentifier.menstrualFlow → Tag.
 ///
 /// value maps to the platform-agnostic MenstrualFlowEnum snake_case string (aligned with Android):
-///   "unknown"  (HK: unspecified)
-///   "none"     (HK: notPresent — flow explicitly recorded as absent)
+///   "unknown"      (HK: unspecified — flow occurred, level not graded)
+///   "not_present"  (HK: none — explicitly logged as no flow today)
 ///   "light"
 ///   "medium"
 ///   "heavy"

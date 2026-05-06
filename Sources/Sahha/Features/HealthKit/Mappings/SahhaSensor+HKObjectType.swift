@@ -175,17 +175,17 @@ extension SahhaSensor {
             return HKQuantityType.quantityType(forIdentifier: .dietaryVitaminB6)
         case .vitamin_b12_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryVitaminB12)
-        case .vitamin_b1_intake:
+        case .thiamin_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryThiamin)
-        case .vitamin_b2_intake:
+        case .riboflavin_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryRiboflavin)
-        case .vitamin_b3_intake:
+        case .niacin_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryNiacin)
-        case .vitamin_b5_intake:
+        case .pantothenic_acid_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryPantothenicAcid)
-        case .vitamin_b9_intake:
+        case .folate_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryFolate)
-        case .vitamin_b7_intake:
+        case .biotin_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryBiotin)
         case .calcium_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryCalcium)
@@ -274,7 +274,7 @@ extension SahhaSensor {
                 return HKCategoryType.categoryType(forIdentifier: .lactation)
             } else { return nil }
             
-        // MARK: - Reproductive Health - Symptoms
+        // MARK: - Symptoms
         case .abdominal_cramps:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .abdominalCramps)
@@ -307,6 +307,10 @@ extension SahhaSensor {
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .constipation)
             } else { return nil }
+        case .coughing:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .coughing)
+            } else { return nil }
         case .diarrhea:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .diarrhea)
@@ -319,9 +323,21 @@ extension SahhaSensor {
             if #available(iOS 14.0, *) {
                 return HKCategoryType.categoryType(forIdentifier: .drySkin)
             } else { return nil }
+        case .fainting:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .fainting)
+            } else { return nil }
         case .fatigue:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .fatigue)
+            } else { return nil }
+        case .fever:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .fever)
+            } else { return nil }
+        case .generalized_body_ache:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .generalizedBodyAche)
             } else { return nil }
         case .hair_loss:
             if #available(iOS 14.0, *) {
@@ -331,9 +347,21 @@ extension SahhaSensor {
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .headache)
             } else { return nil }
+        case .heartburn:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .heartburn)
+            } else { return nil }
         case .hot_flashes:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .hotFlashes)
+            } else { return nil }
+        case .loss_of_smell:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .lossOfSmell)
+            } else { return nil }
+        case .loss_of_taste:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .lossOfTaste)
             } else { return nil }
         case .lower_back_pain:
             if #available(iOS 13.6, *) {
@@ -367,6 +395,10 @@ extension SahhaSensor {
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .runnyNose)
             } else { return nil }
+        case .shortness_of_breath:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .shortnessOfBreath)
+            } else { return nil }
         case .sinus_congestion:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .sinusCongestion)
@@ -390,6 +422,10 @@ extension SahhaSensor {
         case .vomiting:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .vomiting)
+            } else { return nil }
+        case .wheezing:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .wheezing)
             } else { return nil }
 
         // MARK: - Umbrella (no single HK type; expanded to granular sensors before use)
