@@ -144,7 +144,7 @@ extension HKCategoryValueContraceptive {
         case .implant:          return ContraceptiveEnum.implant.value
         case .injection:        return ContraceptiveEnum.injection.value
         case .intravaginalRing: return ContraceptiveEnum.intravaginalRing.value
-        case .iud:              return ContraceptiveEnum.iud.value
+        case .intrauterineDevice:              return ContraceptiveEnum.iud.value
         case .oral:             return ContraceptiveEnum.oral.value
         case .patch:            return ContraceptiveEnum.patch.value
         @unknown default:       return ContraceptiveEnum.unknown.value
