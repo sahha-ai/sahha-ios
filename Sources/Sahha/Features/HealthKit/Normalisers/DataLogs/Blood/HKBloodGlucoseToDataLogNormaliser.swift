@@ -1,7 +1,7 @@
 import HealthKit
 
 final class HKBloodGlucoseToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
-    func normalise(_ sample: HKSample) -> [DataLog] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [DataLog] {
         guard let sample = sample as? HKQuantitySample,
             let sensor = sample.quantityType.sahhaSensor,
             sensor == .blood_glucose,
@@ -22,6 +22,7 @@ final class HKBloodGlucoseToDataLogNormaliser: HKSampleToDataLogNormaliserProtoc
 
         return [
             DataLog(
+                profileId: profileId,
                 logType: sensor.dataLogType,
                 dataType: sensor.rawValue,
                 value: value,

@@ -1,7 +1,7 @@
 import HealthKit
 
 final class HKVO2MaxToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
-    func normalise(_ sample: HKSample) -> [DataLog] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [DataLog] {
         guard let sample = sample as? HKQuantitySample,
             let sensor = sample.quantityType.sahhaSensor,
             sensor == .vo2_max,
@@ -22,6 +22,7 @@ final class HKVO2MaxToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
 
         return [
             DataLog(
+                profileId: profileId,
                 logType: sensor.dataLogType,
                 dataType: sensor.rawValue,
                 value: value,

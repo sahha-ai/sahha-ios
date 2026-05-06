@@ -12,6 +12,8 @@ extension SahhaSensor {
             return Set(SahhaSensor.allCases.filter { $0 != .nutrition && $0.category == .nutrition }.flatMap(\.hkPermissions))
         case .reproductive:
             return Set(SahhaSensor.allCases.filter { $0 != .reproductive && $0.category == .reproductive }.flatMap(\.hkPermissions))
+        case .symptom:
+            return Set(SahhaSensor.allCases.filter { $0 != .symptom && $0.category == .symptom }.flatMap(\.hkPermissions))
         default:
             if let primary = self.hkObjectType {
                 return [primary]

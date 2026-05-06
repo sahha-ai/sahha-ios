@@ -5,7 +5,7 @@ private struct CachedDeviceInfo: Codable {
     let lastSync: Date
 }
 
-actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol {
+actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol, Disposable {
     private let key: String
     private let storage: UserDefaultsStorageProtocol
     private let ttl: TimeInterval
@@ -30,6 +30,10 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol {
             try storage.setObject(value, forKey: key)
         } catch {
         }
+    }
+
+    func dispose() {
+        storage.removeObject(forKey: key)
     }
 
     func needsSync(comparedTo deviceInfo: DeviceInfo) -> Bool {

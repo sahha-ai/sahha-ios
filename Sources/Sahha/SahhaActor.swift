@@ -17,8 +17,10 @@ actor SahhaActor {
 
     func configure(with settings: SahhaSettings) async throws {
         if let configurationTask {
+            Sahha.log("[SahhaActor] configure() called but already in progress, awaiting existing task")
             return try await configurationTask.value
         }
+        Sahha.log("[SahhaActor] configure() starting fresh (container exists: \(container != nil))")
 
         self.settings = settings
 
@@ -32,6 +34,7 @@ actor SahhaActor {
             await SensorDI.registerDependencies(container: container)
             await AuthDI.registerDependencies(container: container)
             await DataLogDI.registerDependencies(container: container)
+            await TagDI.registerDependencies(container: container)
             await HealthKitDI.registerDependencies(container: container)
             await BackgroundDI.registerDependencies(container: container, settings: settings)
             await ScoreDI.registerDependencies(container: container)
@@ -39,6 +42,11 @@ actor SahhaActor {
             await DemographicDI.registerDependencies(container: container)
             await DeviceInfoSyncDI.registerDependencies(container: container)
             await DeviceLogDI.registerDependencies(container: container)
+            await DiagnosticsDI.registerDependencies(container: container)
+
+            // Validate and clean up legacy DLQ files from before the unified pipeline
+            let userDefaultsStorage = try await container.resolve(UserDefaultsStorageProtocol.self)
+            await DLQMigrator.migrateIfNeeded(storage: userDefaultsStorage)
 
             // Device log listener
             let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
@@ -94,15 +102,30 @@ actor SahhaActor {
             let postInsightsListener = try await container.resolve(PostInsightsLifecycleListener.self)
             let deviceLogListener = try await container.resolve(DeviceLogLifecycleListener.self)
             let dataLogRetryListener = try await container.resolve(DataLogRetryLifecycleListener.self)
+            let tagRetryListener = try await container.resolve(TagRetryLifecycleListener.self)
+            let sensorHealthCheckListener = try await container.resolve(SensorHealthCheckLifecycleListener.self)
+            let sensorProbeListener = try await container.resolve(SensorProbeLifecycleListener.self)
+            let diagnosticConfigListener = try await container.resolve(DiagnosticConfigLifecycleListener.self)
 
             await lifecycleObserver.registerListener(deviceInfoSyncListener, for: [.app_resume])
             await lifecycleObserver.registerListener(postInsightsListener, for: [.app_resume])
             await deviceLogListener.setAuthenticated(true)
-            
+
             // Retry pending uploads on resume, foreground, and unlock events.
             // This ensures data queued during background delivery (but not uploaded
             // before suspension) gets sent when the app next wakes.
             await lifecycleObserver.registerListener(dataLogRetryListener, for: [.app_resume, .app_foreground, .app_unlocked])
+            await lifecycleObserver.registerListener(tagRetryListener, for: [.app_resume, .app_foreground, .app_unlocked])
+
+            // Verify observer health on every foreground event — re-registers any
+            // observers silently dropped by iOS (memory pressure, OS updates, etc.)
+            await lifecycleObserver.registerListener(sensorHealthCheckListener, for: [.app_foreground])
+
+            // Probe each sensor for data to detect potentially denied permissions
+            await lifecycleObserver.registerListener(sensorProbeListener, for: [.app_foreground])
+
+            // Upload diagnostic report on each foreground event
+            await lifecycleObserver.registerListener(diagnosticConfigListener, for: [.app_foreground])
         } catch {
             await log(error: error, message: "setupLifecycleListeners failed")
         }
@@ -150,6 +173,7 @@ actor SahhaActor {
         if let task = configurationTask { _ = try await task.value }
         let (container, settings) = try await requireConfig()
         await container.reset()
+        DLQMigrator.reset()
         try await configure(with: settings)
     }
 
@@ -179,6 +203,18 @@ actor SahhaActor {
 
     func demographicManager() async throws -> DemographicManagerProtocol {
         try await resolve(DemographicManagerProtocol.self)
+    }
+
+    func diagnosticReportBuilder() async throws -> DiagnosticReportBuilderProtocol {
+        try await resolve(DiagnosticReportBuilderProtocol.self)
+    }
+
+    func diagnosticUploadService() async throws -> DiagnosticUploadServiceProtocol {
+        try await resolve(DiagnosticUploadServiceProtocol.self)
+    }
+
+    func tagPipeline() async throws -> TagPipelineProtocol {
+        try await resolve(TagPipelineProtocol.self)
     }
     
     func backgroundDelegate() async throws -> BackgroundSessionDelegate {

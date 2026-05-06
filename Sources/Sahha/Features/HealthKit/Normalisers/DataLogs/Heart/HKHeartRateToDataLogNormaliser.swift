@@ -8,7 +8,7 @@ final class HKHeartRateToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol 
         .walking_heart_rate_average,
     ]
 
-    func normalise(_ sample: HKSample) -> [DataLog] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [DataLog] {
         guard let sample = sample as? HKQuantitySample,
             let sensor = sample.quantityType.sahhaSensor,
             HEART_RATE_SENSORS.contains(sensor),
@@ -35,6 +35,7 @@ final class HKHeartRateToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol 
 
         return [
             DataLog(
+                profileId: profileId,
                 logType: sensor.dataLogType,
                 dataType: sensor.rawValue,
                 value: value,

@@ -137,15 +137,15 @@ final class APIClient: APIClientProtocol {
             return APIResponse(data, httpResponse)
         default:
             Sahha.log("[Sahha Error] HTTP \(httpResponse.statusCode) | Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
-            do {
-                let apiError = try JSONDecoder().decode(APIErrorResponse.self, from: data)
+            let responseBody = String(data: data, encoding: .utf8) ?? "Unable to decode response body"
+            if let apiError = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
                 throw apiError
-            } catch {
+            } else {
                 throw APIErrorResponse(
                     title: "HTTP Error",
                     statusCode: httpResponse.statusCode,
                     location: "APIClient.performRequest",
-                    errors: [.init(origin: "HTTP", errors: ["HTTP error with status code \(httpResponse.statusCode)"])]
+                    errors: [.init(origin: "HTTP", errors: [responseBody])]
                 )
             }
         }

@@ -43,7 +43,6 @@ enum HealthKitDI {
     private static func registerObservers(container: DIContainer) async {
         await container.register(HealthKitObserverServiceProtocol.self) { container in
             HealthKitObserverService(
-                permissions: try await container.resolve(HealthKitPermissionsServiceProtocol.self),
                 observerStore: try await container.resolve(HealthKitObserverStoreProtocol.self),
                 circuitBreaker: try? await container.resolve(CircuitBreaker.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
@@ -64,6 +63,9 @@ enum HealthKitDI {
         }
         await container.register(FallbackHKSampleToSahhaSampleNormaliser.self) { _ in
             FallbackHKSampleToSahhaSampleNormaliser()
+        }
+        await container.register(HKSampleToTagNormaliserProtocol.self) { _ in
+            HKSampleToTagNormaliserRegistry()
         }
     }
 
@@ -92,6 +94,7 @@ enum HealthKitDI {
                 anchorQueryService: try await container.resolve(HealthKitAnchorQueryServiceProtocol.self),
                 anchorStore: try await container.resolve(HealthKitAnchorStoreProtocol.self),
                 normaliser: try await container.resolve(HKSampleToDataLogNormaliserProtocol.self),
+                profileIdProvider: try await container.resolve(ProfileIdProviderProtocol.self),
                 dataLogPipeline: try await container.resolve(DataLogPipelineProtocol.self),
                 circuitBreaker: try? await container.resolve(CircuitBreaker.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
@@ -102,6 +105,18 @@ enum HealthKitDI {
                 sampleQueryService: try await container.resolve(HealthKitSampleQueryServiceProtocol.self),
                 permissions: try await container.resolve(HealthKitPermissionsServiceProtocol.self),
                 normaliser: try await container.resolve(HKSampleToSahhaSampleNormaliserProtocol.self),
+                logger: try await container.resolve(ErrorLoggerProtocol.self)
+            )
+        }
+        await container.register(HealthKitTagCoordinatorProtocol.self) { container in
+            HealthKitTagCoordinator(
+                observerService: try await container.resolve(HealthKitObserverServiceProtocol.self),
+                anchorQueryService: try await container.resolve(HealthKitAnchorQueryServiceProtocol.self),
+                anchorStore: try await container.resolve(HealthKitAnchorStoreProtocol.self),
+                normaliser: try await container.resolve(HKSampleToTagNormaliserProtocol.self),
+                profileIdProvider: try await container.resolve(ProfileIdProviderProtocol.self),
+                tagPipeline: try await container.resolve(TagPipelineProtocol.self),
+                circuitBreaker: try? await container.resolve(CircuitBreaker.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
         }
@@ -123,6 +138,7 @@ enum HealthKitDI {
                 anchorStore: try await container.resolve(HealthKitAnchorDateStoreProtocol.self),
                 queryService: try await container.resolve(HealthKitAnchorQueryServiceProtocol.self),
                 normaliserRegistry: try await container.resolve(HKSampleToDataLogNormaliserProtocol.self),
+                profileIdProvider: try await container.resolve(ProfileIdProviderProtocol.self),
                 dataLogPipeline: try await container.resolve(DataLogPipelineProtocol.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
@@ -136,6 +152,7 @@ enum HealthKitDI {
                 permissions: try await container.resolve(HealthKitPermissionsServiceProtocol.self),
                 sensorStore: try await container.resolve(SensorStoreProtocol.self),
                 dataLogCoordinator: try await container.resolve(HealthKitDataLogCoordinatorProtocol.self),
+                tagCoordinator: try await container.resolve(HealthKitTagCoordinatorProtocol.self),
                 statCoordinator: try await container.resolve(HealthKitSahhaStatCoordinatorProtocol.self),
                 sampleCoordinator: try await container.resolve(HealthKitSahhaSampleCoordinatorProtocol.self),
                 demographicService: try await container.resolve(HealthKitDemographicServiceProtocol.self),
@@ -150,6 +167,14 @@ enum HealthKitDI {
         await container.register(PostInsightsLifecycleListener.self) { container in
             PostInsightsLifecycleListener(
                 healthKitManager: try await container.resolve(HealthKitManagerProtocol.self)
+            )
+        }
+        await container.register(SensorHealthCheckLifecycleListener.self) { container in
+            SensorHealthCheckLifecycleListener(
+                sensorStore: try await container.resolve(SensorStoreProtocol.self),
+                observerStore: try await container.resolve(HealthKitObserverStoreProtocol.self),
+                healthKitManager: try await container.resolve(HealthKitManagerProtocol.self),
+                logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
         }
     }

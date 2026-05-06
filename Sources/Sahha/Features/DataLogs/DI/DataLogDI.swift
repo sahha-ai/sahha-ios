@@ -12,49 +12,51 @@ enum DataLogDI {
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
         }
-        await container.register(CircuitBreaker.self) { _ in
-            CircuitBreaker()
+        await container.register(UploadPriorityAssignerProtocol.self) { _ in
+            DefaultUploadPriorityAssigner()
         }
-        await container.register(NetworkMonitor.self) { _ in
-            NetworkMonitor()
-        }
-        await container.register(DeadLetterQueue.self) { _ in
-            DeadLetterQueue(
-                baseDirectory: StorageDirectories.dataLogs,
-                maxStoredBatches: 500
-            )
-        }
-        await container.register(SentLogStore.self) { container in
-            SentLogStore(
-                storage: try await container.resolve(UserDefaultsStorageProtocol.self)
+
+        // Unified upload infrastructure for DataLogs
+        let dataLogCircuitBreaker = CircuitBreaker()
+        let dataLogNetworkMonitor = NetworkMonitor()
+
+        await container.register(DataLogUploaderProtocol.self) { container in
+            let service = try await container.resolve(DataLogServiceProtocol.self)
+            let mapper = try await container.resolve(DataLogRequestMapperProtocol.self)
+            let priorityAssigner = try await container.resolve(UploadPriorityAssignerProtocol.self)
+
+            return UnifiedUploader<DataLog, DataLogRequest>(
+                uploadService: { requests in
+                    try await service.postDataLogs(requests)
+                },
+                logger: try await container.resolve(ErrorLoggerProtocol.self),
+                circuitBreaker: dataLogCircuitBreaker,
+                networkMonitor: dataLogNetworkMonitor,
+                persistentQueue: UnifiedDeadLetterQueue<DataLogRequest>(
+                    baseDirectory: StorageDirectories.dataLogs,
+                    maxStoredBatches: 500,
+                    logLabel: "DataLog Persistent Queue"
+                ),
+                streamingProcessor: StreamingChunkProcessor<DataLog, DataLogRequest>(
+                    mapItem: { log in mapper.map(log) },
+                    assignPriority: { log in priorityAssigner.assignPriority(to: log) },
+                    config: .default
+                ),
+                sentStore: SentItemStore(
+                    storage: try await container.resolve(UserDefaultsStorageProtocol.self),
+                    storageKey: StorageKeys.UserDefaults.sentLogIds,
+                    logLabel: "SentLogStore"
+                ),
+                logLabel: "DataLogUploader"
             )
         }
 
-        await container.register(DataLogUploaderProtocol.self) { container in
-            DataLogUploader(
-                dataLogService: try await container.resolve(DataLogServiceProtocol.self),
-                requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),
-                logger: try await container.resolve(ErrorLoggerProtocol.self),
-                circuitBreaker: try await container.resolve(CircuitBreaker.self),
-                networkMonitor: try await container.resolve(NetworkMonitor.self),
-                persistentQueue: try await container.resolve(DeadLetterQueue.self),
-                streamingProcessor: StreamingBatchProcessor(
-                    requestMapper: try await container.resolve(DataLogRequestMapperProtocol.self),
-                    priorityAssigner: try await container.resolve(UploadPriorityAssignerProtocol.self),
-                    config: .default
-                ),
-                sentLogStore: try await container.resolve(SentLogStore.self)
-            )
-        }
         await container.register(DataLogPipelineProtocol.self) { container in
             DataLogPipeline(
                 uploader: try await container.resolve(DataLogUploaderProtocol.self)
             )
         }
-        await container.register(UploadPriorityAssignerProtocol.self) { _ in
-            DefaultUploadPriorityAssigner()
-        }
-        
+
         // Lifecycle listener that retries pending uploads on app resume/unlock
         await container.register(DataLogRetryLifecycleListener.self) { container in
             DataLogRetryLifecycleListener(
@@ -64,19 +66,19 @@ enum DataLogDI {
     }
 }
 
-//// Adjust what gets prioritized here 
+//// Adjust what gets prioritized here
 final class DefaultUploadPriorityAssigner: UploadPriorityAssignerProtocol {
     func assignPriority(to log: DataLog) -> UploadPriority {
         // Critical: Steps data only
         if log.dataType == "steps" {
             return .critical
         }
-        
+
         // High: All HealthKit data types
         switch log.logType {
         case .sleep, .activity, .heart, .blood, .oxygen, .energy, .temperature, .body:
             return .high
-        
+
         // Normal: Device logs, demographic, and everything else
         default:
             return .normal

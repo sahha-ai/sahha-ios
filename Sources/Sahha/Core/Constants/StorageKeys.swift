@@ -6,6 +6,7 @@ enum StorageKeys {
         static let hkAnchorPrefix = "hkAnchor."
         static let hkAnchorDatePrefix = "hkAnchorDate."
         static let sentLogIds = "sentLogIds"
+        static let sentTagIds = "sentTagIds"
     }
     
     enum Keychain {

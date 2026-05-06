@@ -6,6 +6,7 @@ final class BackgroundDI {
             BackgroundCoordinator(
                 healthKitManager: try await container.resolve(HealthKitManagerProtocol.self),
                 dataLogPipeline: try await container.resolve(DataLogPipelineProtocol.self),
+                profileIdProvider: try await container.resolve(ProfileIdProviderProtocol.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self),
                 enableMotionTrigger: settings.enableMotionTrigger
             )

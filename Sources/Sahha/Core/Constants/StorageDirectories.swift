@@ -13,6 +13,10 @@ enum StorageDirectories {
         base.appendingPathComponent("data-logs", isDirectory: true)
     }
 
+    static var tags: URL {
+        base.appendingPathComponent("tags", isDirectory: true)
+    }
+
     /// Helper: Ensures a directory is excluded from backup (no-op if already set)
     @discardableResult
     private static func ensureExcludedFromBackup(_ dir: URL) -> Bool {

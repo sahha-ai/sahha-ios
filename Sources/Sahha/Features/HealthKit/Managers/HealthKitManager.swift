@@ -4,6 +4,7 @@ final class HealthKitManager: HealthKitManagerProtocol {
     private let permissions: HealthKitPermissionsServiceProtocol
     private let sensorStore: SensorStoreProtocol
     private let dataLogCoordinator: HealthKitDataLogCoordinatorProtocol
+    private let tagCoordinator: HealthKitTagCoordinatorProtocol
     private let statCoordinator: HealthKitSahhaStatCoordinatorProtocol
     private let sampleCoordinator: HealthKitSahhaSampleCoordinatorProtocol
     private let demographicService: HealthKitDemographicServiceProtocol
@@ -14,6 +15,7 @@ final class HealthKitManager: HealthKitManagerProtocol {
         permissions: HealthKitPermissionsServiceProtocol,
         sensorStore: SensorStoreProtocol,
         dataLogCoordinator: HealthKitDataLogCoordinatorProtocol,
+        tagCoordinator: HealthKitTagCoordinatorProtocol,
         statCoordinator: HealthKitSahhaStatCoordinatorProtocol,
         sampleCoordinator: HealthKitSahhaSampleCoordinatorProtocol,
         demographicService: HealthKitDemographicServiceProtocol,
@@ -23,6 +25,7 @@ final class HealthKitManager: HealthKitManagerProtocol {
         self.permissions = permissions
         self.sensorStore = sensorStore
         self.dataLogCoordinator = dataLogCoordinator
+        self.tagCoordinator = tagCoordinator
         self.statCoordinator = statCoordinator
         self.sampleCoordinator = sampleCoordinator
         self.demographicService = demographicService
@@ -32,36 +35,67 @@ final class HealthKitManager: HealthKitManagerProtocol {
     
     func enableSensors(_ sensors: Set<SahhaSensor>) async throws {
         let expanded = SahhaSensor.expanded(sensors)
+        let tagSensors = expanded.filter { $0.category == .reproductive || $0.category == .symptom }
+        let dataLogSensors = expanded.subtracting(tagSensors)
+
         do {
-            // Get exsiting sensors and overwrite storage
+            // Get existing sensors and overwrite storage
             let enabledSensors = try await sensorStore.getSensors()
             // Extract previously enabled sensors and stop data collection
             let sensorsToStop = enabledSensors.subtracting(expanded)
             if !sensorsToStop.isEmpty {
-                try await dataLogCoordinator.stopDataLogCollection(for: sensorsToStop)
+                let tagSensorsToStop = sensorsToStop.filter { $0.category == .reproductive || $0.category == .symptom }
+                let dataLogSensorsToStop = sensorsToStop.subtracting(tagSensorsToStop)
+                if !dataLogSensorsToStop.isEmpty {
+                    try await dataLogCoordinator.stopDataLogCollection(for: dataLogSensorsToStop)
+                }
+                if !tagSensorsToStop.isEmpty {
+                    try await tagCoordinator.stopTagCollection(for: tagSensorsToStop)
+                }
             }
             // Overwrite store with newly enabled sensors (granular list for observers/queries)
             try await sensorStore.setSensors(expanded)
         } catch {
         }
-    
+
         // Request permissions and start data collection (one dialog for all nutrition/reproductive types)
         try await permissions.requestPermissions(for: expanded)
-        try await dataLogCoordinator.startDataLogCollection(for: expanded)
+        if !dataLogSensors.isEmpty {
+            try await dataLogCoordinator.startDataLogCollection(for: dataLogSensors)
+        }
+        if !tagSensors.isEmpty {
+            try await tagCoordinator.startTagCollection(for: tagSensors)
+        }
     }
     
     func resumeSensors() async {
         do {
             let sensors = try await sensorStore.getSensors()
-            try await dataLogCoordinator.startDataLogCollection(for: sensors)
+            let tagSensors = sensors.filter { $0.category == .reproductive || $0.category == .symptom }
+            let dataLogSensors = sensors.subtracting(tagSensors)
+            if !dataLogSensors.isEmpty {
+                try await dataLogCoordinator.startDataLogCollection(for: dataLogSensors)
+            }
+            if !tagSensors.isEmpty {
+                try await tagCoordinator.startTagCollection(for: tagSensors)
+            }
         } catch {
+            Sahha.log("[HealthKitManager] resumeSensors failed: \(error)")
         }
     }
     
     func querySensors() async -> PostSensorDataResult {
         do {
             let sensors = try await sensorStore.getSensors()
-            let results = await dataLogCoordinator.querySensors(sensors)
+            let tagSensors = sensors.filter { $0.category == .reproductive || $0.category == .symptom }
+            let dataLogSensors = sensors.subtracting(tagSensors)
+            var results: [SensorQueryResult] = []
+            if !dataLogSensors.isEmpty {
+                results.append(contentsOf: await dataLogCoordinator.querySensors(dataLogSensors))
+            }
+            if !tagSensors.isEmpty {
+                results.append(contentsOf: await tagCoordinator.querySensors(tagSensors))
+            }
             return PostSensorDataResult(sensorResults: results)
         } catch {
             return PostSensorDataResult(sensorResults: [], errorDescription: error.localizedDescription)
@@ -80,6 +114,17 @@ final class HealthKitManager: HealthKitManagerProtocol {
             return .pending
         }
         guard expanded.isSubset(of: enabledSensors) else { return .pending }
+
+        // Check per-sensor probe results — map .indeterminate to .enabled
+        // for backward compatibility. Per-sensor breakdown will be exposed
+        // in a future release.
+        let statuses = await sensorStore.getSensorStatuses()
+        for sensor in expanded {
+            if let sensorStatus = statuses[sensor], sensorStatus == .indeterminate {
+                // Internally tracked but externally reported as .enabled
+                continue
+            }
+        }
         return .enabled
     }
 

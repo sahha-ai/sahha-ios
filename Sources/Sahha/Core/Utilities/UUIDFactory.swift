@@ -38,9 +38,9 @@ enum UUIDFactory {
     private static func uuidToBigEndianBytes(_ uuid: UUID) -> [UInt8] {
         let bytes = uuid.uuid
         return [
-            bytes.3, bytes.2, bytes.1, bytes.0, // time_low
-            bytes.5, bytes.4,                   // time_mid
-            bytes.7, bytes.6,                   // time_hi_and_version
+            bytes.0, bytes.1, bytes.2, bytes.3,
+            bytes.4, bytes.5,
+            bytes.6, bytes.7,
             bytes.8, bytes.9, bytes.10, bytes.11, bytes.12, bytes.13, bytes.14, bytes.15
         ]
     }

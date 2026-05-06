@@ -3,6 +3,7 @@ import Foundation
 final actor DeviceLogLifecycleListener: LifecycleListener, Disposable {
     private let sensorStore: SensorStoreProtocol
     private let deviceInfoBuilder: DeviceInfoBuilderProtocol
+    private let profileIdProvider: ProfileIdProviderProtocol
     private let dataLogPipeline: DataLogPipelineProtocol
 
     private var bufferedLogs: [DataLog] = []
@@ -11,10 +12,12 @@ final actor DeviceLogLifecycleListener: LifecycleListener, Disposable {
     init(
         sensorStore: SensorStoreProtocol,
         deviceInfoBuilder: DeviceInfoBuilderProtocol,
+        profileIdProvider: ProfileIdProviderProtocol,
         dataLogPipeline: DataLogPipelineProtocol,
     ) {
         self.sensorStore = sensorStore
         self.deviceInfoBuilder = deviceInfoBuilder
+        self.profileIdProvider = profileIdProvider
         self.dataLogPipeline = dataLogPipeline
     }
 
@@ -35,15 +38,43 @@ final actor DeviceLogLifecycleListener: LifecycleListener, Disposable {
         guard let log else { return }
 
         if authenticated {
-            await dataLogPipeline.ingest(log)
+            let profileId = profileIdProvider.profileId()
+            let authenticatedLog = DataLog(
+                profileId: profileId,
+                logType: log.logType,
+                dataType: log.dataType,
+                value: log.value,
+                unit: log.unit,
+                source: log.source,
+                recordingMethod: log.recordingMethod,
+                deviceType: log.deviceType,
+                startDate: log.startDate,
+                endDate: log.endDate,
+                additionalProperties: log.additionalProperties
+            )
+            await dataLogPipeline.ingest(authenticatedLog)
         } else {
             bufferedLogs.append(log)
         }
     }
 
     func flush() async {
+        let profileId = profileIdProvider.profileId()
         for log in bufferedLogs {
-            await dataLogPipeline.ingest(log)
+            let regenerated = DataLog(
+                profileId: profileId,
+                logType: log.logType,
+                dataType: log.dataType,
+                value: log.value,
+                unit: log.unit,
+                source: log.source,
+                recordingMethod: log.recordingMethod,
+                deviceType: log.deviceType,
+                startDate: log.startDate,
+                endDate: log.endDate,
+                additionalProperties: log.additionalProperties
+            )
+            await dataLogPipeline.ingest(regenerated)
         }
         bufferedLogs.removeAll()
     }

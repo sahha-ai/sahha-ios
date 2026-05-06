@@ -143,81 +143,81 @@ extension SahhaSensor {
         // MARK: - Nutrition
         case .energy_consumed:
             return HKQuantityType.quantityType(forIdentifier: .dietaryEnergyConsumed)
-        case .dietary_protein:
+        case .protein_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryProtein)
-        case .dietary_fat_total:
+        case .fat_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal)
-        case .dietary_fat_saturated:
+        case .fat_saturated_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryFatSaturated)
-        case .dietary_fat_monounsaturated:
+        case .fat_monounsaturated_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryFatMonounsaturated)
-        case .dietary_fat_polyunsaturated:
+        case .fat_polyunsaturated_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryFatPolyunsaturated)
-        case .dietary_cholesterol:
+        case .cholesterol_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryCholesterol)
-        case .dietary_carbohydrates:
+        case .carbohydrate_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryCarbohydrates)
-        case .dietary_sugar:
+        case .sugar_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietarySugar)
-        case .dietary_fiber:
+        case .fiber_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryFiber)
-        case .dietary_vitamin_a:
+        case .vitamin_a_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryVitaminA)
-        case .dietary_vitamin_d:
+        case .vitamin_d_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryVitaminD)
-        case .dietary_vitamin_e:
+        case .vitamin_e_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryVitaminE)
-        case .dietary_vitamin_k:
+        case .vitamin_k_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryVitaminK)
-        case .dietary_vitamin_c:
+        case .vitamin_c_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryVitaminC)
-        case .dietary_vitamin_b6:
+        case .vitamin_b6_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryVitaminB6)
-        case .dietary_vitamin_b12:
+        case .vitamin_b12_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryVitaminB12)
-        case .dietary_thiamin:
+        case .thiamin_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryThiamin)
-        case .dietary_riboflavin:
+        case .riboflavin_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryRiboflavin)
-        case .dietary_niacin:
+        case .niacin_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryNiacin)
-        case .dietary_pantothenic_acid:
+        case .pantothenic_acid_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryPantothenicAcid)
-        case .dietary_folate:
+        case .folate_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryFolate)
-        case .dietary_biotin:
+        case .biotin_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryBiotin)
-        case .dietary_calcium:
+        case .calcium_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryCalcium)
-        case .dietary_iron:
+        case .iron_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryIron)
-        case .dietary_magnesium:
+        case .magnesium_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryMagnesium)
-        case .dietary_phosphorus:
+        case .phosphorus_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryPhosphorus)
-        case .dietary_potassium:
+        case .potassium_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryPotassium)
-        case .dietary_sodium:
+        case .sodium_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietarySodium)
-        case .dietary_zinc:
+        case .zinc_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryZinc)
-        case .dietary_chloride:
+        case .chloride_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryChloride)
-        case .dietary_copper:
+        case .copper_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryCopper)
-        case .dietary_manganese:
+        case .manganese_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryManganese)
-        case .dietary_chromium:
+        case .chromium_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryChromium)
-        case .dietary_molybdenum:
+        case .molybdenum_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryMolybdenum)
-        case .dietary_selenium:
+        case .selenium_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietarySelenium)
-        case .dietary_iodine:
+        case .iodine_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryIodine)
-        case .dietary_caffeine:
+        case .caffeine_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryCaffeine)
-        case .dietary_water:
+        case .water_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryWater)
             
         // MARK: - Reproductive Health - Menstrual Cycle
@@ -243,9 +243,9 @@ extension SahhaSensor {
             } else { return nil }
             
         // MARK: - Reproductive Health - Fertility
-        case .ovulation_test_result:
+        case .ovulation_test:
             return HKCategoryType.categoryType(forIdentifier: .ovulationTestResult)
-        case .cervical_mucus_quality:
+        case .cervical_mucus:
             return HKCategoryType.categoryType(forIdentifier: .cervicalMucusQuality)
             
         // MARK: - Reproductive Health - Sexual Activity
@@ -261,11 +261,11 @@ extension SahhaSensor {
             if #available(iOS 14.3, *) {
                 return HKCategoryType.categoryType(forIdentifier: .pregnancy)
             } else { return nil }
-        case .pregnancy_test_result:
+        case .pregnancy_test:
             if #available(iOS 15.0, *) {
                 return HKCategoryType.categoryType(forIdentifier: .pregnancyTestResult)
             } else { return nil }
-        case .progesterone_test_result:
+        case .progesterone_test:
             if #available(iOS 15.0, *) {
                 return HKCategoryType.categoryType(forIdentifier: .progesteroneTestResult)
             } else { return nil }
@@ -274,7 +274,7 @@ extension SahhaSensor {
                 return HKCategoryType.categoryType(forIdentifier: .lactation)
             } else { return nil }
             
-        // MARK: - Reproductive Health - Symptoms
+        // MARK: - Symptoms
         case .abdominal_cramps:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .abdominalCramps)
@@ -307,6 +307,10 @@ extension SahhaSensor {
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .constipation)
             } else { return nil }
+        case .coughing:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .coughing)
+            } else { return nil }
         case .diarrhea:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .diarrhea)
@@ -319,9 +323,21 @@ extension SahhaSensor {
             if #available(iOS 14.0, *) {
                 return HKCategoryType.categoryType(forIdentifier: .drySkin)
             } else { return nil }
+        case .fainting:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .fainting)
+            } else { return nil }
         case .fatigue:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .fatigue)
+            } else { return nil }
+        case .fever:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .fever)
+            } else { return nil }
+        case .generalized_body_ache:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .generalizedBodyAche)
             } else { return nil }
         case .hair_loss:
             if #available(iOS 14.0, *) {
@@ -331,9 +347,21 @@ extension SahhaSensor {
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .headache)
             } else { return nil }
+        case .heartburn:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .heartburn)
+            } else { return nil }
         case .hot_flashes:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .hotFlashes)
+            } else { return nil }
+        case .loss_of_smell:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .lossOfSmell)
+            } else { return nil }
+        case .loss_of_taste:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .lossOfTaste)
             } else { return nil }
         case .lower_back_pain:
             if #available(iOS 13.6, *) {
@@ -367,6 +395,10 @@ extension SahhaSensor {
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .runnyNose)
             } else { return nil }
+        case .shortness_of_breath:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .shortnessOfBreath)
+            } else { return nil }
         case .sinus_congestion:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .sinusCongestion)
@@ -391,9 +423,13 @@ extension SahhaSensor {
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .vomiting)
             } else { return nil }
+        case .wheezing:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .wheezing)
+            } else { return nil }
 
         // MARK: - Umbrella (no single HK type; expanded to granular sensors before use)
-        case .nutrition, .reproductive:
+        case .nutrition, .reproductive, .symptom:
             return nil
         }
     }

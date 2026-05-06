@@ -5,6 +5,7 @@ final class HealthKitActivitySummaryUploader: HealthKitActivitySummaryUploaderPr
     private let anchorStore: HealthKitAnchorDateStoreProtocol
     private let queryService: HealthKitAnchorQueryServiceProtocol
     private let normaliserRegistry: HKSampleToDataLogNormaliserProtocol
+    private let profileIdProvider: ProfileIdProviderProtocol
     private let dataLogPipeline: DataLogPipelineProtocol
     private let logger: ErrorLoggerProtocol
     private let calendar: Calendar
@@ -14,6 +15,7 @@ final class HealthKitActivitySummaryUploader: HealthKitActivitySummaryUploaderPr
         anchorStore: HealthKitAnchorDateStoreProtocol,
         queryService: HealthKitAnchorQueryServiceProtocol,
         normaliserRegistry: HKSampleToDataLogNormaliserProtocol,
+        profileIdProvider: ProfileIdProviderProtocol,
         dataLogPipeline: DataLogPipelineProtocol,
         logger: ErrorLoggerProtocol,
         calendar: Calendar = .current
@@ -22,6 +24,7 @@ final class HealthKitActivitySummaryUploader: HealthKitActivitySummaryUploaderPr
         self.anchorStore = anchorStore
         self.queryService = queryService
         self.normaliserRegistry = normaliserRegistry
+        self.profileIdProvider = profileIdProvider
         self.dataLogPipeline = dataLogPipeline
         self.logger = logger
         self.calendar = calendar
@@ -60,7 +63,8 @@ final class HealthKitActivitySummaryUploader: HealthKitActivitySummaryUploaderPr
                 )
                 guard !samples.isEmpty else { return }
 
-                let logs = samples.flatMap { normaliserRegistry.normalise($0) }
+                let profileId = profileIdProvider.profileId()
+                let logs = samples.flatMap { normaliserRegistry.normalise($0, profileId: profileId) }
                 if !logs.isEmpty {
                     await dataLogPipeline.ingest(logs)
                 }

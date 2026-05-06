@@ -4,14 +4,16 @@ import UIKit
 actor MotionTrigger {
     private let pedometer = CMPedometer()
     private weak var delegate: BackgroundTriggerDelegate?
+    private let profileIdProvider: ProfileIdProviderProtocol
     private let interval: TimeInterval = 30 * 60 // 30 minutes
-    
+
     private var isRunning = false
     private var lastTriggerTime: Date?
     private var timerTask: Task<Void, Never>?
-    
-    init(delegate: BackgroundTriggerDelegate) {
+
+    init(delegate: BackgroundTriggerDelegate, profileIdProvider: ProfileIdProviderProtocol) {
         self.delegate = delegate
+        self.profileIdProvider = profileIdProvider
     }
     
     func start() {
@@ -87,10 +89,12 @@ actor MotionTrigger {
     
     private func convertToDataLogs(_ data: CMPedometerData) -> [DataLog] {
         var logs: [DataLog] = []
-        
+        let profileId = profileIdProvider.profileId()
+
         let steps = data.numberOfSteps.doubleValue
         if steps > 0 {
              let log = DataLog(
+                profileId: profileId,
                 logType: .activity,
                 dataType: "steps",
                 value: steps,

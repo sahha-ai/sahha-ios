@@ -38,46 +38,48 @@ extension SahhaSensor {
             ""
             
         // MARK: - Nutrition - Grams
-        case .dietary_protein, .dietary_fat_total, .dietary_fat_saturated,
-             .dietary_fat_monounsaturated, .dietary_fat_polyunsaturated,
-             .dietary_carbohydrates, .dietary_sugar, .dietary_fiber:
+        case .protein_intake, .fat_intake, .fat_saturated_intake,
+             .fat_monounsaturated_intake, .fat_polyunsaturated_intake,
+             .carbohydrate_intake, .sugar_intake, .fiber_intake:
             "g"
             
         // MARK: - Nutrition - Milligrams
-        case .dietary_cholesterol, .dietary_vitamin_e, .dietary_vitamin_c,
-             .dietary_vitamin_b6, .dietary_thiamin, .dietary_riboflavin,
-             .dietary_niacin, .dietary_pantothenic_acid, .dietary_calcium,
-             .dietary_iron, .dietary_magnesium, .dietary_phosphorus,
-             .dietary_potassium, .dietary_sodium, .dietary_zinc, .dietary_chloride,
-             .dietary_copper, .dietary_manganese, .dietary_caffeine:
+        case .cholesterol_intake, .vitamin_e_intake, .vitamin_c_intake,
+             .vitamin_b6_intake, .thiamin_intake, .riboflavin_intake,
+             .niacin_intake, .pantothenic_acid_intake, .calcium_intake,
+             .iron_intake, .magnesium_intake, .phosphorus_intake,
+             .potassium_intake, .sodium_intake, .zinc_intake, .chloride_intake,
+             .copper_intake, .manganese_intake, .caffeine_intake:
             "mg"
             
         // MARK: - Nutrition - Micrograms
-        case .dietary_vitamin_a, .dietary_vitamin_d, .dietary_vitamin_k,
-             .dietary_vitamin_b12, .dietary_folate, .dietary_biotin,
-             .dietary_chromium, .dietary_molybdenum, .dietary_selenium, .dietary_iodine:
+        case .vitamin_a_intake, .vitamin_d_intake, .vitamin_k_intake,
+             .vitamin_b12_intake, .folate_intake, .biotin_intake,
+             .chromium_intake, .molybdenum_intake, .selenium_intake, .iodine_intake:
             "mcg"
             
-        // MARK: - Nutrition - Liters
-        case .dietary_water:
+        // MARK: - Hydration - Liters
+        case .water_intake:
             "L"
             
-        // MARK: - Reproductive Health (Category values - no units, value is enum index)
+        // MARK: - Category types (no units)
         case .menstrual_flow, .intermenstrual_bleeding, .infrequent_menstrual_cycles,
              .irregular_menstrual_cycles, .persistent_intermenstrual_bleeding,
-             .prolonged_menstrual_periods, .ovulation_test_result, .cervical_mucus_quality,
-             .sexual_activity, .contraceptive, .pregnancy, .pregnancy_test_result,
-             .progesterone_test_result, .lactation, .abdominal_cramps, .acne,
+             .prolonged_menstrual_periods, .ovulation_test, .cervical_mucus,
+             .sexual_activity, .contraceptive, .pregnancy, .pregnancy_test,
+             .progesterone_test, .lactation, .abdominal_cramps, .acne,
              .appetite_changes, .bladder_incontinence, .bloating, .breast_pain, .chills,
-             .constipation, .diarrhea, .dizziness, .dry_skin, .fatigue, .hair_loss,
-             .headache, .hot_flashes, .lower_back_pain, .memory_lapse, .mood_changes,
-             .nausea, .night_sweats, .pelvic_pain, .rapid_pounding_or_fluttering_heartbeat,
-             .runny_nose, .sinus_congestion, .skipped_heartbeat, .sleep_changes,
-             .sore_throat, .vaginal_dryness, .vomiting:
-            "category"
+             .constipation, .coughing, .diarrhea, .dizziness, .dry_skin, .fainting,
+             .fatigue, .fever, .generalized_body_ache, .hair_loss, .headache, .heartburn,
+             .hot_flashes, .loss_of_smell, .loss_of_taste, .lower_back_pain, .memory_lapse,
+             .mood_changes, .nausea, .night_sweats, .pelvic_pain,
+             .rapid_pounding_or_fluttering_heartbeat, .runny_nose, .shortness_of_breath,
+             .sinus_congestion, .skipped_heartbeat, .sleep_changes, .sore_throat,
+             .vaginal_dryness, .vomiting, .wheezing:
+            ""
 
         // MARK: - Umbrella (not used for samples; expanded before query)
-        case .nutrition, .reproductive:
+        case .nutrition, .reproductive, .symptom:
             ""
         }
     }

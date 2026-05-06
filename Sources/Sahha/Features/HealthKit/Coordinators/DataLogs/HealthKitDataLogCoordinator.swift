@@ -16,6 +16,7 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
     private let anchorQueryService: HealthKitAnchorQueryServiceProtocol
     private let anchorStore: HealthKitAnchorStoreProtocol
     private let normaliser: HKSampleToDataLogNormaliserProtocol
+    private let profileIdProvider: ProfileIdProviderProtocol
     private let dataLogPipeline: DataLogPipelineProtocol
     private let circuitBreaker: CircuitBreaker?
     private let logger: ErrorLoggerProtocol
@@ -29,6 +30,7 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
         anchorQueryService: HealthKitAnchorQueryServiceProtocol,
         anchorStore: HealthKitAnchorStoreProtocol,
         normaliser: HKSampleToDataLogNormaliserProtocol,
+        profileIdProvider: ProfileIdProviderProtocol,
         dataLogPipeline: DataLogPipelineProtocol,
         circuitBreaker: CircuitBreaker? = nil,
         logger: ErrorLoggerProtocol,
@@ -39,6 +41,7 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
         self.anchorQueryService = anchorQueryService
         self.anchorStore = anchorStore
         self.normaliser = normaliser
+        self.profileIdProvider = profileIdProvider
         self.dataLogPipeline = dataLogPipeline
         self.circuitBreaker = circuitBreaker
         self.logger = logger
@@ -177,7 +180,8 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
 
                     totalSamples += samples.count
 
-                    let dataLogs = samples.flatMap { self.normaliser.normalise($0) }
+                    let profileId = self.profileIdProvider.profileId()
+                    let dataLogs = samples.flatMap { self.normaliser.normalise($0, profileId: profileId) }
                     totalLogs += dataLogs.count
 
                     guard !Task.isCancelled else { break }

@@ -1,7 +1,7 @@
 import HealthKit
 
 final class HKWorkoutToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
-    func normalise(_ sample: HKSample) -> [DataLog] {
+    func normalise(_ sample: HKSample, profileId: String?) -> [DataLog] {
         guard let sample = sample as? HKWorkout,
             let sensor = HKWorkoutType.workoutType().sahhaSensor,
             sensor == .exercise
@@ -22,6 +22,7 @@ final class HKWorkoutToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
         let additionalProperties: [String: String]? = properties.isEmpty ? nil : properties
 
         let parent = DataLog(
+            profileId: profileId,
             logType: sensor.dataLogType,
             dataType: "exercise_session_\(sample.workoutActivityType.name)",
             value: 1.0,
@@ -40,6 +41,7 @@ final class HKWorkoutToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
             logs.append(
                 contentsOf: workoutEvents.compactMap { event in
                     DataLog(
+                        profileId: profileId,
                         parentId: parent.id,
                         logType: sensor.dataLogType,
                         dataType: "exercise_event_\(event.type.name)",
@@ -59,6 +61,7 @@ final class HKWorkoutToDataLogNormaliser: HKSampleToDataLogNormaliserProtocol {
             logs.append(
                 contentsOf: sample.workoutActivities.compactMap { activity in
                     DataLog(
+                        profileId: profileId,
                         parentId: parent.id,
                         logType: sensor.dataLogType,
                         dataType: "exercise_segment_\(activity.workoutConfiguration.activityType.name)",
