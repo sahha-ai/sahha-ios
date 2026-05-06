@@ -130,7 +130,7 @@ else
 fi
 
 echo "==> Linting podspec"
-run pod spec lint "$PODSPEC_FILE"
+run pod lib lint "$PODSPEC_FILE"
 
 echo "==> Committing version bump"
 run git add "$SDK_FILE" "$PODSPEC_FILE"
