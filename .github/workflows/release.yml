@@ -1,0 +1,60 @@
+name: Release
+
+# Triggered manually from the Actions tab. Test the version locally with the
+# React Native and Flutter sample apps BEFORE running this workflow — there is
+# no manual gate inside the job.
+#
+# Required secrets:
+#   COCOAPODS_TRUNK_TOKEN  pod trunk session token (from ~/.netrc, line under
+#                          "machine trunk.cocoapods.org")
+#   RELEASE_TOKEN          (optional) PAT with `repo` scope. Only needed if the
+#                          `production` branch protection rule blocks the
+#                          default GITHUB_TOKEN from pushing the merge commit.
+#                          Falls back to GITHUB_TOKEN when unset.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver version (e.g. 1.4.0 or 1.4.0-beta.1)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as prerelease (skips production round-trip)"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout development
+        uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run release script
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+        run: |
+          flags=()
+          if [[ "${{ inputs.prerelease }}" == "true" ]]; then
+              flags+=(--prerelease)
+          fi
+          ./scripts/release.sh "${{ inputs.version }}" "${flags[@]}"
