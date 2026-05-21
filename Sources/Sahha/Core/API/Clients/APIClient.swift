@@ -152,7 +152,7 @@ final class APIClient: APIClientProtocol {
     }
 
     //// Method to compress large bodies with gzip
-    private func compressBodyIfNeeded(_ urlRequest: URLRequest) throws -> URLRequest? {
+    func compressBodyIfNeeded(_ urlRequest: URLRequest) throws -> URLRequest? {
         guard let body = urlRequest.httpBody, body.count > 1024 else {
             return nil // shows no comp. for bodies < 1kb
         }
@@ -171,7 +171,7 @@ final class APIClient: APIClientProtocol {
     }
 
     //function to compress data with gzip using Foundation's Compression, no added library needed
-    private func compressGzip(data: Data) throws -> Data {
+    func compressGzip(data: Data) throws -> Data {
         guard !data.isEmpty else { return data }
         
         // First, compress using deflate (ZLIB without header/footer)

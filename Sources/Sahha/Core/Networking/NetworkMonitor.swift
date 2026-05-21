@@ -18,7 +18,13 @@ actor NetworkMonitor: Disposable {
     private var stateChangeCallbacks: [CallbackToken: @Sendable (Bool) async -> Void] = [:]
     
     init() {}
-    
+
+    /// Test seam: construct with a fixed connectivity state so tests can exercise
+    /// connectivity-dependent paths without a live NWPathMonitor.
+    init(isConnected: Bool) {
+        self.isConnected = isConnected
+    }
+
     /// Start monitoring network state
     func startMonitoring() {
         guard !isMonitoring else { return }
