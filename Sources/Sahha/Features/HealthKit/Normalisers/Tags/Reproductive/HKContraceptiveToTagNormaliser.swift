@@ -9,8 +9,10 @@ import HealthKit
 /// `.state` treatment of pregnancy and lactation.
 ///
 /// Samples logged at a single instant in HealthKit will surface as zero-duration
-/// state spans (`startDateTime == endDateTime`). Per-pill / per-dose adherence
-/// signals — if ever captured — would belong on a separate event-typed sensor.
+/// state spans (`startDateTime == endDateTime`). An in-effect method that HealthKit
+/// marks open-ended with `Date.distantFuture` is emitted with a nil endDateTime —
+/// see [Date.isDistantFutureSentinel]. Per-pill / per-dose adherence signals — if
+/// ever captured — would belong on a separate event-typed sensor.
 ///
 /// value maps to the platform-agnostic ContraceptiveEnum snake_case string
 /// (aligned with Android):
@@ -28,13 +30,14 @@ final class HKContraceptiveToTagNormaliser: HKSampleToTagNormaliserProtocol {
         else { return [] }
 
         let value = HKCategoryValueContraceptive(rawValue: sample.value)?.contraceptiveValue ?? ContraceptiveEnum.unknown.value
+        let endDateTime: Date? = sample.endDate.isDistantFutureSentinel ? nil : sample.endDate
 
         return [
             Tag(
                 profileId: profileId,
                 type: .state,
                 startDateTime: sample.startDate,
-                endDateTime: sample.endDate,
+                endDateTime: endDateTime,
                 name: sensor.rawValue,
                 category: "reproductive",
                 value: value,

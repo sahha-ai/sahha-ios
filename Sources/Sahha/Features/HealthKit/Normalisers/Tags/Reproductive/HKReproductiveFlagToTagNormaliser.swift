@@ -14,7 +14,8 @@ import HealthKit
 /// value is nil since the tag's presence alone is sufficient.
 ///
 /// pregnancy and lactation use `.state` type (preserving endDate for duration),
-/// all others use `.event`.
+/// all others use `.event`. Ongoing states that HealthKit marks open-ended with
+/// `Date.distantFuture` are emitted with a nil endDateTime — see [Date.isDistantFutureSentinel].
 final class HKReproductiveFlagToTagNormaliser: HKSampleToTagNormaliserProtocol {
 
     private static let STATE_SENSORS: Set<SahhaSensor> = [
@@ -28,13 +29,14 @@ final class HKReproductiveFlagToTagNormaliser: HKSampleToTagNormaliserProtocol {
         else { return [] }
 
         let isState = Self.STATE_SENSORS.contains(sensor)
+        let endDateTime: Date? = isState && !sample.endDate.isDistantFutureSentinel ? sample.endDate : nil
 
         return [
             Tag(
                 profileId: profileId,
                 type: isState ? .state : .event,
                 startDateTime: sample.startDate,
-                endDateTime: isState ? sample.endDate : nil,
+                endDateTime: endDateTime,
                 name: sensor.rawValue,
                 category: "reproductive",
                 value: nil,
