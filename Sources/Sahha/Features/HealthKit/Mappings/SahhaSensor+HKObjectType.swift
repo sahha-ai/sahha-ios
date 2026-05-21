@@ -303,6 +303,10 @@ extension SahhaSensor {
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .breastPain)
             } else { return nil }
+        case .chest_tightness_or_pain:
+            if #available(iOS 13.6, *) {
+                return HKCategoryType.categoryType(forIdentifier: .chestTightnessOrPain)
+            } else { return nil }
         case .chills:
             if #available(iOS 13.6, *) {
                 return HKCategoryType.categoryType(forIdentifier: .chills)

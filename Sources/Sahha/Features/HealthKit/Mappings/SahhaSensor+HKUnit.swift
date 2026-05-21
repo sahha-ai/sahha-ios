@@ -122,7 +122,7 @@ extension SahhaSensor {
              .sexual_activity, .contraceptive, .pregnancy, .pregnancy_test,
              .progesterone_test, .lactation, .abdominal_cramps, .acne,
              .appetite_changes, .bladder_incontinence, .bloating, .breast_pain,
-             .chills, .constipation, .coughing, .diarrhea, .dizziness, .dry_skin,
+             .chest_tightness_or_pain, .chills, .constipation, .coughing, .diarrhea, .dizziness, .dry_skin,
              .fainting, .fatigue, .fever, .generalized_body_ache, .hair_loss,
              .headache, .heartburn, .hot_flashes, .loss_of_smell, .loss_of_taste,
              .lower_back_pain, .memory_lapse, .mood_changes, .nausea, .night_sweats,

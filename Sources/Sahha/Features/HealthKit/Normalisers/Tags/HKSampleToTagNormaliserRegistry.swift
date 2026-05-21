@@ -31,6 +31,7 @@ final class HKSampleToTagNormaliserRegistry: HKSampleToTagNormaliserProtocol {
             HKCategoryTypeIdentifier.appetiteChanges.rawValue: symptom,
             HKCategoryTypeIdentifier.bloating.rawValue: symptom,
             HKCategoryTypeIdentifier.breastPain.rawValue: symptom,
+            HKCategoryTypeIdentifier.chestTightnessOrPain.rawValue: symptom,
             HKCategoryTypeIdentifier.chills.rawValue: symptom,
             HKCategoryTypeIdentifier.constipation.rawValue: symptom,
             HKCategoryTypeIdentifier.coughing.rawValue: symptom,

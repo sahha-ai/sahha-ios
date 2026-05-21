@@ -138,13 +138,14 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case progesterone_test
     case lactation
     
-    // MARK: - Symptoms (38 types)
+    // MARK: - Symptoms (39 types)
     case abdominal_cramps
     case acne
     case appetite_changes
     case bladder_incontinence
     case bloating
     case breast_pain
+    case chest_tightness_or_pain
     case chills
     case constipation
     case coughing

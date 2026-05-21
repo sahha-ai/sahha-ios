@@ -44,9 +44,9 @@ extension SahhaSensor {
              .progesterone_test, .lactation:
             .reproductive
 
-        // MARK: - Symptoms (38 types)
+        // MARK: - Symptoms (39 types)
         case .abdominal_cramps, .acne, .appetite_changes, .bladder_incontinence,
-             .bloating, .breast_pain, .chills, .constipation, .coughing, .diarrhea,
+             .bloating, .breast_pain, .chest_tightness_or_pain, .chills, .constipation, .coughing, .diarrhea,
              .dizziness, .dry_skin, .fainting, .fatigue, .fever, .generalized_body_ache,
              .hair_loss, .headache, .heartburn, .hot_flashes, .loss_of_smell,
              .loss_of_taste, .lower_back_pain, .memory_lapse, .mood_changes, .nausea,
