@@ -141,7 +141,7 @@ extension SahhaSensor {
             return nil
             
         // MARK: - Nutrition
-        case .energy_consumed:
+        case .energy_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryEnergyConsumed)
         case .protein_intake:
             return HKQuantityType.quantityType(forIdentifier: .dietaryProtein)
@@ -241,7 +241,11 @@ extension SahhaSensor {
             if #available(iOS 16.0, *) {
                 return HKCategoryType.categoryType(forIdentifier: .prolongedMenstrualPeriods)
             } else { return nil }
-            
+
+        // MARK: - Reproductive Health - Android-only (no HealthKit equivalent)
+        case .menstrual_period:
+            return nil
+
         // MARK: - Reproductive Health - Fertility
         case .ovulation_test:
             return HKCategoryType.categoryType(forIdentifier: .ovulationTestResult)

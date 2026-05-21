@@ -71,7 +71,7 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case sleeping_wrist_temperature
     
     // MARK: - Nutrition (38 types)
-    case energy_consumed
+    case energy_intake
     case protein_intake
     case fat_intake
     case fat_saturated_intake
@@ -118,7 +118,12 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case irregular_menstrual_cycles
     case persistent_intermenstrual_bleeding
     case prolonged_menstrual_periods
-    
+
+    // MARK: - Reproductive Health - Android-only (no HealthKit equivalent)
+    /// Android-only: HealthKit has no bounded menstrual-period sample (the period
+    /// is derived from menstrual_flow events), so this is never collected on iOS.
+    case menstrual_period
+
     // MARK: - Reproductive Health - Fertility (2 types)
     case ovulation_test
     case cervical_mucus

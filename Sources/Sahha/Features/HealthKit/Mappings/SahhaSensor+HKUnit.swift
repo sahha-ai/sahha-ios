@@ -58,7 +58,7 @@ extension SahhaSensor {
             return .count().unitDivided(by: .second())
 
         // MARK: - Energy
-        case .active_energy_burned, .basal_energy_burned, .energy_consumed:
+        case .active_energy_burned, .basal_energy_burned, .energy_intake:
             return .largeCalorie()
         case .basal_metabolic_rate, .total_energy_burned:
             return nil
@@ -116,7 +116,7 @@ extension SahhaSensor {
             return .liter()
             
         // MARK: - Category types (no units)
-        case .menstrual_flow, .intermenstrual_bleeding, .infrequent_menstrual_cycles,
+        case .menstrual_period, .menstrual_flow, .intermenstrual_bleeding, .infrequent_menstrual_cycles,
              .irregular_menstrual_cycles, .persistent_intermenstrual_bleeding,
              .prolonged_menstrual_periods, .ovulation_test, .cervical_mucus,
              .sexual_activity, .contraceptive, .pregnancy, .pregnancy_test,
