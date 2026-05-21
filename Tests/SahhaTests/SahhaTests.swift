@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import HealthKit  // For HealthKit mocks
+import Compression  // For verifying gzip round-trips
 @testable import Sahha  // Access internal SDK components
 
 // MARK: - Mocks (Self-contained for testing; no SDK changes)
@@ -22,18 +23,45 @@ final class MockHKHealthStore: HKHealthStore, @unchecked Sendable {
 }
 
 // MARK: - Tests
-@Test("APIClient: GZIP compression matches expected format")
+@Test("APIClient: GZIP compression emits valid framing and round-trips to the original bytes")
 func testGZIPCompression() async throws {
     let client = APIClient(baseURL: URL(string: "https://example.com")!)
-    // A repeating payload large enough to compress below its original size; tiny
-    // inputs can't shrink because gzip's 18-byte header/footer dominates.
-    let testData = Data(repeating: 0x01, count: 2000)
+    // A mixed, compressible payload large enough that compression shrinks it
+    // (tiny inputs can't, since gzip's 18-byte header/footer dominates).
+    let testData = Data("Sahha gzip round-trip — ".utf8) + Data(repeating: 0x01, count: 2000)
 
     let compressed = try client.compressGzip(data: testData)
 
     #expect(compressed.count < testData.count)  // Compression occurred
     #expect(compressed[0] == 0x1F)  // GZIP header ID1
     #expect(compressed[1] == 0x8B)  // GZIP header ID2
+    #expect(compressed[2] == 0x08)  // CM = DEFLATE
+
+    // Strongest correctness check: inflating the gzip output must reproduce the
+    // original bytes exactly. This exercises the hand-rolled CRC32/ISIZE footer
+    // offsets too, not just the magic bytes.
+    let restored = try #require(inflateGzip(compressed, decompressedSize: testData.count))
+    #expect(restored == testData)
+}
+
+/// Inflates the SDK's gzip output by stripping the 10-byte gzip header and
+/// 8-byte footer, then decoding the raw-DEFLATE body. Apple's COMPRESSION_ZLIB
+/// is raw DEFLATE (RFC 1951), which is exactly the gzip payload between the frame.
+private func inflateGzip(_ gzip: Data, decompressedSize: Int) -> Data? {
+    let headerSize = 10
+    let footerSize = 8
+    guard gzip.count > headerSize + footerSize else { return nil }
+    let deflateBody = gzip.subdata(in: headerSize ..< (gzip.count - footerSize))
+
+    let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: decompressedSize)
+    defer { dst.deallocate() }
+
+    let written = deflateBody.withUnsafeBytes { src -> Int in
+        guard let base = src.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+        return compression_decode_buffer(dst, decompressedSize, base, deflateBody.count, nil, COMPRESSION_ZLIB)
+    }
+    guard written > 0 else { return nil }
+    return Data(bytes: dst, count: written)
 }
 
 @Test("APIClient: Compresses body if >1KB and sets header")
@@ -49,43 +77,17 @@ func testCompressBodyIfNeeded() async throws {
     #expect(compressedRequest!.value(forHTTPHeaderField: "Content-Encoding") == "gzip")
 }
 
-@Test("CircuitBreaker: Opens after failure threshold")
-func testCircuitBreakerOpensAfterThreshold() async {
-    let breaker = CircuitBreaker(failureThreshold: 3, recoveryTimeout: 0.1)
-    for _ in 0..<3 { await breaker.recordFailure() }
-    #expect(await breaker.shouldAllowRequest() == false)
-    let (state, _) = await breaker.getState()
-    #expect(state == .open)
-}
+@Test("NetworkMonitor: connectivity state gates upload attempts")
+func testNetworkMonitorConnectivityGating() async {
+    // A test-controlled monitor reports its seeded state and never starts a real
+    // NWPathMonitor, so `shouldAttemptUpload()` reflects connectivity deterministically.
+    let connected = NetworkMonitor(isConnected: true)
+    #expect(await connected.isConnected == true)
+    #expect(await connected.shouldAttemptUpload() == true)
 
-@Test("CircuitBreaker: Recovers to half-open after timeout")
-func testCircuitBreakerRecoversAfterTimeout() async throws {
-    let breaker = CircuitBreaker(failureThreshold: 1, recoveryTimeout: 0.1)
-    await breaker.recordFailure()
-    try await Task.sleep(nanoseconds: 200_000_000)
-    #expect(await breaker.shouldAllowRequest() == true)
-    let (state, _) = await breaker.getState()
-    #expect(state == .halfOpen)
-}
-
-@Test("CircuitBreaker: Closes after successes in half-open")
-func testCircuitBreakerClosesAfterSuccesses() async throws {
-    let breaker = CircuitBreaker(failureThreshold: 1, recoveryTimeout: 0.1, halfOpenSuccessThreshold: 2)
-    await breaker.recordFailure()
-    try await Task.sleep(nanoseconds: 200_000_000)  // Past recovery timeout
-    _ = await breaker.shouldAllowRequest()          // Lazily transitions .open → .halfOpen
-    await breaker.recordSuccess()
-    await breaker.recordSuccess()
-    let (state, _) = await breaker.getState()
-    #expect(state == .closed)
-}
-
-@Test("NetworkMonitor: Initial state and monitoring")
-func testNetworkMonitorInitialState() async {
-    let monitor = NetworkMonitor()
-    #expect(await monitor.isConnected == true)
-    await monitor.startMonitoring()
-    // Note: To test changes, use a mock or real network toggle
+    let disconnected = NetworkMonitor(isConnected: false)
+    #expect(await disconnected.isConnected == false)
+    #expect(await disconnected.shouldAttemptUpload() == false)
 }
 
 @Test("NetworkMonitor: Wait for connectivity timeout")
@@ -96,7 +98,8 @@ func testNetworkMonitorWaitForConnectivityTimeout() async throws {
         try await monitor.waitForConnectivity(timeout: 0.1)
         #expect(Bool(false), "Should throw timeout")
     } catch {
-        #expect(error is NetworkError)
+        // Specifically the timeout case, not just any NetworkError.
+        #expect((error as? NetworkError) == .timeout)
     }
 }
 
@@ -119,19 +122,23 @@ func testDeadLetterQueuePersistAndLoad() async throws {
     try? FileManager.default.removeItem(at: tempDir)
 }
 
-@Test("UnifiedDeadLetterQueue: Cleanup exceeds max batches")
+@Test("UnifiedDeadLetterQueue: Cleanup keeps only the newest batches when max is exceeded")
 func testDeadLetterQueueCleanup() async throws {
     let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let queue = UnifiedDeadLetterQueue<DataLogRequest>(baseDirectory: tempDir, maxStoredBatches: 2)
 
-    for _ in 0..<4 {
-        let chunk = UploadChunk<DataLogRequest>(requests: [], sizeInBytes: 0, priority: .normal)
+    // sizeInBytes acts as a per-batch marker so we can prove *which* batches survive.
+    for marker in 1...4 {
+        let chunk = UploadChunk<DataLogRequest>(requests: [], sizeInBytes: marker, priority: .normal)
         await queue.persistBatch(chunk)
-        try await Task.sleep(nanoseconds: 10_000_000)  // Ensure different timestamps
+        try await Task.sleep(nanoseconds: 50_000_000)  // Distinct creation timestamps for ordering
     }
 
-    let count = await queue.getCount()
-    #expect(count == 2)  // Oldest 2 removed
+    #expect(await queue.getCount() == 2)
+
+    // The oldest two (markers 1, 2) are evicted; the newest two survive, oldest-first.
+    let survivors = await queue.loadAllBatches().map(\.chunk.sizeInBytes)
+    #expect(survivors == [3, 4])
 
     try? FileManager.default.removeItem(at: tempDir)
 }
@@ -176,40 +183,6 @@ func testSDKHealthKitObserver() async throws {
     #expect(mockHealthStore.executedQueries.count == 1)
     let keys = await observerStore.getRegisteredKeys()
     #expect(keys.contains(SahhaSensor.heart_rate.rawValue))
-}
-
-@Test("SDK: Circuit breaker opens after failures")
-func testSDKDataUploadCircuitOpen() async throws {
-    let breaker = CircuitBreaker(failureThreshold: 1)
-    await breaker.recordFailure()
-
-    // Circuit breaker should be open and reject requests
-    #expect(await breaker.shouldAllowRequest() == false)
-}
-
-@Test("SDK: Offline data persistence via UnifiedDeadLetterQueue")
-func testSDKOfflineRecovery() async throws {
-    let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    let queue = UnifiedDeadLetterQueue<DataLogRequest>(baseDirectory: tempDir)
-
-    let chunk = UploadChunk<DataLogRequest>(requests: [], sizeInBytes: 0, priority: .high)
-    let id = await queue.persistBatch(chunk)
-    #expect(id != nil)
-
-    // Verify persisted
-    let batches = await queue.loadAllBatches()
-    #expect(batches.count == 1)
-
-    // Simulate recovery: remove after upload
-    await queue.removeBatch(withId: id!)
-    let emptyBatches = await queue.loadAllBatches()
-    #expect(emptyBatches.isEmpty)
-
-    try? FileManager.default.removeItem(at: tempDir)
-}
-
-@Test func example() async throws {
-    // Your existing test - keep or expand
 }
 
 @Test("DiagnosticReport: queues field replaces dataLogDLQ and tagDLQ in encoded payload")

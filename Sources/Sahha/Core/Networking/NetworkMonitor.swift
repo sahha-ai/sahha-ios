@@ -10,25 +10,46 @@ actor NetworkMonitor: Disposable {
     private var monitor: NWPathMonitor?
     private let queue = DispatchQueue(label: "ai.sahha.networkmonitor")
     private var isMonitoring = false
-    
+
+    /// When true, this instance never starts a real NWPathMonitor and its
+    /// connectivity is driven explicitly (test-only). See `init(isConnected:)`.
+    private let isTestControlled: Bool
+
     private(set) var isConnected: Bool = true
     private(set) var connectionType: NWInterface.InterfaceType?
-    
+
     // Callbacks for network state changes (keyed by token for removal)
     private var stateChangeCallbacks: [CallbackToken: @Sendable (Bool) async -> Void] = [:]
-    
-    init() {}
 
-    /// Test seam: construct with a fixed connectivity state so tests can exercise
-    /// connectivity-dependent paths without a live NWPathMonitor.
+    init() {
+        isTestControlled = false
+    }
+
+    /// Test seam: a connectivity-controlled monitor that never starts a real
+    /// NWPathMonitor. `startMonitoring()`/`stopMonitoring()` are no-ops and the
+    /// connectivity state is driven explicitly via `setConnectedForTesting(_:)`,
+    /// so connectivity-dependent paths can be exercised deterministically.
     init(isConnected: Bool) {
+        isTestControlled = true
         self.isConnected = isConnected
+    }
+
+    /// Test seam: drive a connectivity transition deterministically, notifying
+    /// any registered state-change callbacks just as a real path update would.
+    func setConnectedForTesting(_ connected: Bool) {
+        guard isTestControlled else { return }
+        let wasConnected = isConnected
+        isConnected = connected
+        if wasConnected != connected {
+            notifyStateChange(connected)
+        }
     }
 
     /// Start monitoring network state
     func startMonitoring() {
+        guard !isTestControlled else { return }
         guard !isMonitoring else { return }
-        
+
         // Create a fresh NWPathMonitor each time (cancel() is irreversible)
         let newMonitor = NWPathMonitor()
         self.monitor = newMonitor
