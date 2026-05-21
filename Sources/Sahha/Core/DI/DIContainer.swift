@@ -3,8 +3,9 @@ final actor DIContainer {
 
     private var factories: [ObjectIdentifier: Factory] = [:]
     private var instances: [ObjectIdentifier: Sendable] = [:]
+    private var inFlight: [ObjectIdentifier: Task<Sendable, Error>] = [:]
     private var disposables: [Disposable] = []
-    
+
     func register<T: Sendable>(
         _ type: T.Type = T.self,
         factory: @escaping Factory
@@ -21,17 +22,29 @@ final actor DIContainer {
         if let singleton = instances[key] as? T {
             return singleton
         }
-        
-        if let factory = factories[key] {
-            let instance = try await factory(self)
-            if let disposable = instance as? Disposable {
-                disposables.append(disposable)
-            }
-            instances[key] = instance
-            return instance as! T
+
+        // Dedup concurrent/reentrant resolutions: a second resolve of the same
+        // type joins the in-flight construction instead of building a duplicate
+        // "singleton". Without this, the await on the factory lets the actor
+        // re-enter and create multiple instances of the same registration.
+        if let existing = inFlight[key] {
+            return try await existing.value as! T
         }
 
-        throw SahhaError(message: "Dependency \(type) is not registered")
+        guard let factory = factories[key] else {
+            throw SahhaError(message: "Dependency \(type) is not registered")
+        }
+
+        let task = Task { try await factory(self) }
+        inFlight[key] = task
+        defer { inFlight[key] = nil }
+
+        let instance = try await task.value
+        if let disposable = instance as? Disposable {
+            disposables.append(disposable)
+        }
+        instances[key] = instance
+        return instance as! T
     }
 
     func reset() async {
@@ -41,5 +54,6 @@ final actor DIContainer {
         disposables.removeAll()
         factories.removeAll()
         instances.removeAll()
+        inFlight.removeAll()
     }
 }

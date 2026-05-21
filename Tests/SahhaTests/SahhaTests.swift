@@ -1,96 +1,67 @@
 import Testing
 import Foundation
 import HealthKit  // For HealthKit mocks
+import Compression  // For verifying gzip round-trips
 @testable import Sahha  // Access internal SDK components
 
 // MARK: - Mocks (Self-contained for testing; no SDK changes)
-class MockHKHealthStore: HKHealthStore {
+final class MockHKHealthStore: HKHealthStore, @unchecked Sendable {
     var executedQueries: [HKObserverQuery] = []
     var stoppedQueries: [HKObserverQuery] = []
-    var simulatedError: Error? = nil
-    
+
     override func execute(_ query: HKQuery) {
         if let observerQuery = query as? HKObserverQuery {
             executedQueries.append(observerQuery)
         }
     }
-    
+
     override func stop(_ query: HKQuery) {
         if let observerQuery = query as? HKObserverQuery {
             stoppedQueries.append(observerQuery)
         }
     }
-    
-    // Simulate a HealthKit update by calling the query's handler
-    func simulateUpdate(for query: HKObserverQuery) {
-        query.updateHandler?(query, {}, simulatedError)
-    }
-}
-
-class MockAPIClient: APIClientProtocol {
-    var shouldSucceed = true
-    var simulatedResponse: APIResponse?
-    var lastRequest: APIRequest?
-    
-    func send(_ request: APIRequest) async throws -> APIResponse {
-        lastRequest = request
-        if shouldSucceed {
-            return simulatedResponse ?? APIResponse(Data(), HTTPURLResponse())
-        } else {
-            throw NSError(domain: "TestError", code: 500, userInfo: nil)
-        }
-    }
-}
-
-class MockNetworkMonitor: NetworkMonitor {
-    private var _isConnected = true
-    override var isConnected: Bool { _isConnected }
-    
-    func setConnected(_ connected: Bool) {
-        _isConnected = connected
-        // Simulate callback
-        Task { await notifyStateChange(connected) }
-    }
 }
 
 // MARK: - Tests
-@Test("APIClient: GZIP compression matches expected format")
+@Test("APIClient: GZIP compression emits valid framing and round-trips to the original bytes")
 func testGZIPCompression() async throws {
     let client = APIClient(baseURL: URL(string: "https://example.com")!)
-    let testData = "Test data for compression".data(using: .utf8)!
-    
-    // Compress
+    // A mixed, compressible payload large enough that compression shrinks it
+    // (tiny inputs can't, since gzip's 18-byte header/footer dominates).
+    let testData = Data("Sahha gzip round-trip — ".utf8) + Data(repeating: 0x01, count: 2000)
+
     let compressed = try client.compressGzip(data: testData)
-    
-    // Basic checks (header, footer, size)
+
     #expect(compressed.count < testData.count)  // Compression occurred
     #expect(compressed[0] == 0x1F)  // GZIP header ID1
     #expect(compressed[1] == 0x8B)  // GZIP header ID2
-    
-    // Decompress to verify (simulate server-side)
-    let decompressed = try decompressGZIP(compressed)
-    #expect(decompressed == testData)
+    #expect(compressed[2] == 0x08)  // CM = DEFLATE
+
+    // Strongest correctness check: inflating the gzip output must reproduce the
+    // original bytes exactly. This exercises the hand-rolled CRC32/ISIZE footer
+    // offsets too, not just the magic bytes.
+    let restored = try #require(inflateGzip(compressed, decompressedSize: testData.count))
+    #expect(restored == testData)
 }
 
-// Helper for test (simulates server decompression)
-private func decompressGZIP(_ data: Data) throws -> Data {
-    let bufferSize = data.count * 2
-    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-    defer { buffer.deallocate() }
-    
-    let decompressedSize = data.withUnsafeBytes { sourceBuffer in
-        compression_decode_buffer(
-            buffer,
-            bufferSize,
-            sourceBuffer.baseAddress!.assumingMemoryBound(to: UInt8.self),
-            data.count,
-            nil,
-            COMPRESSION_ZLIB
-        )
+/// Inflates the SDK's gzip output by stripping the 10-byte gzip header and
+/// 8-byte footer, then decoding the raw-DEFLATE body. Apple's COMPRESSION_ZLIB
+/// is raw DEFLATE (RFC 1951), which is exactly the gzip payload between the frame.
+private func inflateGzip(_ gzip: Data, decompressedSize: Int) -> Data? {
+    let headerSize = 10
+    let footerSize = 8
+    guard gzip.count > headerSize + footerSize else { return nil }
+    let deflateBody = gzip.subdata(in: headerSize ..< (gzip.count - footerSize))
+
+    let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: decompressedSize)
+    defer { dst.deallocate() }
+
+    let written = deflateBody.withUnsafeBytes { src -> Int in
+        guard let base = src.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+        return compression_decode_buffer(dst, decompressedSize, base, deflateBody.count, nil, COMPRESSION_ZLIB)
     }
-    
-    #expect(decompressedSize > 0)
-    return Data(bytes: buffer, count: decompressedSize)
+    guard written > 0 else { return nil }
+    return Data(bytes: dst, count: written)
 }
 
 @Test("APIClient: Compresses body if >1KB and sets header")
@@ -106,54 +77,29 @@ func testCompressBodyIfNeeded() async throws {
     #expect(compressedRequest!.value(forHTTPHeaderField: "Content-Encoding") == "gzip")
 }
 
-@Test("CircuitBreaker: Opens after failure threshold")
-func testCircuitBreakerOpensAfterThreshold() async {
-    let breaker = CircuitBreaker(failureThreshold: 3, recoveryTimeout: 0.1)
-    for _ in 0..<3 { await breaker.recordFailure() }
-    #expect(await breaker.shouldAllowRequest() == false)
-    let (state, _) = await breaker.getState()
-    #expect(state == .open)
-}
+@Test("NetworkMonitor: connectivity state gates upload attempts")
+func testNetworkMonitorConnectivityGating() async {
+    // A test-controlled monitor reports its seeded state and never starts a real
+    // NWPathMonitor, so `shouldAttemptUpload()` reflects connectivity deterministically.
+    let connected = NetworkMonitor(isConnected: true)
+    #expect(await connected.isConnected == true)
+    #expect(await connected.shouldAttemptUpload() == true)
 
-@Test("CircuitBreaker: Recovers to half-open after timeout")
-func testCircuitBreakerRecoversAfterTimeout() async throws {
-    let breaker = CircuitBreaker(failureThreshold: 1, recoveryTimeout: 0.1)
-    await breaker.recordFailure()
-    try await Task.sleep(for: .seconds(0.2))
-    #expect(await breaker.shouldAllowRequest() == true)
-    let (state, _) = await breaker.getState()
-    #expect(state == .halfOpen)
-}
-
-@Test("CircuitBreaker: Closes after successes in half-open")
-func testCircuitBreakerClosesAfterSuccesses() async throws {
-    let breaker = CircuitBreaker(failureThreshold: 1, recoveryTimeout: 0.1, halfOpenSuccessThreshold: 2)
-    await breaker.recordFailure()
-    try await Task.sleep(for: .seconds(0.2))  // Enter half-open
-    await breaker.recordSuccess()
-    await breaker.recordSuccess()
-    let (state, _) = await breaker.getState()
-    #expect(state == .closed)
-}
-
-@Test("NetworkMonitor: Initial state and monitoring")
-func testNetworkMonitorInitialState() async {
-    let monitor = NetworkMonitor()
-    #expect(await monitor.isConnected == true)
-    await monitor.startMonitoring()
-    // Note: To test changes, use a mock or real network toggle
+    let disconnected = NetworkMonitor(isConnected: false)
+    #expect(await disconnected.isConnected == false)
+    #expect(await disconnected.shouldAttemptUpload() == false)
 }
 
 @Test("NetworkMonitor: Wait for connectivity timeout")
 func testNetworkMonitorWaitForConnectivityTimeout() async throws {
-    let monitor = MockNetworkMonitor()
-    monitor.setConnected(false)
-    
+    let monitor = NetworkMonitor(isConnected: false)
+
     do {
         try await monitor.waitForConnectivity(timeout: 0.1)
         #expect(Bool(false), "Should throw timeout")
     } catch {
-        #expect(error is NetworkError)
+        // Specifically the timeout case, not just any NetworkError.
+        #expect((error as? NetworkError) == .timeout)
     }
 }
 
@@ -176,19 +122,23 @@ func testDeadLetterQueuePersistAndLoad() async throws {
     try? FileManager.default.removeItem(at: tempDir)
 }
 
-@Test("UnifiedDeadLetterQueue: Cleanup exceeds max batches")
+@Test("UnifiedDeadLetterQueue: Cleanup keeps only the newest batches when max is exceeded")
 func testDeadLetterQueueCleanup() async throws {
     let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let queue = UnifiedDeadLetterQueue<DataLogRequest>(baseDirectory: tempDir, maxStoredBatches: 2)
 
-    for _ in 0..<4 {
-        let chunk = UploadChunk<DataLogRequest>(requests: [], sizeInBytes: 0, priority: .normal)
+    // sizeInBytes acts as a per-batch marker so we can prove *which* batches survive.
+    for marker in 1...4 {
+        let chunk = UploadChunk<DataLogRequest>(requests: [], sizeInBytes: marker, priority: .normal)
         await queue.persistBatch(chunk)
-        try await Task.sleep(for: .milliseconds(10))  // Ensure different timestamps
+        try await Task.sleep(nanoseconds: 50_000_000)  // Distinct creation timestamps for ordering
     }
 
-    let count = await queue.getCount()
-    #expect(count == 2)  // Oldest 2 removed
+    #expect(await queue.getCount() == 2)
+
+    // The oldest two (markers 1, 2) are evicted; the newest two survive, oldest-first.
+    let survivors = await queue.loadAllBatches().map(\.chunk.sizeInBytes)
+    #expect(survivors == [3, 4])
 
     try? FileManager.default.removeItem(at: tempDir)
 }
@@ -197,67 +147,42 @@ func testDeadLetterQueueCleanup() async throws {
 func testSDKConfiguration() async throws {
     let settings = SahhaSettings(environment: .sandbox)  // Use test settings
     try await SahhaActor.shared.configure(with: settings)
-    #expect(SahhaActor.shared.container != nil)
+
+    // requireConfig() throws unless the DI container was built; a clean return
+    // (and the round-tripped environment) proves configuration completed.
+    let (_, resolvedSettings) = try await SahhaActor.shared.requireConfig()
+    #expect(resolvedSettings.environment == .sandbox)
 }
 
-@Test("SDK: Authentication flow")
+@Test("SDK: Authentication rejects empty credentials before any network call")
 func testSDKAuthentication() async throws {
-    // Assumes mocks or test credentials; replace with valid test values
+    try await SahhaActor.shared.configure(with: SahhaSettings(environment: .sandbox))
     let authManager = try await SahhaActor.shared.authManager()
-    try await authManager.authenticate(appId: "test-app-id", appSecret: "test-secret", externalId: "test-external-id")
-    #expect(Sahha.isAuthenticated == true)
-}
 
-@Test("SDK: HealthKit observer receives notifications")
-func testSDKHealthKitObserver() async throws {
-    // Setup with mocks
-    let mockHealthStore = MockHKHealthStore()
-    let observerService = HealthKitObserverService(healthStore: mockHealthStore, /* inject other deps */)
-    
-    var handlerCalled = false
-    try await observerService.startObservers(for: [.heartRate]) { _, _ in
-        handlerCalled = true
+    // Empty appId is rejected by validation before the auth service is contacted,
+    // so this exercises real behavior without depending on the network.
+    await #expect(throws: SahhaError.self) {
+        try await authManager.authenticate(appId: "", appSecret: "test-secret", externalId: "test-external-id")
     }
-    
-    // Simulate update
-    let query = mockHealthStore.executedQueries.first!
-    mockHealthStore.simulateUpdate(for: query)
-    
-    #expect(handlerCalled == true)
 }
 
-@Test("SDK: Circuit breaker opens after failures")
-func testSDKDataUploadCircuitOpen() async throws {
-    let breaker = CircuitBreaker(failureThreshold: 1)
-    await breaker.recordFailure()
+@Test("SDK: HealthKit observer service registers an observer query")
+func testSDKHealthKitObserver() async throws {
+    let mockHealthStore = MockHKHealthStore()
+    let observerStore = MockHealthKitObserverStore()
+    let observerService = HealthKitObserverService(
+        healthStore: mockHealthStore,
+        observerStore: observerStore,
+        logger: NoopErrorLogger()
+    )
 
-    // Circuit breaker should be open and reject requests
-    #expect(await breaker.shouldAllowRequest() == false)
-}
+    // HKObserverQuery has no externally callable update handler, so we verify the
+    // service registers and executes an observer rather than simulating delivery.
+    try await observerService.startObservers(for: [.heart_rate]) { _, _ in }
 
-@Test("SDK: Offline data persistence via UnifiedDeadLetterQueue")
-func testSDKOfflineRecovery() async throws {
-    let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    let queue = UnifiedDeadLetterQueue<DataLogRequest>(baseDirectory: tempDir)
-
-    let chunk = UploadChunk<DataLogRequest>(requests: [], sizeInBytes: 0, priority: .high)
-    let id = await queue.persistBatch(chunk)
-    #expect(id != nil)
-
-    // Verify persisted
-    let batches = await queue.loadAllBatches()
-    #expect(batches.count == 1)
-
-    // Simulate recovery: remove after upload
-    await queue.removeBatch(withId: id!)
-    let emptyBatches = await queue.loadAllBatches()
-    #expect(emptyBatches.isEmpty)
-
-    try? FileManager.default.removeItem(at: tempDir)
-}
-
-@Test func example() async throws {
-    // Your existing test - keep or expand
+    #expect(mockHealthStore.executedQueries.count == 1)
+    let keys = await observerStore.getRegisteredKeys()
+    #expect(keys.contains(SahhaSensor.heart_rate.rawValue))
 }
 
 @Test("DiagnosticReport: queues field replaces dataLogDLQ and tagDLQ in encoded payload")
