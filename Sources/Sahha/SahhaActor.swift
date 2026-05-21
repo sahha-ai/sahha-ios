@@ -124,8 +124,9 @@ actor SahhaActor {
             // Probe each sensor for data to detect potentially denied permissions
             await lifecycleObserver.registerListener(sensorProbeListener, for: [.app_foreground])
 
-            // Upload diagnostic report on each foreground event
-            await lifecycleObserver.registerListener(diagnosticConfigListener, for: [.app_foreground])
+            // Upload diagnostic report on app open. Uses .app_resume (didBecomeActive) rather
+            // than .app_foreground because the latter does not fire on cold launch.
+            await lifecycleObserver.registerListener(diagnosticConfigListener, for: [.app_resume])
         } catch {
             await log(error: error, message: "setupLifecycleListeners failed")
         }

@@ -36,7 +36,7 @@ final class SensorProbeLifecycleListener: LifecycleListener, @unchecked Sendable
 
             do {
                 let predicate = HKQuery.predicateForSamples(
-                    withStart: Calendar.current.date(byAdding: .hour, value: -24, to: Date()),
+                    withStart: Calendar.current.date(byAdding: .month, value: -6, to: Date()),
                     end: Date(),
                     options: .strictStartDate
                 )

@@ -9,7 +9,7 @@ final class DiagnosticConfigLifecycleListener: LifecycleListener, @unchecked Sen
         do {
             try await uploadService.uploadDiagnosticReport()
         } catch {
-            Sahha.log("[Diagnostics] Foreground upload failed: \(error.localizedDescription)")
+            Sahha.log("[Diagnostics] Upload failed on \(event): \(error.localizedDescription)")
         }
     }
 }
