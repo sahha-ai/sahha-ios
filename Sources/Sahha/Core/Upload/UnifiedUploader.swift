@@ -90,6 +90,12 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
         uploadTask = nil
         await chunkQueue.clear()
         await persistentQueue.clearAll()
+        // Clear the sent-ID dedup store too. On deauthentication the container is
+        // reset and anchors are wiped, so the next session re-queries history from
+        // scratch. If the dedup store survived, those re-queried items would be
+        // filtered as "already sent" and never re-uploaded — only genuinely new
+        // samples (e.g. a fresh night of sleep) would get through.
+        await sentStore.dispose()
         await networkMonitor.stopMonitoring()
     }
 

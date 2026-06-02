@@ -4,14 +4,17 @@ set -euo pipefail
 VERSION=""
 PRERELEASE=false
 DRY_RUN=false
+PUBLISH_ONLY=false
 
 usage() {
     cat <<EOF
-Usage: $0 <version> [--prerelease] [--dry-run]
+Usage: $0 <version> [--prerelease] [--publish-only] [--dry-run]
 
-  <version>      Semver version, e.g. 1.4.0 or 1.4.0-beta.1
-  --prerelease   Mark as prerelease and skip the production round-trip
-  --dry-run      Print actions without executing
+  <version>       Semver version, e.g. 1.4.0 or 1.4.0-beta.1
+  --prerelease    Mark as prerelease and skip the production round-trip
+  --publish-only  Skip bump/commit/tag/push; only lint, pod trunk push and
+                  gh release for a version that is already committed and tagged
+  --dry-run       Print actions without executing
 
 Test the SDK locally with the React Native and Flutter sample apps before
 running this script.
@@ -23,6 +26,11 @@ Stable release flow:
 Prerelease flow:
   development -> bump versions -> tag -> push -> pod trunk push -> gh release
   (production branch is left alone)
+
+Publish-only flow (--publish-only):
+  verify version + existing tag -> lint -> pod trunk push -> gh release
+  (no commit, tag, push or production round-trip; the tag must already point
+  at the development tip)
 EOF
     exit 1
 }
@@ -30,6 +38,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --prerelease) PRERELEASE=true; shift ;;
+        --publish-only) PUBLISH_ONLY=true; shift ;;
         --dry-run) DRY_RUN=true; shift ;;
         -h|--help) usage ;;
         -*) echo "Unknown flag: $1" >&2; usage ;;
@@ -98,48 +107,82 @@ if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/development)" ]]; then
     exit 1
 fi
 
-if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
-    echo "Error: tag '$VERSION' already exists locally" >&2
-    exit 1
-fi
-if git ls-remote --tags origin "refs/tags/$VERSION" | grep -q "refs/tags/$VERSION"; then
-    echo "Error: tag '$VERSION' already exists on origin" >&2
-    exit 1
+if [[ "$PUBLISH_ONLY" == true ]]; then
+    if ! git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+        echo "Error: --publish-only requires tag '$VERSION' to exist locally" >&2
+        exit 1
+    fi
+    if ! git ls-remote --tags origin "refs/tags/$VERSION" | grep -q "refs/tags/$VERSION"; then
+        echo "Error: --publish-only requires tag '$VERSION' to exist on origin" >&2
+        echo "       Push it first: git push origin $VERSION" >&2
+        exit 1
+    fi
+    TAG_COMMIT="$(git rev-parse "refs/tags/$VERSION^{commit}")"
+    if [[ "$TAG_COMMIT" != "$(git rev-parse HEAD)" ]]; then
+        echo "Error: tag '$VERSION' points at $TAG_COMMIT, not the development tip $(git rev-parse HEAD)" >&2
+        echo "       Move it: git tag -f $VERSION HEAD && git push origin --force $VERSION" >&2
+        exit 1
+    fi
+else
+    if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+        echo "Error: tag '$VERSION' already exists locally" >&2
+        exit 1
+    fi
+    if git ls-remote --tags origin "refs/tags/$VERSION" | grep -q "refs/tags/$VERSION"; then
+        echo "Error: tag '$VERSION' already exists on origin" >&2
+        exit 1
+    fi
 fi
 
-echo "==> Releasing version: $VERSION (prerelease: $PRERELEASE)"
+echo "==> Releasing version: $VERSION (prerelease: $PRERELEASE, publish-only: $PUBLISH_ONLY)"
 
 SDK_FILE="Sources/Sahha/Core/Constants/SDK.swift"
 PODSPEC_FILE="Sahha.podspec"
 
-echo "==> Bumping version in $SDK_FILE and $PODSPEC_FILE"
-if [[ "$DRY_RUN" == true ]]; then
-    echo "[dry-run] would set version=$VERSION in $SDK_FILE and $PODSPEC_FILE"
-else
-    perl -i -pe "s/static let version = \"[^\"]+\"/static let version = \"$VERSION\"/" "$SDK_FILE"
-    perl -i -pe "s/s\.version(\s+)= '[^']+'/s.version\1= '$VERSION'/" "$PODSPEC_FILE"
-
+if [[ "$PUBLISH_ONLY" == true ]]; then
+    echo "==> Verifying $SDK_FILE and $PODSPEC_FILE already declare $VERSION"
     if ! grep -q "static let version = \"$VERSION\"" "$SDK_FILE"; then
-        echo "Error: failed to update $SDK_FILE" >&2
+        echo "Error: $SDK_FILE does not declare version $VERSION" >&2
+        echo "       --publish-only does not bump; commit the version first." >&2
         exit 1
     fi
     if ! grep -q "s.version.* = '$VERSION'" "$PODSPEC_FILE"; then
-        echo "Error: failed to update $PODSPEC_FILE" >&2
+        echo "Error: $PODSPEC_FILE does not declare version $VERSION" >&2
+        echo "       --publish-only does not bump; commit the version first." >&2
         exit 1
+    fi
+else
+    echo "==> Bumping version in $SDK_FILE and $PODSPEC_FILE"
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "[dry-run] would set version=$VERSION in $SDK_FILE and $PODSPEC_FILE"
+    else
+        perl -i -pe "s/static let version = \"[^\"]+\"/static let version = \"$VERSION\"/" "$SDK_FILE"
+        perl -i -pe "s/s\.version(\s+)= '[^']+'/s.version\1= '$VERSION'/" "$PODSPEC_FILE"
+
+        if ! grep -q "static let version = \"$VERSION\"" "$SDK_FILE"; then
+            echo "Error: failed to update $SDK_FILE" >&2
+            exit 1
+        fi
+        if ! grep -q "s.version.* = '$VERSION'" "$PODSPEC_FILE"; then
+            echo "Error: failed to update $PODSPEC_FILE" >&2
+            exit 1
+        fi
     fi
 fi
 
 echo "==> Linting podspec"
 run pod lib lint "$PODSPEC_FILE"
 
-echo "==> Committing version bump"
-run git add "$SDK_FILE" "$PODSPEC_FILE"
-run git commit -m "chore: release $VERSION"
-run git tag "$VERSION"
-run git push origin development
-run git push origin "$VERSION"
+if [[ "$PUBLISH_ONLY" == false ]]; then
+    echo "==> Committing version bump"
+    run git add "$SDK_FILE" "$PODSPEC_FILE"
+    run git commit -m "chore: release $VERSION"
+    run git tag "$VERSION"
+    run git push origin development
+    run git push origin "$VERSION"
+fi
 
-if [[ "$PRERELEASE" == false ]]; then
+if [[ "$PRERELEASE" == false && "$PUBLISH_ONLY" == false ]]; then
     echo "==> Fast-forwarding production to development"
     run git checkout production
     run git pull --ff-only origin production
@@ -167,7 +210,7 @@ if [[ "$PRERELEASE" == true ]]; then
 fi
 run gh release create "$VERSION" "${GH_FLAGS[@]}"
 
-if [[ "$PRERELEASE" == false ]]; then
+if [[ "$PRERELEASE" == false && "$PUBLISH_ONLY" == false ]]; then
     echo "==> Fast-forwarding development to production (handles any hotfixes)"
     run git pull --ff-only origin development
     if [[ "$DRY_RUN" == false ]]; then
