@@ -10,7 +10,7 @@ extension SahhaSensor {
         case .oxygen_saturation, .body_fat, .walking_steadiness, .walking_asymmetry_percentage, .walking_double_support_percentage:
             "percent"
         case .respiratory_rate:
-            "bps"
+            "count/minute"
         case .active_energy_burned, .basal_energy_burned, .energy_intake:
             "kcal"
         case .sleep, .time_in_daylight, .stand_time, .move_time, .exercise_time, .exercise:
