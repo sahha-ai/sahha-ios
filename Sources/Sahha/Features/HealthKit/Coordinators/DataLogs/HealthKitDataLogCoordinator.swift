@@ -181,7 +181,7 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                     totalSamples += samples.count
 
                     let profileId = self.profileIdProvider.profileId()
-                    let dataLogs = samples.flatMap { self.normaliser.normalise($0, profileId: profileId) }
+                    let dataLogs = self.normaliser.normalise(samples, profileId: profileId)
                     totalLogs += dataLogs.count
 
                     guard !Task.isCancelled else { break }
