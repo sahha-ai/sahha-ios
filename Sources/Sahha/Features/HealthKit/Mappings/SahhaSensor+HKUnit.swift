@@ -55,7 +55,7 @@ extension SahhaSensor {
         case .vo2_max:
             return HKUnit(from: "ml/kg*min")
         case .respiratory_rate:
-            return .count().unitDivided(by: .second())
+            return .count().unitDivided(by: .minute())
 
         // MARK: - Energy
         case .active_energy_burned, .basal_energy_burned, .energy_intake:
