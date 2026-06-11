@@ -153,16 +153,23 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
 
             do {
                 var anchor = try await anchorStore.loadAnchor(for: sensor)
-                
-                // If this is the FIRST run (no anchor), limit data to the last 30 days
-                // to prevent flooding the server with years of historical data.
+
+                // Reject data older than 30 days on EVERY run, not just the first.
+                // Anchored queries return any sample newly written to HealthKit since the
+                // last anchor regardless of the sample's actual date, so a source that
+                // backfills history (a new Apple Watch pairing, a device restore, a
+                // third-party app sync) would otherwise surface months- or years-old data.
+                let now = Date()
+                let cutoffDate = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? now.addingTimeInterval(-30 * 24 * 3600)
+
+                // On the FIRST run (no anchor), also bound the query itself to the last 30
+                // days so HealthKit filters server-side rather than loading years of
+                // history into memory just to discard it.
                 var startDate: Date?
                 var endDate: Date?
-                
+
                 if anchor == nil {
-                    let now = Date()
-                    let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? now.addingTimeInterval(-30 * 24 * 3600)
-                    startDate = thirtyDaysAgo
+                    startDate = cutoffDate
                     endDate = now
                     Sahha.log("[HealthKitDataLogCoordinator] Initial sync for \(sensor.rawValue). Limiting to 30 days history.")
                 }
@@ -180,8 +187,13 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
 
                     totalSamples += samples.count
 
+                    // Drop samples older than the cutoff before normalising. The raw
+                    // `samples` array still drives pagination and the anchor still advances
+                    // below, so backdated data is skipped permanently and never re-fetched.
+                    let recentSamples = samples.filter { $0.endDate >= cutoffDate }
+
                     let profileId = self.profileIdProvider.profileId()
-                    let dataLogs = samples.flatMap { self.normaliser.normalise($0, profileId: profileId) }
+                    let dataLogs = recentSamples.flatMap { self.normaliser.normalise($0, profileId: profileId) }
                     totalLogs += dataLogs.count
 
                     guard !Task.isCancelled else { break }
