@@ -69,6 +69,13 @@ final class APIClient: APIClientProtocol {
         }
         components.queryItems = request.queryParameters
 
+        // URLComponents leaves "+" literal in query values (it is a valid sub-delim),
+        // but servers decode a literal "+" as a space — which corrupts datetime offsets
+        // such as "2026-06-12T00:00:00.00+12:00". Percent-encode it so the offset survives.
+        if let encodedQuery = components.percentEncodedQuery {
+            components.percentEncodedQuery = encodedQuery.replacingOccurrences(of: "+", with: "%2B")
+        }
+
         guard let url = components.url else {
             throw APIErrorResponse(
                 title: "Invalid URL",

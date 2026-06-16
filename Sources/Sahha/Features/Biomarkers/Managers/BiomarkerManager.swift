@@ -26,8 +26,8 @@ final class BiomarkerManager: BiomarkerManagerProtocol {
         let response = try await biomarkerService.fetchBiomarkers(
             categories: categories,
             types: types,
-            startDateTime: startDateTime.isoDate,
-            endDateTime: endDateTime.isoDate
+            startDateTime: startDateTime.isoDateTime,
+            endDateTime: endDateTime.isoDateTime
         )
         
         do {
