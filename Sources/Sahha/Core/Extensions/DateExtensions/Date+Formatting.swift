@@ -8,6 +8,10 @@ extension Date {
     var isoDateTime: String {
         DateFormatter.isoDateTime.string(from: self)
     }
+
+    var isoDateTimeWithoutTimeZone: String {
+        DateFormatter.isoDateTimeWithoutTimeZone.string(from: self)
+    }
     
     var uuidDateTime: String {
         DateFormatter.uuidDateTime.string(from: self)

@@ -66,8 +66,8 @@ private let endWithOffset = "2026-06-13T00:00:00.000+12:00"
 @Suite(.serialized)
 struct BiomarkerScoreEndpointTests {
 
-    @Test("Biomarker request targets v2 and percent-encodes the +12:00 offset")
-    func biomarkerRequestUsesV2AndEncodesOffset() async throws {
+    @Test("Biomarker request targets v1 and percent-encodes a + in the query")
+    func biomarkerRequestUsesV1AndEncodesPlus() async throws {
         let recorder = RequestRecorder()
         let client = APIClient(baseURL: testBaseURL, session: makeMockSession(recorder: recorder))
         let service = BiomarkerService(apiClient: client)
@@ -80,16 +80,17 @@ struct BiomarkerScoreEndpointTests {
         )
 
         let line = try #require(recorder.lastURL).absoluteString
-        #expect(line.contains("/api/v2/profile/biomarker"))
-        #expect(!line.contains("/api/v1/profile/biomarker"))
+        #expect(line.contains("/api/v1/profile/biomarker"))
+        #expect(!line.contains("/api/v2/profile/biomarker"))
+        // The managers no longer emit an offset, but the APIClient must still encode a
+        // literal "+" as "%2B" if one ever reaches the query (servers decode raw "+" as space).
         #expect(line.contains("startDateTime=2026-06-12T00:00:00.000%2B12:00"))
         #expect(line.contains("endDateTime=2026-06-13T00:00:00.000%2B12:00"))
-        // The raw "+" must not survive into the request line.
         #expect(!line.contains("+12:00"))
     }
 
-    @Test("Score request targets v2 and percent-encodes the +12:00 offset")
-    func scoreRequestUsesV2AndEncodesOffset() async throws {
+    @Test("Score request targets v1 and percent-encodes a + in the query")
+    func scoreRequestUsesV1AndEncodesPlus() async throws {
         let recorder = RequestRecorder()
         let client = APIClient(baseURL: testBaseURL, session: makeMockSession(recorder: recorder))
         let service = ScoreService(apiClient: client)
@@ -101,15 +102,15 @@ struct BiomarkerScoreEndpointTests {
         )
 
         let line = try #require(recorder.lastURL).absoluteString
-        #expect(line.contains("/api/v2/profile/score"))
-        #expect(!line.contains("/api/v1/profile/score"))
+        #expect(line.contains("/api/v1/profile/score"))
+        #expect(!line.contains("/api/v2/profile/score"))
         #expect(line.contains("startDateTime=2026-06-12T00:00:00.000%2B12:00"))
         #expect(line.contains("endDateTime=2026-06-13T00:00:00.000%2B12:00"))
         #expect(!line.contains("+12:00"))
     }
 
-    @Test("Manager forwards an offset-bearing ISO-8601 datetime, not a bare date")
-    func managerSendsDateTimeWithOffset() async throws {
+    @Test("Manager forwards an offset-less ISO-8601 datetime, not a bare date")
+    func managerSendsDateTimeWithoutOffset() async throws {
         let service = CapturingBiomarkerService()
         let manager = BiomarkerManager(biomarkerService: service)
 
@@ -121,10 +122,10 @@ struct BiomarkerScoreEndpointTests {
         )
 
         let start = try #require(service.startDateTime)
-        // Must carry a time component and an explicit offset (Z or ±HH:MM); the v2 server
-        // reads an offset-less bound as UTC, which is the bug this migration fixes.
-        #expect(start.contains("T"))
-        #expect(start.range(of: #"T\d{2}:\d{2}:\d{2}.*(Z|[+-]\d{2}:\d{2})$"#, options: .regularExpression) != nil)
+        // Must carry a time component but no timezone designator: getScores/getBiomarkers
+        // send a local, offset-less datetime so the bounds reach the server unzoned.
+        #expect(start.range(of: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"#, options: .regularExpression) != nil)
+        #expect(start.range(of: #"(Z|[+-]\d{2}:\d{2})$"#, options: .regularExpression) == nil)
         // Regression guard against the old "yyyy-MM-dd" (date-only) behaviour.
         #expect(start.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) == nil)
     }
