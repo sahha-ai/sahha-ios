@@ -21,8 +21,8 @@ final class ScoreManager: ScoreManagerProtocol {
         
         let response = try await scoreService.fetchScores(
             types: types,
-            startDateTime: startDateTime.isoDateTime,
-            endDateTime: endDateTime.isoDateTime
+            startDateTime: startDateTime.isoDateTimeWithoutTimeZone,
+            endDateTime: endDateTime.isoDateTimeWithoutTimeZone
         )
         
         do {
