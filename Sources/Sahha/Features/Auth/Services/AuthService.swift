@@ -18,6 +18,9 @@ final class AuthService: AuthServiceProtocol {
     }
 
     func refreshToken(refreshToken: String) async throws -> TokenResponse {
+        // This request must NEVER set requiresAuth: the AuthorizationInterceptor would re-enter
+        // token refresh from inside the refresh call itself and self-join the in-flight task,
+        // deadlocking until the URLSession timeout.
         let request = APIRequest(
             endpoint: APIEndpoints.refreshToken,
             method: .POST,

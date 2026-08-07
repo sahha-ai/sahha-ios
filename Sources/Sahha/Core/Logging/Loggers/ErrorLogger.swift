@@ -79,6 +79,12 @@ final class ErrorLogger: ErrorLoggerProtocol {
         function: StaticString,
         line: UInt
     ) -> ErrorLogRequest {
+        // A SahhaError wrapping an API failure (e.g. "Session expired" wrapping the 401 that
+        // killed the session) must report the underlying status code and location, not fall
+        // through to the generic SDK-error shape.
+        if let sahhaError = error as? SahhaError, let underlying = sahhaError.error {
+            return makeErrorLogRequest(error: underlying, deviceInfo: deviceInfo, file: file, function: function, line: line)
+        }
         switch error {
         case let apiError as APIErrorResponse:
             let errorBody: String? = {

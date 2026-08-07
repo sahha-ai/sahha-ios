@@ -145,7 +145,11 @@ final class APIClient: APIClientProtocol {
         default:
             Sahha.log("[Sahha Error] HTTP \(httpResponse.statusCode) | Response: \(String(data: data, encoding: .utf8) ?? "Unable to decode")")
             let responseBody = String(data: data, encoding: .utf8) ?? "Unable to decode response body"
-            if let apiError = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
+            if var apiError = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
+                // The status line is authoritative — auth decisions (refresh-and-retry, session
+                // expiry) key off statusCode, and a body-supplied value must never be able to
+                // fake or mask a 401.
+                apiError.statusCode = httpResponse.statusCode
                 throw apiError
             } else {
                 throw APIErrorResponse(
