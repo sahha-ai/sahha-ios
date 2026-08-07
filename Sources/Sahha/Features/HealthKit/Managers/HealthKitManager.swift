@@ -60,11 +60,27 @@ final class HealthKitManager: HealthKitManagerProtocol {
 
         // Request permissions and start data collection (one dialog for all nutrition/reproductive types)
         try await permissions.requestPermissions(for: expanded)
-        if !dataLogSensors.isEmpty {
-            try await dataLogCoordinator.startDataLogCollection(for: dataLogSensors)
-        }
-        if !tagSensors.isEmpty {
-            try await tagCoordinator.startTagCollection(for: tagSensors)
+
+        // Post-grant setup must never leave the caller's callback waiting indefinitely.
+        // If it exceeds the timeout, the work continues in the abandoned background task
+        // (and observers self-heal via resumeSensors on the next launch); the timeout is
+        // logged rather than thrown. Any other error still propagates as before.
+        let dataLogCoordinator = self.dataLogCoordinator
+        let tagCoordinator = self.tagCoordinator
+        do {
+            try await withAbandoningTimeout(
+                seconds: 60,
+                operationName: "Sensor data collection setup"
+            ) {
+                if !dataLogSensors.isEmpty {
+                    try await dataLogCoordinator.startDataLogCollection(for: dataLogSensors)
+                }
+                if !tagSensors.isEmpty {
+                    try await tagCoordinator.startTagCollection(for: tagSensors)
+                }
+            }
+        } catch let error as AsyncTimeoutError {
+            logger.postError(error)
         }
     }
     

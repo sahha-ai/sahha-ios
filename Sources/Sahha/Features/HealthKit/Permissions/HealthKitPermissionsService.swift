@@ -1,24 +1,52 @@
 import HealthKit
 
 final class HealthKitPermissionsService: HealthKitPermissionsServiceProtocol {
+    /// How long an authorization request may remain unresolved before the SDK stops
+    /// waiting. Generous, because the await legitimately includes the time a user
+    /// spends reading the permission sheet.
+    static let defaultRequestTimeout: TimeInterval = 120
+
     private let healthStore: HKHealthStore
-    
-    init(healthStore: HKHealthStore = .init()) {
+    private let requestTimeout: TimeInterval
+    /// Serializes authorization requests. Concurrent `requestAuthorization` calls on
+    /// the same `HKHealthStore` (e.g. `enableSensors` invoked again while the
+    /// permission sheet is up) can leave one continuation suspended forever; queueing
+    /// the second request until the first resolves avoids that.
+    private let requestSerializer = AsyncSemaphore(value: 1)
+
+    init(
+        healthStore: HKHealthStore = .init(),
+        requestTimeout: TimeInterval = HealthKitPermissionsService.defaultRequestTimeout
+    ) {
         self.healthStore = healthStore
+        self.requestTimeout = requestTimeout
     }
-    
+
     func requestPermissions(for sensors: Set<SahhaSensor>) async throws {
         guard !sensors.isEmpty else {
             throw SahhaError(message: "Sensor set cannot be empty.")
         }
-        
+
         let permissions = Set(sensors.flatMap(\.hkPermissions))
-        
+
         guard !permissions.isEmpty else {
             throw SahhaError(message: "Health data types not specified.")
         }
-        
-        try await healthStore.requestAuthorization(toShare: [], read: permissions)
+
+        await requestSerializer.wait()
+        do {
+            let healthStore = self.healthStore
+            try await withAbandoningTimeout(
+                seconds: requestTimeout,
+                operationName: "HealthKit authorization request"
+            ) {
+                try await healthStore.requestAuthorization(toShare: [], read: permissions)
+            }
+        } catch {
+            await requestSerializer.signal()
+            throw error
+        }
+        await requestSerializer.signal()
     }
     
     func getPermissionsStatus(for sensors: Set<SahhaSensor>) async throws -> HKAuthorizationRequestStatus {
