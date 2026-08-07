@@ -41,6 +41,7 @@ actor SingleTaskActor<Output: Sendable> {
 /// Ensures only one instance of a throwing async operation is running at once.
 actor SingleThrowingTaskActor<Output: Sendable> {
     private var currentTask: Task<Output, Error>?
+    private var generation: UInt64 = 0
 
     /// Runs the given throwing operation if no task is in progress, otherwise awaits the current task's result.
     /// - Parameter operation: The async closure to run.
@@ -51,25 +52,32 @@ actor SingleThrowingTaskActor<Output: Sendable> {
             // A task is already running; wait for its result
             return try await existingTask.value
         }
+        generation &+= 1
+        let taskGeneration = generation
         let task = Task {
-            defer { self.clearTask() }
+            defer { self.clearTask(ifGeneration: taskGeneration) }
             return try await operation()
         }
         currentTask = task
         return try await task.value
     }
-    
+
     func cancel() {
            currentTask?.cancel()
            currentTask = nil
+           // Invalidate the cancelled flight's pending clearTask: a cancelled task can unwind
+           // *after* a new flight registers, and its stale defer must not clobber that
+           // registration (which would let two flights run concurrently).
+           generation &+= 1
        }
 
        func isRunning() -> Bool {
            currentTask != nil
        }
 
-    /// Clears the current task reference when done.
-    private func clearTask() {
+    /// Clears the current task reference when done, unless a newer flight has replaced it.
+    private func clearTask(ifGeneration taskGeneration: UInt64) {
+        guard taskGeneration == generation else { return }
         currentTask = nil
     }
 }

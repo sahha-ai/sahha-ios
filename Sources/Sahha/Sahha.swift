@@ -5,6 +5,11 @@ import BackgroundTasks
 /// Synchronous auth for legacy API - updated from TokenStore
 final class AuthSnapshot: @unchecked Sendable {
     var profileToken: String?
+    /// Cached from the profile token's JWT claim on save. Survives a session-expiry
+    /// `clearToken()` (unlike `profileToken`) so data logs generated while signed out keep a
+    /// stable identity — their deterministic IDs embed the profile id. Cleared only on full
+    /// teardown (`deauthenticate()`).
+    var profileId: String?
     var isAuthenticated: Bool {
         guard let profileToken else { return false }
         return !profileToken.isEmpty

@@ -53,6 +53,10 @@ actor SahhaActor {
             await self.lifecycleObserver.registerListener(deviceLogListener)
 
             // Register interceptors
+            // NOTE: keep AuthorizationInterceptor registered FIRST. APIClient.buildNext folds
+            // the chain so earlier registrations are inner links, and the auth interceptor's
+            // 401 retry re-invokes only its own `next` — an interceptor registered before it
+            // would be re-executed on every retried request.
             let interceptorStore = try await container.resolve(APIInterceptorStoreProtocol.self)
             let authInterceptor = try await container.resolve(AuthorizationInterceptor.self)
             await interceptorStore.addInterceptor(authInterceptor)
