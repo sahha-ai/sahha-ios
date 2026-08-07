@@ -10,7 +10,7 @@ final class FallbackHKSampleToSahhaSampleNormaliser: HKSampleToSahhaSampleNormal
         return [
             SahhaSample(
                 id: sample.uuid.uuidString,
-                category: sensor.category.rawValue,
+                category: sensor.dataLogType.stringValue,
                 type: sensor.rawValue,
                 value: sample.quantity.doubleValue(for: unit).rounded(toPlaces: 4),
                 unit: sensor.unitString,

@@ -114,7 +114,7 @@ final class HealthKitSahhaStatCoordinator: HealthKitSahhaStatCoordinatorProtocol
             let intervalStats = statPairs.map { (stage, sourceValue) in
                 let (source, value) = sourceValue
                 return SahhaStat(
-                    category: SahhaBiomarkerCategory.sleep.rawValue,
+                    category: SahhaSensor.sleep.dataLogType.stringValue,
                     type: stage.rawValue,
                     aggregation: AggregationType.sum.rawValue,
                     periodicity: periodicity.rawValue,
@@ -187,7 +187,7 @@ final class HealthKitSahhaStatCoordinator: HealthKitSahhaStatCoordinatorProtocol
             let intervalStats = statPairs.map { (type, sourceValue) in
                 let (source, value) = sourceValue
                 return SahhaStat(
-                    category: SahhaBiomarkerCategory.exercise.rawValue,
+                    category: SahhaSensor.exercise.dataLogType.stringValue,
                     type: type,
                     aggregation: AggregationType.sum.rawValue,
                     periodicity: Periodicity.daily.rawValue,
@@ -259,7 +259,7 @@ final class HealthKitSahhaStatCoordinator: HealthKitSahhaStatCoordinatorProtocol
         let sahhaStats: [SahhaStat] = stats.compactMap { stat in
             guard let unit = sensor.hkUnit else { return nil }
             return SahhaStat(
-                category: sensor.category.rawValue,
+                category: sensor.dataLogType.stringValue,
                 type: sensor.rawValue,
                 aggregation: stat.aggregationType.rawValue,
                 periodicity: periodicity.rawValue,

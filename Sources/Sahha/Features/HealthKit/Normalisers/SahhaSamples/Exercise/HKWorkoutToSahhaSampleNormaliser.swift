@@ -17,7 +17,7 @@ final class HKWorkoutToSahhaSampleNormaliser: HKSampleToSahhaSampleNormaliserPro
             stats = statistics.compactMap { stat in
                 guard let unit = sensor.hkUnit else { return nil }
                 return SahhaStat(
-                    category: sensor.category.rawValue,
+                    category: sensor.dataLogType.stringValue,
                     type: sensor.rawValue,
                     aggregation: stat.aggregationType.rawValue,
                     periodicity: Periodicity.daily.rawValue,
@@ -36,7 +36,7 @@ final class HKWorkoutToSahhaSampleNormaliser: HKSampleToSahhaSampleNormaliserPro
         return [
             SahhaSample(
                 id: sample.uuid.uuidString,
-                category: sensor.category.rawValue,
+                category: sensor.dataLogType.stringValue,
                 type: "exercise_\(sample.workoutActivityType.name)",
                 value: value,
                 unit: sensor.unitString,

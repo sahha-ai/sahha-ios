@@ -35,7 +35,7 @@ final class HealthKitManager: HealthKitManagerProtocol {
     
     func enableSensors(_ sensors: Set<SahhaSensor>) async throws {
         let expanded = SahhaSensor.expanded(sensors)
-        let tagSensors = expanded.filter { $0.category == .reproductive || $0.category == .symptom }
+        let tagSensors = expanded.filter { $0.dataLogType == .reproductive || $0.dataLogType == .symptom }
         let dataLogSensors = expanded.subtracting(tagSensors)
 
         do {
@@ -44,7 +44,7 @@ final class HealthKitManager: HealthKitManagerProtocol {
             // Extract previously enabled sensors and stop data collection
             let sensorsToStop = enabledSensors.subtracting(expanded)
             if !sensorsToStop.isEmpty {
-                let tagSensorsToStop = sensorsToStop.filter { $0.category == .reproductive || $0.category == .symptom }
+                let tagSensorsToStop = sensorsToStop.filter { $0.dataLogType == .reproductive || $0.dataLogType == .symptom }
                 let dataLogSensorsToStop = sensorsToStop.subtracting(tagSensorsToStop)
                 if !dataLogSensorsToStop.isEmpty {
                     try await dataLogCoordinator.stopDataLogCollection(for: dataLogSensorsToStop)
@@ -87,7 +87,7 @@ final class HealthKitManager: HealthKitManagerProtocol {
     func resumeSensors() async {
         do {
             let sensors = try await sensorStore.getSensors()
-            let tagSensors = sensors.filter { $0.category == .reproductive || $0.category == .symptom }
+            let tagSensors = sensors.filter { $0.dataLogType == .reproductive || $0.dataLogType == .symptom }
             let dataLogSensors = sensors.subtracting(tagSensors)
             if !dataLogSensors.isEmpty {
                 try await dataLogCoordinator.startDataLogCollection(for: dataLogSensors)
@@ -103,7 +103,7 @@ final class HealthKitManager: HealthKitManagerProtocol {
     func querySensors() async -> PostSensorDataResult {
         do {
             let sensors = try await sensorStore.getSensors()
-            let tagSensors = sensors.filter { $0.category == .reproductive || $0.category == .symptom }
+            let tagSensors = sensors.filter { $0.dataLogType == .reproductive || $0.dataLogType == .symptom }
             let dataLogSensors = sensors.subtracting(tagSensors)
             var results: [SensorQueryResult] = []
             if !dataLogSensors.isEmpty {
