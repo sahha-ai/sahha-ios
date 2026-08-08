@@ -287,6 +287,7 @@ public class Sahha {
     }
 
     // MARK: - Samples
+    @available(*, deprecated, message: "Use getBiomarkers to read server-processed biomarkers instead.")
     public static func getSamples(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [SahhaSample]) -> Void) {
         runAsyncWithCallback(
             callback: callback,
@@ -303,6 +304,7 @@ public class Sahha {
     }
 
     // MARK: - Stats
+    @available(*, deprecated, message: "Use getBiomarkers to read server-processed biomarkers instead.")
     public static func getStats(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [SahhaStat]) -> Void) {
         runAsyncWithCallback(
             callback: callback,

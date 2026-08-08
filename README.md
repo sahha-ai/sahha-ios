@@ -460,6 +460,8 @@ Sahha.getBiomarkers(
 
 ### getStats(...)
 
+> **Deprecated**: Use [getBiomarkers(...)](#getbiomarkers) instead — server-processed biomarkers are the supported read API.
+
 ```swift
 public static func getStats(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [SahhaStat])->Void)
 ```
@@ -484,6 +486,8 @@ Sahha.getStats(sensor: .steps, startDateTime: sevenDaysAgo, endDateTime: today) 
 ---
 
 ### getSamples(...)
+
+> **Deprecated**: Use [getBiomarkers(...)](#getbiomarkers) instead — server-processed biomarkers are the supported read API.
 
 ```swift
 public static func getSamples(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [SahhaSample])->Void)
