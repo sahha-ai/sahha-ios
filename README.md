@@ -460,9 +460,13 @@ Sahha.getBiomarkers(
 
 ### getStats(...)
 
+> **Deprecated**: Use [getBiomarkers(...)](#getbiomarkers) instead — server-processed biomarkers are the supported read API.
+
 ```swift
 public static func getStats(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [SahhaStat])->Void)
 ```
+
+> **Note**: `SahhaStat.category` contains the sensor's data log type — the same label the SDK stamps on the data it uploads (e.g. `sleep`, `activity`, `energy`, `heart`, `blood`, `oxygen`, `temperature`, `body`, `exercise`, `nutrition`). This vocabulary is intentionally different from the six `SahhaBiomarkerCategory` values used by `getBiomarkers(...)`.
 
 **Example usage**:
 
@@ -483,9 +487,13 @@ Sahha.getStats(sensor: .steps, startDateTime: sevenDaysAgo, endDateTime: today) 
 
 ### getSamples(...)
 
+> **Deprecated**: Use [getBiomarkers(...)](#getbiomarkers) instead — server-processed biomarkers are the supported read API.
+
 ```swift
 public static func getSamples(sensor: SahhaSensor, startDateTime: Date, endDateTime: Date, callback: @escaping (String?, [SahhaSample])->Void)
 ```
+
+> **Note**: `SahhaSample.category` is labeled the same way as `SahhaStat.category` — see [getStats](#getstats) above.
 
 **Example usage**:
 
@@ -808,14 +816,10 @@ public enum SahhaScoreType: String {
 public enum SahhaBiomarkerCategory: String {
     case activity
     case body
-    case characteristic
-    case reproductive
+    case engagement
+    case nutrition
     case sleep
     case vitals
-    case exercise
-    case device
-    case nutrition
-    case symptom
 }
 ```
 
@@ -828,7 +832,7 @@ public enum SahhaBiomarkerType: String {
     case active_hours
     case active_duration
     case activity_low_intensity_duration
-    case activity_mid_intensity_duration
+    case activity_medium_intensity_duration
     case activity_high_intensity_duration
     case activity_sedentary_duration
     case active_energy_burned

@@ -28,7 +28,7 @@ extension SahhaSensor {
         case .exercise:
             return .exercise
             
-        // MARK: - Nutrition (38 types)
+        // MARK: - Nutrition (39 types)
         case .energy_intake, .protein_intake, .fat_intake, .fat_saturated_intake,
              .fat_monounsaturated_intake, .fat_polyunsaturated_intake, .cholesterol_intake,
              .carbohydrate_intake, .sugar_intake, .fiber_intake, .vitamin_a_intake,
@@ -41,7 +41,7 @@ extension SahhaSensor {
              .selenium_intake, .iodine_intake, .caffeine_intake, .water_intake:
             return .nutrition
             
-        // MARK: - Reproductive Health (14 types)
+        // MARK: - Reproductive Health (15 types)
         case .menstrual_period, .menstrual_flow, .intermenstrual_bleeding, .infrequent_menstrual_cycles,
              .irregular_menstrual_cycles, .persistent_intermenstrual_bleeding,
              .prolonged_menstrual_periods, .ovulation_test, .cervical_mucus,

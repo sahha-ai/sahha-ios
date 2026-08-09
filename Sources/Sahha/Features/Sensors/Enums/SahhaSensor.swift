@@ -70,7 +70,7 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
     case body_temperature
     case sleeping_wrist_temperature
     
-    // MARK: - Nutrition (38 types)
+    // MARK: - Nutrition (39 types)
     case energy_intake
     case protein_intake
     case fat_intake
@@ -186,18 +186,18 @@ public enum SahhaSensor: String, CaseIterable, Codable, Sendable {
 }
 
 extension SahhaSensor {
-    /// Replaces umbrella sensors (.nutrition, .reproductive) with all underlying granular sensors.
-    /// Use at API entry points so the app can pass [.nutrition] instead of 38+ individual types.
+    /// Replaces umbrella sensors (.nutrition, .reproductive, .symptom) with all underlying granular sensors.
+    /// Use at API entry points so the app can pass [.nutrition] instead of 39 individual types.
     static func expanded(_ sensors: Set<SahhaSensor>) -> Set<SahhaSensor> {
         var result = sensors
         if result.remove(.nutrition) != nil {
-            result.formUnion(SahhaSensor.allCases.filter { $0 != .nutrition && $0.category == .nutrition })
+            result.formUnion(SahhaSensor.allCases.filter { $0 != .nutrition && $0.dataLogType == .nutrition })
         }
         if result.remove(.reproductive) != nil {
-            result.formUnion(SahhaSensor.allCases.filter { $0 != .reproductive && $0.category == .reproductive })
+            result.formUnion(SahhaSensor.allCases.filter { $0 != .reproductive && $0.dataLogType == .reproductive })
         }
         if result.remove(.symptom) != nil {
-            result.formUnion(SahhaSensor.allCases.filter { $0 != .symptom && $0.category == .symptom })
+            result.formUnion(SahhaSensor.allCases.filter { $0 != .symptom && $0.dataLogType == .symptom })
         }
         return result
     }

@@ -14,7 +14,7 @@ final class HKSleepAnalysisToSahhaSampleNormaliser: HKSampleToSahhaSampleNormali
         return [
             SahhaSample(
                 id: sample.uuid.uuidString,
-                category: sensor.category.rawValue,
+                category: sensor.dataLogType.stringValue,
                 type: "sleep_stage_\(sleepStage)",
                 value: value,
                 unit: sensor.unitString,

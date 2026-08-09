@@ -1,10 +1,10 @@
-public enum SahhaBiomarkerType: String, Sendable {
+public enum SahhaBiomarkerType: String, Sendable, CaseIterable {
     case steps
     case floors_climbed
     case active_hours
     case active_duration
     case activity_low_intensity_duration
-    case activity_mid_intensity_duration
+    case activity_medium_intensity_duration
     case activity_high_intensity_duration
     case activity_sedentary_duration
     case active_energy_burned
