@@ -832,7 +832,7 @@ public enum SahhaBiomarkerType: String {
     case active_hours
     case active_duration
     case activity_low_intensity_duration
-    case activity_mid_intensity_duration
+    case activity_medium_intensity_duration
     case activity_high_intensity_duration
     case activity_sedentary_duration
     case active_energy_burned

@@ -17,6 +17,70 @@ struct BiomarkerCategoryTests {
         ])
     }
 
+    /// getBiomarkers sends each type's rawValue as the `types` query parameter, so every
+    /// name must exist in the server's biomarker vocabulary (the docs data dictionary) —
+    /// an off-vocabulary name matches nothing and silently returns no data.
+    @Test("SahhaBiomarkerType raw values match the server biomarker vocabulary")
+    func biomarkerTypesMatchServerVocabulary() {
+        #expect(SahhaBiomarkerType.allCases.map(\.rawValue) == [
+            "steps",
+            "floors_climbed",
+            "active_hours",
+            "active_duration",
+            "activity_low_intensity_duration",
+            "activity_medium_intensity_duration",
+            "activity_high_intensity_duration",
+            "activity_sedentary_duration",
+            "active_energy_burned",
+            "total_energy_burned",
+            "height",
+            "weight",
+            "body_mass_index",
+            "body_fat",
+            "fat_mass",
+            "lean_mass",
+            "waist_circumference",
+            "resting_energy_burned",
+            "age",
+            "biological_sex",
+            "date_of_birth",
+            "menstrual_cycle_length",
+            "menstrual_cycle_start_date",
+            "menstrual_cycle_end_date",
+            "menstrual_phase",
+            "menstrual_phase_start_date",
+            "menstrual_phase_end_date",
+            "menstrual_phase_length",
+            "sleep_start_time",
+            "sleep_end_time",
+            "sleep_duration",
+            "sleep_debt",
+            "sleep_interruptions",
+            "sleep_in_bed_duration",
+            "sleep_awake_duration",
+            "sleep_light_duration",
+            "sleep_rem_duration",
+            "sleep_deep_duration",
+            "sleep_regularity",
+            "sleep_latency",
+            "sleep_efficiency",
+            "heart_rate_resting",
+            "heart_rate_sleep",
+            "heart_rate_variability_sdnn",
+            "heart_rate_variability_rmssd",
+            "respiratory_rate",
+            "respiratory_rate_sleep",
+            "oxygen_saturation",
+            "oxygen_saturation_sleep",
+            "vo2_max",
+            "blood_glucose",
+            "blood_pressure_systolic",
+            "blood_pressure_diastolic",
+            "body_temperature_basal",
+            "skin_temperature_sleep",
+        ])
+    }
+
     /// getStats/getSamples label every row with the sensor's upload logType
     /// (`sensor.dataLogType.stringValue`), matching the Android SDK. This pins the
     /// full sensor→label mapping: a change here changes public getStats/getSamples
