@@ -71,7 +71,7 @@ In the `Podfile`:
 platform :ios, '15.0'
 target 'YourProjectName' do
   use_frameworks!
-  pod 'sahha-swift' # Use the latest version
+  pod 'Sahha' # Use the latest version
 end
 ```
 
