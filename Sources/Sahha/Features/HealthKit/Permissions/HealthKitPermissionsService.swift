@@ -29,9 +29,9 @@ final class HealthKitPermissionsService: HealthKitPermissionsServiceProtocol {
 
         let permissions = Set(sensors.flatMap(\.hkPermissions))
 
-        guard !permissions.isEmpty else {
-            throw SahhaError(message: "Health data types not specified.")
-        }
+        // Some sensors (e.g. .device_lock) have no HealthKit backing, so a set
+        // composed entirely of them has nothing to authorize — succeed as a no-op.
+        guard !permissions.isEmpty else { return }
 
         await requestSerializer.wait()
         do {
@@ -55,11 +55,10 @@ final class HealthKitPermissionsService: HealthKitPermissionsServiceProtocol {
         }
         
         let permissions = Set(sensors.flatMap(\.hkPermissions))
-        
-        guard !permissions.isEmpty else {
-            throw SahhaError(message: "Health data types not specified.")
-        }
-        
+
+        // No HealthKit-backed types means no authorization request is needed.
+        guard !permissions.isEmpty else { return .unnecessary }
+
         return try await healthStore.statusForAuthorizationRequest(toShare: [], read: permissions)
     }
     
