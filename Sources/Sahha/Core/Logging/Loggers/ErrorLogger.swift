@@ -72,6 +72,13 @@ final class ErrorLogger: ErrorLoggerProtocol {
         return true
     }
 
+    /// The code-site values reported as codePath/codeMethod/codeBody.
+    private struct CodeOrigin {
+        let path: String
+        let method: String
+        let line: UInt
+    }
+
     private func makeErrorLogRequest(
         error: Error,
         deviceInfo: DeviceInfo,
@@ -79,11 +86,30 @@ final class ErrorLogger: ErrorLoggerProtocol {
         function: StaticString,
         line: UInt
     ) -> ErrorLogRequest {
-        // A SahhaError wrapping an API failure (e.g. "Session expired" wrapping the 401 that
-        // killed the session) must report the underlying status code and location, not fall
-        // through to the generic SDK-error shape.
-        if let sahhaError = error as? SahhaError, let underlying = sahhaError.error {
-            return makeErrorLogRequest(error: underlying, deviceInfo: deviceInfo, file: file, function: function, line: line)
+        makeErrorLogRequest(
+            error: error,
+            deviceInfo: deviceInfo,
+            origin: CodeOrigin(path: file.description, method: function.description, line: line)
+        )
+    }
+
+    private func makeErrorLogRequest(
+        error: Error,
+        deviceInfo: DeviceInfo,
+        origin callSiteOrigin: CodeOrigin
+    ) -> ErrorLogRequest {
+        // Prefer the throw site captured by SahhaError over the logging call site — errors
+        // funneled through forwarding helpers (e.g. SahhaActor.logError) all share one call
+        // site, which says nothing about where the failure happened.
+        var origin = callSiteOrigin
+        if let sahhaError = error as? SahhaError {
+            origin = CodeOrigin(path: sahhaError.file, method: sahhaError.function, line: sahhaError.line)
+            // A SahhaError wrapping an API failure (e.g. "Session expired" wrapping the 401 that
+            // killed the session) must report the underlying status code and location, not fall
+            // through to the generic SDK-error shape.
+            if let underlying = sahhaError.error {
+                return makeErrorLogRequest(error: underlying, deviceInfo: deviceInfo, origin: origin)
+            }
         }
         switch error {
         case let apiError as APIErrorResponse:
@@ -112,9 +138,9 @@ final class ErrorLogger: ErrorLoggerProtocol {
                 errorLocation: apiError.location,
                 errorMessage: apiError.title,
                 errorBody: errorBody,
-                codePath: file.description,
-                codeMethod: function.description,
-                codeBody: "line \(line)"
+                codePath: origin.path,
+                codeMethod: origin.method,
+                codeBody: "line \(origin.line)"
             )
         default:
             return ErrorLogRequest(
@@ -129,12 +155,15 @@ final class ErrorLogger: ErrorLoggerProtocol {
                 systemVersion: deviceInfo.systemVersion,
                 errorSource: ErrorSource.sdk.rawValue,
                 errorCode: nil,
-                errorLocation: nil,
+                // SDK-sourced errors have no API location; report the framework the SDK runs
+                // as (sdkId carries the configured SahhaFramework rawValue, e.g. "ios_swift")
+                // so the dashboard's location column isn't null.
+                errorLocation: deviceInfo.sdkId,
                 errorMessage: error.localizedDescription,
                 errorBody: String(describing: error),
-                codePath: file.description,
-                codeMethod: function.description,
-                codeBody: "line \(line)"
+                codePath: origin.path,
+                codeMethod: origin.method,
+                codeBody: "line \(origin.line)"
             )
         }
     }
