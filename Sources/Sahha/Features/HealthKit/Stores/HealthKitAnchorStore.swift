@@ -2,12 +2,15 @@ import HealthKit
 
 actor HealthKitAnchorStore: HealthKitAnchorStoreProtocol, Disposable {
     private let prefix = StorageKeys.UserDefaults.hkAnchorPrefix
+    /// Pre-rename SDKs prefixed the already-prefixed key again; reads still
+    /// honour those keys and dispose must wipe them too.
+    private let legacyKeyPrefix = "sahha_"
     private let storage: UserDefaultsStorageProtocol
-    
+
     init(storage: UserDefaultsStorageProtocol) {
         self.storage = storage
     }
-    
+
     func saveAnchor(_ anchor: HKQueryAnchor, forKey key: String) throws {
         let key = prefix + key
         let data = try NSKeyedArchiver.archivedData(
@@ -18,14 +21,15 @@ actor HealthKitAnchorStore: HealthKitAnchorStoreProtocol, Disposable {
     }
 
     func loadAnchor(forKey key: String) throws -> HKQueryAnchor? {
-        let key = prefix + key
-
-        var anchorData: Data?
-        if let data = storage.data(forKey: key) {
-            anchorData = data
-        } else if let data = storage.data(forKey: "sahha_\(key)") {
-            // Legacy key for anchor data
-            anchorData = data
+        // Read-time alias for renamed sensors: canonical key first (both
+        // prefix forms), then the old-name key the pre-rename SDK wrote. The
+        // alias is permanent, not transitional — saves are canonical but not
+        // prompt (coordinators skip saving when a query returns no samples),
+        // and the old key is deliberately never deleted: deletion is worse on
+        // downgrade, where the old binary would re-backfill.
+        var anchorData = data(forUnprefixedKey: key)
+        if anchorData == nil, let legacyName = SahhaSensor.currentToLegacyRawValue[key] {
+            anchorData = data(forUnprefixedKey: legacyName)
         }
         guard let anchorData else { return nil }
         let unarchiver = try NSKeyedUnarchiver(forReadingFrom: anchorData)
@@ -34,7 +38,16 @@ actor HealthKitAnchorStore: HealthKitAnchorStoreProtocol, Disposable {
     }
 
     func dispose() async {
-        let keys = storage.allKeys { $0.hasPrefix(self.prefix) }
+        // Wipes the legacy-prefixed family too: a legacy-key anchor that
+        // survives deauth would be resurrected by the fallback read.
+        let keys = storage.allKeys {
+            $0.hasPrefix(self.prefix) || $0.hasPrefix(self.legacyKeyPrefix + self.prefix)
+        }
         keys.forEach(storage.removeObject)
+    }
+
+    private func data(forUnprefixedKey key: String) -> Data? {
+        let key = prefix + key
+        return storage.data(forKey: key) ?? storage.data(forKey: legacyKeyPrefix + key)
     }
 }
