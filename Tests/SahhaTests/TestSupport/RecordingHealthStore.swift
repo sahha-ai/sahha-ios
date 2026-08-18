@@ -129,6 +129,7 @@ final class RecordingHealthStore: HKHealthStore, @unchecked Sendable {
     // MARK: - Background delivery
 
     private var _backgroundDeliveryError: Error?
+    private var _failingBackgroundTypes: Set<HKObjectType> = []
     private var _enabledBackgroundTypes: [HKObjectType] = []
     private var _disabledBackgroundTypes: [HKObjectType] = []
     private var _disableAllBackgroundDeliveryCount = 0
@@ -137,6 +138,13 @@ final class RecordingHealthStore: HKHealthStore, @unchecked Sendable {
     var backgroundDeliveryError: Error? {
         get { lock.lock(); defer { lock.unlock() }; return _backgroundDeliveryError }
         set { lock.lock(); defer { lock.unlock() }; _backgroundDeliveryError = newValue }
+    }
+
+    /// Per-type scripting: enable-background-delivery calls for these types fail
+    /// while every other type succeeds — the "one denied type" scenario.
+    var failingBackgroundTypes: Set<HKObjectType> {
+        get { lock.lock(); defer { lock.unlock() }; return _failingBackgroundTypes }
+        set { lock.lock(); defer { lock.unlock() }; _failingBackgroundTypes = newValue }
     }
 
     var enabledBackgroundTypes: [HKObjectType] {
@@ -161,7 +169,10 @@ final class RecordingHealthStore: HKHealthStore, @unchecked Sendable {
     ) {
         lock.lock()
         _enabledBackgroundTypes.append(type)
-        let error = _backgroundDeliveryError
+        var error = _backgroundDeliveryError
+        if error == nil, _failingBackgroundTypes.contains(type) {
+            error = NSError(domain: "RecordingHealthStore.backgroundDelivery", code: 1)
+        }
         lock.unlock()
         completion(error == nil, error)
     }

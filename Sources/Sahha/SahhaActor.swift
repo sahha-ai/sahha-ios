@@ -112,12 +112,14 @@ actor SahhaActor {
         async let d: Void = syncDemographic(container)
         async let e: Void = startBackgroundCoordinator(container)
         _ = await (a, b, c, d, e)
-        // Deterministic bring-up tail (PRD #76 D8), after every branch above —
-        // observer arming included — so it runs identically on the launch,
-        // authenticate, and deferred-retry paths. Lifecycle listeners cannot
-        // stand in for this: the resume event can fire before listeners
-        // register on cold launch and be lost.
+        // Deterministic bring-up tail (PRD #76 D8 + D11), after every branch
+        // above — observer arming included — so it runs identically on the
+        // launch, authenticate, and deferred-retry paths. Lifecycle listeners
+        // cannot stand in for this: the resume event can fire before listeners
+        // register on cold launch and be lost. The health check runs before the
+        // probe+report so the report describes the repaired state.
         await postPendingSensorStoreAnomaly(container)
+        await runSensorHealthCheck(container)
         await uploadDiagnosticReport(container)
     }
 
@@ -133,6 +135,19 @@ actor SahhaActor {
             }
         } catch {
             await log(error: error, message: "postPendingSensorStoreAnomaly failed")
+        }
+    }
+
+    /// One explicit health check after observer arming (PRD #76 D11): repairs
+    /// observers or background delivery dropped since the last launch. The
+    /// service is single-flighted, so this trigger and the `.app_foreground`
+    /// listener can never run two re-arm passes concurrently.
+    private func runSensorHealthCheck(_ container: DIContainer) async {
+        do {
+            let healthCheckService = try await container.resolve(SensorHealthCheckServiceProtocol.self)
+            await healthCheckService.runHealthCheck()
+        } catch {
+            await log(error: error, message: "bring-up sensor health check failed")
         }
     }
 

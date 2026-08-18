@@ -64,18 +64,50 @@ private struct ScriptedSampleQueryService: HealthKitSampleQueryServiceProtocol {
 }
 
 /// Stands in for the HealthKit manager during bring-up: arming reduces to the
-/// store read that matters to the tail (it is what latches a store anomaly),
-/// with no live HealthKit dependency.
+/// store read that matters to the tail (it is what latches a store anomaly)
+/// plus the observer-store bookkeeping a successful arm leaves behind, with no
+/// live HealthKit dependency. `armsOnResume: false` simulates a resume whose
+/// arming was dropped, so the tail health check has something to repair.
 private final class StoreReadingHealthKitManager: HealthKitManagerProtocol, @unchecked Sendable {
+    private let lock = NSLock()
     private let sensorStore: SensorStoreProtocol
+    private let observerStore: HealthKitObserverStoreProtocol
+    private let armsOnResume: Bool
+    private var _resumeForCalls: [Set<SahhaSensor>] = []
 
-    init(sensorStore: SensorStoreProtocol) {
+    /// Sets the health check asked to repair, in call order.
+    var resumeForCalls: [Set<SahhaSensor>] {
+        lock.lock(); defer { lock.unlock() }
+        return _resumeForCalls
+    }
+
+    init(sensorStore: SensorStoreProtocol, observerStore: HealthKitObserverStoreProtocol, armsOnResume: Bool) {
         self.sensorStore = sensorStore
+        self.observerStore = observerStore
+        self.armsOnResume = armsOnResume
     }
 
     func enableSensors(_ sensors: Set<SahhaSensor>) async throws {}
     func resumeSensors() async {
-        _ = try? await sensorStore.getSensors()
+        guard let sensors = try? await sensorStore.getSensors() else { return }
+        guard armsOnResume else { return }
+        await arm(sensors)
+    }
+    func resumeSensors(for sensors: Set<SahhaSensor>) async {
+        recordResumeFor(sensors)
+        await arm(sensors)
+    }
+    private func recordResumeFor(_ sensors: Set<SahhaSensor>) {
+        lock.lock(); defer { lock.unlock() }
+        _resumeForCalls.append(sensors)
+    }
+    private func arm(_ sensors: Set<SahhaSensor>) async {
+        for sensor in sensors {
+            guard let sampleType = sensor.hkSampleType else { continue }
+            let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { _, _, _ in }
+            await observerStore.replaceObserver(query, for: sensor, stoppingDisplaced: { _ in }, executing: { _ in })
+            await observerStore.recordDeliveryEnabled(for: sensor)
+        }
     }
     func querySensors() async -> PostSensorDataResult { PostSensorDataResult(sensorResults: []) }
     func getSensorStatus(_ sensors: Set<SahhaSensor>) async throws -> SahhaSensorStatus { .pending }
@@ -142,12 +174,31 @@ private func decodeReport(_ request: APIRequest) throws -> DiagnosticReport {
 
 /// A non-shared actor over the production graph with persistence, network,
 /// health-store access, and auth swapped for the given doubles.
+/// Hands the registrar-built manager stub back to the test, so assertions can
+/// read what the tail health check asked it to repair.
+private final class ManagerBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _manager: StoreReadingHealthKitManager?
+
+    var manager: StoreReadingHealthKitManager? {
+        lock.lock(); defer { lock.unlock() }
+        return _manager
+    }
+
+    func set(_ manager: StoreReadingHealthKitManager) {
+        lock.lock(); defer { lock.unlock() }
+        _manager = manager
+    }
+}
+
 private func makeActor(
     storage: InMemoryStorage,
     logger: RecordingErrorLogger,
     apiClient: RecordingAPIClient,
     hasValidToken: Bool,
-    sampleQuery: ScriptedSampleQueryService
+    sampleQuery: ScriptedSampleQueryService,
+    armsOnResume: Bool = true,
+    managerBox: ManagerBox? = nil
 ) -> SahhaActor {
     SahhaActor(
         registrar: { container, settings in
@@ -159,7 +210,13 @@ private func makeActor(
             await container.register(AuthManagerProtocol.self) { _ in StubAuthManager(hasValid: hasValidToken) }
             await container.register(HealthKitSampleQueryServiceProtocol.self) { _ in sampleQuery }
             await container.register(HealthKitManagerProtocol.self) { container in
-                StoreReadingHealthKitManager(sensorStore: try await container.resolve(SensorStoreProtocol.self))
+                let manager = StoreReadingHealthKitManager(
+                    sensorStore: try await container.resolve(SensorStoreProtocol.self),
+                    observerStore: try await container.resolve(HealthKitObserverStoreProtocol.self),
+                    armsOnResume: armsOnResume
+                )
+                managerBox?.set(manager)
+                return manager
             }
         },
         lifecycleObserver: LifecycleObserverSpy()
@@ -253,6 +310,62 @@ struct BringUpTailTests {
         try await actor.startAuthenticatedServices()
         #expect(anomalyPosts().isEmpty)
         #expect(apiClient.diagnosticRequests.count == 2)
+    }
+
+    // MARK: Bring-up-tail health check
+
+    @Test("After a full resume, the bring-up-tail health check finds nothing missing")
+    func tailHealthCheckIsNoOpAfterFullResume() async throws {
+        let storage = InMemoryStorage()
+        try seedSensors(storage, rawValues: ["sleep"])
+        let logger = RecordingErrorLogger()
+        let box = ManagerBox()
+        let actor = makeActor(
+            storage: storage,
+            logger: logger,
+            apiClient: RecordingAPIClient(),
+            hasValidToken: true,
+            sampleQuery: alwaysSample,
+            managerBox: box
+        )
+
+        try await actor.configure(with: SahhaSettings(environment: .sandbox))
+
+        // The check ran after arming: had it run before (or had arming not
+        // registered sleep), it would have asked for a repair here.
+        let manager = try #require(box.manager)
+        #expect(manager.resumeForCalls.isEmpty)
+        let aggregates = logger.drain().compactMap { ($0.error as? SahhaError)?.message }
+            .filter { $0.contains("Observer re-registration failed") }
+        #expect(aggregates.isEmpty)
+    }
+
+    @Test("The bring-up-tail health check repairs arming dropped during resume, with no lifecycle event fired")
+    func tailHealthCheckRepairsDroppedArming() async throws {
+        let storage = InMemoryStorage()
+        try seedSensors(storage, rawValues: ["sleep"])
+        let logger = RecordingErrorLogger()
+        let box = ManagerBox()
+        let actor = makeActor(
+            storage: storage,
+            logger: logger,
+            apiClient: RecordingAPIClient(),
+            hasValidToken: true,
+            sampleQuery: alwaysSample,
+            armsOnResume: false,   // resume leaves no observers behind
+            managerBox: box
+        )
+
+        try await actor.configure(with: SahhaSettings(environment: .sandbox))
+
+        // The tail check detected the missing observer and asked for a bounded
+        // repair of exactly that sensor — no lifecycle event was ever fired.
+        let manager = try #require(box.manager)
+        #expect(manager.resumeForCalls == [[.sleep]])
+        // The repair armed successfully, so nothing reached the aggregate post.
+        let aggregates = logger.drain().compactMap { ($0.error as? SahhaError)?.message }
+            .filter { $0.contains("Observer re-registration failed") }
+        #expect(aggregates.isEmpty)
     }
 
     // MARK: Report builder probe-on-demand

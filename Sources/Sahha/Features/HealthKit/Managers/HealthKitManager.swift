@@ -128,21 +128,56 @@ final class HealthKitManager: HealthKitManagerProtocol {
     }
     
     func resumeSensors() async {
+        let sensors: Set<SahhaSensor>
         do {
-            let sensors = try await sensorStore.getSensors()
-            let tagSensors = sensors.filter { $0.dataLogType == .reproductive || $0.dataLogType == .symptom }
-            let dataLogSensors = sensors.subtracting(tagSensors)
-            if !dataLogSensors.isEmpty {
-                try await dataLogCoordinator.startDataLogCollection(for: dataLogSensors)
-            }
-            if !tagSensors.isEmpty {
-                try await tagCoordinator.startTagCollection(for: tagSensors)
-            }
+            sensors = try await sensorStore.getSensors()
         } catch {
             // A failed launch-time resume means no observers for the whole process —
             // previously only a local debug line, invisible on the dashboard.
             logger.postError(error)
             Sahha.log("[HealthKitManager] resumeSensors failed: \(error)")
+            return
+        }
+        await armSensors(sensors)
+    }
+
+    func resumeSensors(for sensors: Set<SahhaSensor>) async {
+        let enabledSensors: Set<SahhaSensor>
+        do {
+            enabledSensors = try await sensorStore.getSensors()
+        } catch {
+            logger.postError(error)
+            return
+        }
+        // Fresh read at arm time: a sensor torn down since the caller computed
+        // its missing set intersects away instead of being resurrected.
+        let target = sensors.intersection(enabledSensors)
+        guard !target.isEmpty else { return }
+        await armSensors(target)
+    }
+
+    /// Arms the data-log and tag sides independently: one coordinator's failure
+    /// is posted and must not prevent the other side from arming. The shared
+    /// catch this replaces let a data-log failure silently kill all
+    /// reproductive/symptom arming.
+    private func armSensors(_ sensors: Set<SahhaSensor>) async {
+        let tagSensors = sensors.filter { $0.dataLogType == .reproductive || $0.dataLogType == .symptom }
+        let dataLogSensors = sensors.subtracting(tagSensors)
+        if !dataLogSensors.isEmpty {
+            do {
+                try await dataLogCoordinator.startDataLogCollection(for: dataLogSensors)
+            } catch {
+                logger.postError(error)
+                Sahha.log("[HealthKitManager] data-log arming failed: \(error)")
+            }
+        }
+        if !tagSensors.isEmpty {
+            do {
+                try await tagCoordinator.startTagCollection(for: tagSensors)
+            } catch {
+                logger.postError(error)
+                Sahha.log("[HealthKitManager] tag arming failed: \(error)")
+            }
         }
     }
     
