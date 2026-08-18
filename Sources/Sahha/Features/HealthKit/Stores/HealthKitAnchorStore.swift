@@ -6,12 +6,21 @@ actor HealthKitAnchorStore: HealthKitAnchorStoreProtocol, Disposable {
     /// honour those keys and dispose must wipe them too.
     private let legacyKeyPrefix = "sahha_"
     private let storage: UserDefaultsStorageProtocol
+    /// Latched by `dispose()` (container teardown, e.g. deauthentication). A straggling
+    /// anchored query that resolves after teardown must not save its anchor back —
+    /// the next session would silently skip all history behind it.
+    private var disposed = false
 
     init(storage: UserDefaultsStorageProtocol) {
         self.storage = storage
     }
 
     func saveAnchor(_ anchor: HKQueryAnchor, forKey key: String) throws {
+        guard !disposed else {
+            // Throwing (rather than silently dropping) stops the caller's pagination
+            // loop: an anchor that cannot advance must not keep fetching pages.
+            throw SahhaError(message: "Anchor store has been disposed.")
+        }
         let key = prefix + key
         let data = try NSKeyedArchiver.archivedData(
             withRootObject: anchor,
@@ -38,6 +47,7 @@ actor HealthKitAnchorStore: HealthKitAnchorStoreProtocol, Disposable {
     }
 
     func dispose() async {
+        disposed = true
         // Wipes the legacy-prefixed family too: a legacy-key anchor that
         // survives deauth would be resurrected by the fallback read.
         let keys = storage.allKeys {

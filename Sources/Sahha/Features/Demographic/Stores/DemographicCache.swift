@@ -12,7 +12,11 @@ actor DemographicCache: DemographicCacheProtocol {
     private let logger: ErrorLoggerProtocol
     
     private var cachedDemographic: CachedDemographic?
-    
+    /// Latched by `dispose()` (container teardown, e.g. deauthentication). A demographic
+    /// flight that resolves after teardown must not write the departing profile's
+    /// demographic back into the keychain — the next profile would inherit it.
+    private var disposed = false
+
     init(
         key: String = StorageKeys.Keychain.demographic,
         storage: KeychainStorageProtocol,
@@ -53,6 +57,7 @@ actor DemographicCache: DemographicCacheProtocol {
     }
     
     func cacheDemographic(_ demographic: SahhaDemographic) {
+        guard !disposed else { return }
         let value = CachedDemographic(demographic: demographic, lastSync: Date())
         cachedDemographic = value
         do {
@@ -79,6 +84,7 @@ actor DemographicCache: DemographicCacheProtocol {
     }
     
     func dispose() async {
+        disposed = true
         cachedDemographic = nil
         do {
             try storage.removeObject(forKey: key)

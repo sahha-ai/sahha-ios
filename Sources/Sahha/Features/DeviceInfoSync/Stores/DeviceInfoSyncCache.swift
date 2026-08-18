@@ -10,6 +10,10 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol, Disposable {
     private let storage: UserDefaultsStorageProtocol
     private let ttl: TimeInterval
     private let logger: ErrorLoggerProtocol
+    /// Latched by `dispose()` (container teardown, e.g. deauthentication). A sync
+    /// flight that resolves after teardown must not write the hash back — the next
+    /// session's `needsSync` would then skip the new profile's first device-info sync.
+    private var disposed = false
 
     init(
         key: String = StorageKeys.UserDefaults.deviceInfo,
@@ -24,6 +28,7 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol, Disposable {
     }
 
     func cacheDeviceInfo(_ deviceInfo: DeviceInfo) {
+        guard !disposed else { return }
         do {
             let hash = try deviceInfo.sha256Hash()
             let value = CachedDeviceInfo(hash: hash, lastSync: Date())
@@ -33,6 +38,7 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol, Disposable {
     }
 
     func dispose() {
+        disposed = true
         storage.removeObject(forKey: key)
     }
 
