@@ -38,6 +38,9 @@ final class SensorHealthCheckLifecycleListener: LifecycleListener, @unchecked Se
         do {
             enabledSensors = try await sensorStore.getSensors()
         } catch {
+            // An unreadable store blinds the entire check — previously swallowed,
+            // which made a broken store indistinguishable from a healthy empty one.
+            logger.postError(error)
             return SensorHealthCheckResult(
                 timestamp: Date(),
                 sensorsChecked: [],
@@ -78,10 +81,18 @@ final class SensorHealthCheckLifecycleListener: LifecycleListener, @unchecked Se
                 if updatedKeys.contains(sensor.rawValue) {
                     reRegistered.insert(sensor)
                 } else {
-                    let message = "Observer re-registration failed for \(sensor.rawValue)"
-                    failures[sensor] = message
-                    logger.postError(SahhaError(message: message))
+                    failures[sensor] = "Observer re-registration failed for \(sensor.rawValue)"
                 }
+            }
+
+            if !failures.isEmpty {
+                // One aggregate post carrying the count and every failed sensor:
+                // per-sensor posts would be collapsed by the logger's origin-keyed
+                // dedup into whichever sensor happened to post first.
+                let names = failures.keys.map(\.rawValue).sorted().joined(separator: ", ")
+                logger.postError(SahhaError(
+                    message: "Observer re-registration failed for \(failures.count) sensor(s): \(names)"
+                ))
             }
         }
 

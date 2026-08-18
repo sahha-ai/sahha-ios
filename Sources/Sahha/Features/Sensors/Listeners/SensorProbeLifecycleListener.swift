@@ -24,6 +24,9 @@ final class SensorProbeLifecycleListener: LifecycleListener, @unchecked Sendable
         do {
             enabledSensors = try await sensorStore.getSensors()
         } catch {
+            // Previously swallowed: without the store the probe cannot run at all,
+            // and every per-sensor status silently stays stale.
+            logger.postError(error)
             return
         }
 

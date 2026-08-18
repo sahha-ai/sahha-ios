@@ -96,6 +96,9 @@ final class HealthKitManager: HealthKitManagerProtocol {
                 try await tagCoordinator.startTagCollection(for: tagSensors)
             }
         } catch {
+            // A failed launch-time resume means no observers for the whole process —
+            // previously only a local debug line, invisible on the dashboard.
+            logger.postError(error)
             Sahha.log("[HealthKitManager] resumeSensors failed: \(error)")
         }
     }
@@ -114,6 +117,7 @@ final class HealthKitManager: HealthKitManagerProtocol {
             }
             return PostSensorDataResult(sensorResults: results)
         } catch {
+            logger.postError(error)
             return PostSensorDataResult(sensorResults: [], errorDescription: error.localizedDescription)
         }
     }
