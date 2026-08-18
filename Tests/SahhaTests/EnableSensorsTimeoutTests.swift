@@ -70,7 +70,7 @@ struct EnableSensorsTimeoutTests {
 
     @Test("requestPermissions throws AsyncTimeoutError instead of hanging when authorization never resolves")
     func requestPermissionsTimesOut() async {
-        let store = AuthorizationCapturingHealthStore()
+        let store = RecordingHealthStore(autoComplete: false)
         let service = HealthKitPermissionsService(healthStore: store, requestTimeout: 0.3)
 
         do {
@@ -85,7 +85,7 @@ struct EnableSensorsTimeoutTests {
 
     @Test("Concurrent requestPermissions calls are serialized onto the health store")
     func concurrentRequestsAreSerialized() async throws {
-        let store = AuthorizationCapturingHealthStore()
+        let store = RecordingHealthStore(autoComplete: false)
         let service = HealthKitPermissionsService(healthStore: store, requestTimeout: 5)
 
         async let first: Void = service.requestPermissions(for: [.heart_rate])
@@ -110,7 +110,7 @@ struct EnableSensorsTimeoutTests {
 
     @Test("A timed-out request releases the serializer for the next request")
     func timeoutReleasesSerializer() async {
-        let store = AuthorizationCapturingHealthStore()
+        let store = RecordingHealthStore(autoComplete: false)
         let service = HealthKitPermissionsService(healthStore: store, requestTimeout: 0.2)
 
         // First call times out (never answered)...
@@ -126,50 +126,5 @@ struct EnableSensorsTimeoutTests {
         } catch {
             Issue.record("Second request should succeed after a timed-out first, got \(error)")
         }
-    }
-}
-
-/// HKHealthStore stub that captures authorization completions instead of presenting
-/// UI, so tests can simulate the sheet resolving, parking forever, or resolving late.
-private final class AuthorizationCapturingHealthStore: HKHealthStore, @unchecked Sendable {
-    private let lock = NSLock()
-    private var completions: [(Bool, Error?) -> Void] = []
-    private var completed = 0
-    var autoComplete = false
-
-    var capturedCompletionCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return completions.count + completed
-    }
-
-    override func requestAuthorization(
-        toShare typesToShare: Set<HKSampleType>?,
-        read typesToRead: Set<HKObjectType>?,
-        completion: @escaping (Bool, Error?) -> Void
-    ) {
-        lock.lock()
-        let shouldAutoComplete = autoComplete
-        if shouldAutoComplete {
-            completed += 1
-        } else {
-            completions.append(completion)
-        }
-        lock.unlock()
-        if shouldAutoComplete {
-            completion(true, nil)
-        }
-    }
-
-    func completeNext() {
-        lock.lock()
-        guard !completions.isEmpty else {
-            lock.unlock()
-            return
-        }
-        let completion = completions.removeFirst()
-        completed += 1
-        lock.unlock()
-        completion(true, nil)
     }
 }

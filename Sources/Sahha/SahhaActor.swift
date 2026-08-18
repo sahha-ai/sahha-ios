@@ -5,13 +5,45 @@ import UIKit
 actor SahhaActor {
     static let shared = SahhaActor()
 
+    /// Registers a dependency graph into a fresh container on every (re)configure.
+    typealias DependencyRegistrar = @Sendable (DIContainer, SahhaSettings) async -> Void
+
     private var settings: SahhaSettings?
     private var container: DIContainer?
     private var configurationTask: Task<Void, Error>?
 
-    private init() {}
+    private let registrar: DependencyRegistrar
+    private let lifecycleObserver: any LifecycleObserverProtocol
 
-    private let lifecycleObserver = LifecycleObserver()
+    /// Non-shared instances exist for integration tests: inject a registrar that
+    /// swaps storage/network registrations for doubles, and an observer spy so no
+    /// NotificationCenter observers are installed.
+    init(
+        registrar: @escaping DependencyRegistrar = SahhaActor.registerProductionDependencies,
+        lifecycleObserver: any LifecycleObserverProtocol = LifecycleObserver()
+    ) {
+        self.registrar = registrar
+        self.lifecycleObserver = lifecycleObserver
+    }
+
+    static func registerProductionDependencies(container: DIContainer, settings: SahhaSettings) async {
+        await StorageDI.registerDependencies(container: container)
+        await DeviceInfoDI.registerDependencies(container: container, settings: settings)
+        await NetworkingDI.registerDependencies(container: container, settings: settings)
+        await LoggingDI.registerDependencies(container: container)
+        await SensorDI.registerDependencies(container: container)
+        await AuthDI.registerDependencies(container: container)
+        await DataLogDI.registerDependencies(container: container)
+        await TagDI.registerDependencies(container: container)
+        await HealthKitDI.registerDependencies(container: container)
+        await BackgroundDI.registerDependencies(container: container, settings: settings)
+        await ScoreDI.registerDependencies(container: container)
+        await BiomarkerDI.registerDependencies(container: container)
+        await DemographicDI.registerDependencies(container: container)
+        await DeviceInfoSyncDI.registerDependencies(container: container)
+        await DeviceLogDI.registerDependencies(container: container)
+        await DiagnosticsDI.registerDependencies(container: container)
+    }
 
     // MARK: - Configuration
 
@@ -27,22 +59,7 @@ actor SahhaActor {
         configurationTask = Task { [settings] in
             let container = DIContainer()
 
-            await StorageDI.registerDependencies(container: container)
-            await DeviceInfoDI.registerDependencies(container: container, settings: settings)
-            await NetworkingDI.registerDependencies(container: container, settings: settings)
-            await LoggingDI.registerDependencies(container: container)
-            await SensorDI.registerDependencies(container: container)
-            await AuthDI.registerDependencies(container: container)
-            await DataLogDI.registerDependencies(container: container)
-            await TagDI.registerDependencies(container: container)
-            await HealthKitDI.registerDependencies(container: container)
-            await BackgroundDI.registerDependencies(container: container, settings: settings)
-            await ScoreDI.registerDependencies(container: container)
-            await BiomarkerDI.registerDependencies(container: container)
-            await DemographicDI.registerDependencies(container: container)
-            await DeviceInfoSyncDI.registerDependencies(container: container)
-            await DeviceLogDI.registerDependencies(container: container)
-            await DiagnosticsDI.registerDependencies(container: container)
+            await self.registrar(container, settings)
 
             // Validate and clean up legacy DLQ files from before the unified pipeline
             let userDefaultsStorage = try await container.resolve(UserDefaultsStorageProtocol.self)

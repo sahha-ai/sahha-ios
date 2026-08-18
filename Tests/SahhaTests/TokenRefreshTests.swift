@@ -19,29 +19,11 @@ import Foundation
 /// - the reactive interceptor: a 401'd authed request forces exactly one refresh and one
 ///   retry; nothing else (4xx/5xx/transport errors) triggers a refresh or replays a request.
 ///
-/// All mocks are private actors; no test touches process-global state (`Sahha.authSnapshot`
-/// is written only by the real `TokenStore`, which these tests never construct), so the file
-/// is safe under parallel suite execution.
+/// The auth doubles live in TestSupport/AuthMocks.swift; no test touches process-global
+/// state (`Sahha.authSnapshot` is written only by the real `TokenStore`, which these tests
+/// never construct), so the file is safe under parallel suite execution.
 
 // MARK: - Helpers
-
-/// Builds a signed-looking (unverified) JWT whose payload contains the given claims.
-private func encodeJWT(payload: [String: Any]) -> String {
-    func base64URL(_ data: Data) -> String {
-        data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-    let header = base64URL(Data(#"{"alg":"HS256","typ":"JWT"}"#.utf8))
-    let body = base64URL(try! JSONSerialization.data(withJSONObject: payload))
-    return "\(header).\(body).signature"
-}
-
-/// A JWT whose `exp` claim is `expiresIn` seconds from now (negative = already expired).
-private func jwt(expiresIn: TimeInterval) -> String {
-    encodeJWT(payload: ["exp": Date().timeIntervalSince1970 + expiresIn])
-}
 
 private func okResponse() -> HTTPURLResponse {
     HTTPURLResponse(url: URL(string: "https://sandbox-api.sahha.ai")!, statusCode: 200, httpVersion: nil, headerFields: nil)!
@@ -52,121 +34,6 @@ private func apiError(_ statusCode: Int) -> APIErrorResponse {
 }
 
 // MARK: - Mocks
-
-/// Records refresh calls and returns a configured success/failure.
-private actor MockAuthService: AuthServiceProtocol {
-    private(set) var refreshCallCount = 0
-    private(set) var lastRefreshToken: String?
-    private let delayNanos: UInt64
-    private let success: TokenResponse?
-    private let failure: APIErrorResponse?
-
-    init(delayNanos: UInt64 = 0, success: TokenResponse? = nil, failure: APIErrorResponse? = nil) {
-        self.delayNanos = delayNanos
-        self.success = success
-        self.failure = failure
-    }
-
-    func authenticate(appId: String, appSecret: String, externalId: String) async throws -> TokenResponse {
-        throw SahhaError(message: "authenticate is not used in MockAuthService")
-    }
-
-    func refreshToken(refreshToken: String) async throws -> TokenResponse {
-        refreshCallCount += 1
-        lastRefreshToken = refreshToken
-        // Propagates cancellation, so dispose-mid-flight tests exercise the real path.
-        if delayNanos > 0 { try await Task.sleep(nanoseconds: delayNanos) }
-        if let failure { throw failure }
-        guard let success else { throw SahhaError(message: "MockAuthService not configured") }
-        return success
-    }
-}
-
-/// In-memory token store (no keychain, no global authSnapshot).
-private actor MockTokenStore: TokenStoreProtocol {
-    private var current: TokenResponse?
-    private(set) var saveCount = 0
-    private(set) var clearCount = 0
-    private(set) var disposed = false
-
-    init(_ initial: TokenResponse?) { self.current = initial }
-
-    func saveToken(_ token: TokenResponse) throws {
-        saveCount += 1
-        current = token
-    }
-    func token() -> TokenResponse? { current }
-    func profileToken() -> String? { current?.profileToken }
-    func refreshToken() -> String? { current?.refreshToken }
-    func clearToken() {
-        clearCount += 1
-        current = nil
-    }
-    func dispose() async {
-        current = nil
-        disposed = true
-    }
-}
-
-/// Returns a scripted sequence from `token()`, reproducing the exact
-/// read→check→(rotated by another flight)→re-read interleaving the single-flight guard closes.
-private actor ScriptedTokenStore: TokenStoreProtocol {
-    private var scripted: [TokenResponse?]
-    private var current: TokenResponse?
-
-    init(reads: [TokenResponse?]) {
-        scripted = reads
-        current = reads.last ?? nil
-    }
-
-    func token() -> TokenResponse? {
-        scripted.isEmpty ? current : scripted.removeFirst()
-    }
-    func saveToken(_ token: TokenResponse) throws { current = token }
-    func profileToken() -> String? { current?.profileToken }
-    func refreshToken() -> String? { current?.refreshToken }
-    func clearToken() { current = nil }
-    func dispose() async { current = nil }
-}
-
-/// Stub AuthManager for interceptor tests, with optional injected failures.
-private actor MockAuthManager: AuthManagerProtocol {
-    private let validToken: String
-    private let refreshedToken: String
-    private let getValidError: Error?
-    private let refreshError: Error?
-    private(set) var getValidCalls = 0
-    private(set) var refreshStaleTokens: [String] = []
-
-    init(
-        validToken: String,
-        refreshedToken: String,
-        getValidError: Error? = nil,
-        refreshError: Error? = nil
-    ) {
-        self.validToken = validToken
-        self.refreshedToken = refreshedToken
-        self.getValidError = getValidError
-        self.refreshError = refreshError
-    }
-
-    func authenticate(appId: String, appSecret: String, externalId: String) async throws {}
-    func authenticate(profileToken: String, refreshToken: String) async throws {}
-
-    func getValidProfileToken() async throws -> String {
-        getValidCalls += 1
-        if let getValidError { throw getValidError }
-        return validToken
-    }
-
-    func refreshProfileToken(staleToken: String) async throws -> String {
-        refreshStaleTokens.append(staleToken)
-        if let refreshError { throw refreshError }
-        return refreshedToken
-    }
-
-    func hasValidProfileToken() async -> Bool { true }
-}
 
 /// Captures the requests an interceptor forwards and replies per call index.
 private actor NextRecorder {
