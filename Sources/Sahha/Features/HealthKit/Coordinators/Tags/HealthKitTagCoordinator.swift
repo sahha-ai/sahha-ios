@@ -201,9 +201,18 @@ actor HealthKitTagCoordinator: HealthKitTagCoordinatorProtocol, Disposable {
                             anchor = newAnchor
                             anchorUpdated = true
                         } catch {
+                            // An unsaved anchor cannot advance, so the next pass
+                            // would fetch this identical page again, forever. Stop
+                            // this run; the next trigger resumes from the last
+                            // saved anchor.
+                            self.logger.postError(error)
+                            break
                         }
                     }
                 }
+            } catch is CancellationError {
+                // Collection was stopped mid-query (stopTagCollection or dispose):
+                // not a failure, and whatever was ingested stands.
             } catch {
                 status = .failed
                 errorDescription = error.localizedDescription
@@ -242,33 +251,30 @@ actor HealthKitTagCoordinator: HealthKitTagCoordinatorProtocol, Disposable {
         limit: Int,
         sensor: SahhaSensor
     ) async throws -> ([HKSample], HKQueryAnchor?) {
-        try await withThrowingTaskGroup(of: ([HKSample], HKQueryAnchor?).self) { group in
-            group.addTask { [self] in
+        let service = anchorQueryService
+        do {
+            // Abandoning timeout rather than a task-group race: a group awaits ALL
+            // of its children, so a query whose result handler never fires would
+            // hang the caller — and with it the sensor's task slot and the
+            // observer's completion handler — past the deadline. On timeout the
+            // work task is cancelled, which stops the underlying HealthKit query
+            // via the service's cancellation handler, and then abandoned.
+            return try await withAbandoningTimeout(seconds: queryTimeout, operationName: "anchor query") {
                 var predicate: NSPredicate?
                 if let startDate, let endDate {
                     predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
                 }
-
-                return try await self.anchorQueryService.runAnchorQuery(
+                return try await service.runAnchorQuery(
                     for: sampleType,
                     predicate: predicate,
                     anchor: anchor,
                     limit: limit
                 )
             }
-
-            let timeoutNanoseconds = UInt64(max(queryTimeout, 0.1) * 1_000_000_000)
-            group.addTask {
-                try await Task.sleep(nanoseconds: timeoutNanoseconds)
-                throw HealthKitTagCoordinatorError.queryTimeout(sensor: sensor, seconds: self.queryTimeout)
-            }
-
-            guard let result = try await group.next() else {
-                throw HealthKitTagCoordinatorError.queryTimeout(sensor: sensor, seconds: self.queryTimeout)
-            }
-
-            group.cancelAll()
-            return result
+        } catch is AsyncTimeoutError {
+            let timeoutError = HealthKitTagCoordinatorError.queryTimeout(sensor: sensor, seconds: queryTimeout)
+            logger.postError(timeoutError)
+            throw timeoutError
         }
     }
 }

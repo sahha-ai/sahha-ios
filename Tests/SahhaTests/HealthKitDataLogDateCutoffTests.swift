@@ -13,42 +13,7 @@ import Testing
 // ongoing (anchor != nil) path, which previously had no date bound at all.
 
 // MARK: - Mocks
-
-/// Returns scripted query batches and records the predicate it was called with.
-private final class ScriptedAnchorQueryService: HealthKitAnchorQueryServiceProtocol, @unchecked Sendable {
-    private let lock = NSLock()
-    private var batches: [([HKSample], HKQueryAnchor?)]
-    private var _capturedPredicates: [NSPredicate?] = []
-
-    init(batches: [([HKSample], HKQueryAnchor?)]) {
-        self.batches = batches
-    }
-
-    var capturedPredicates: [NSPredicate?] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _capturedPredicates
-    }
-
-    func runAnchorQuery(
-        for sampleType: HKSampleType,
-        predicate: NSPredicate?,
-        anchor: HKQueryAnchor?,
-        limit: Int
-    ) async throws -> ([HKSample], HKQueryAnchor?) {
-        // Locking lives in a synchronous helper: NSLock is unavailable from
-        // async contexts.
-        nextBatch(recording: predicate)
-    }
-
-    private func nextBatch(recording predicate: NSPredicate?) -> ([HKSample], HKQueryAnchor?) {
-        lock.lock()
-        defer { lock.unlock() }
-        _capturedPredicates.append(predicate)
-        guard !batches.isEmpty else { return ([], nil) }
-        return batches.removeFirst()
-    }
-}
+// The scripted anchor-query service lives in TestSupport/ScriptedAnchorQueryService.swift.
 
 private actor StubAnchorStore: HealthKitAnchorStoreProtocol {
     private let anchorToReturn: HKQueryAnchor?
