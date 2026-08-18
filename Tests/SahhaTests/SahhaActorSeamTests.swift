@@ -39,4 +39,59 @@ struct SahhaActorSeamTests {
         // The device-log listener was registered on the injected observer.
         #expect(await observerSpy.registrationCount == 1)
     }
+
+    @Test("Configure-time bring-up failures reach the injected error logger")
+    func bringUpErrorsReachInjectedLogger() async throws {
+        let recorder = RecordingErrorLogger()
+
+        let actor = SahhaActor(
+            registrar: { container, settings in
+                await SahhaActor.registerProductionDependencies(container: container, settings: settings)
+                await container.register(UserDefaultsStorageProtocol.self) { _ in InMemoryStorage() }
+                await container.register(KeychainStorageProtocol.self) { _ in MockKeychainStorage() }
+                await container.register(ErrorLoggerProtocol.self) { _ in recorder }
+                // A signed-in session, so configure runs authenticated bring-up.
+                await container.register(AuthManagerProtocol.self) { _ in
+                    MockAuthManager(validToken: "token", refreshedToken: "token")
+                }
+                // Every bring-up dependency fails to build. Each branch catches and
+                // logs — which only reaches the injected logger if the actor's
+                // container is assigned BEFORE bring-up runs (the D5 hoist). With
+                // the old order, this test records zero errors.
+                await container.register(HealthKitManagerProtocol.self) { _ in
+                    throw SahhaError(message: "bring-up fixture: health kit manager unavailable")
+                }
+                await container.register(DeviceInfoSyncManagerProtocol.self) { _ in
+                    throw SahhaError(message: "bring-up fixture: device info sync unavailable")
+                }
+                await container.register(DemographicManagerProtocol.self) { _ in
+                    throw SahhaError(message: "bring-up fixture: demographic manager unavailable")
+                }
+                await container.register(BackgroundCoordinatorProtocol.self) { _ in
+                    throw SahhaError(message: "bring-up fixture: background coordinator unavailable")
+                }
+            },
+            lifecycleObserver: LifecycleObserverSpy()
+        )
+
+        try await actor.configure(with: SahhaSettings(environment: .sandbox))
+
+        let messages = recorder.drain().compactMap { ($0.error as? SahhaError)?.message }
+        #expect(messages.contains("bring-up fixture: health kit manager unavailable"))
+    }
+
+    @Test("The circuit breaker stays unregistered in the production graph")
+    func circuitBreakerRemainsUnregistered() async throws {
+        // PRD #76 D5 explicitly leaves the breaker dead: registering it would switch
+        // on error-drop behavior nobody has decided on. LoggingDI resolves it with
+        // `try?`, so the logger builds fine while this resolve keeps failing.
+        let container = DIContainer()
+        await SahhaActor.registerProductionDependencies(
+            container: container,
+            settings: SahhaSettings(environment: .sandbox)
+        )
+        await #expect(throws: (any Error).self) {
+            _ = try await container.resolve(CircuitBreaker.self)
+        }
+    }
 }

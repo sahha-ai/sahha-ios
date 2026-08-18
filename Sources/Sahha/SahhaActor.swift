@@ -80,11 +80,17 @@ actor SahhaActor {
 
             // Start authenticated services if already logged in
             let authManager = try await container.resolve(AuthManagerProtocol.self)
+
+            // The container must be visible before authenticated bring-up: errors logged
+            // during bring-up resolve the error logger through `self.container`, and
+            // assigning it afterwards sent every configure-time bring-up failure to the
+            // no-op debug logger instead. All throwing steps stay above this line, so a
+            // failed configure still leaves the actor unconfigured.
+            self.container = container
+
             if  await authManager.hasValidProfileToken() {
                 await self.startAuthenticatedServices(container)
             }
-
-            self.container = container
         }
         
         defer { configurationTask = nil }

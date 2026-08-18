@@ -10,6 +10,7 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
     private let dataLogUploader: DataLogUploaderProtocol
     private let tagUploader: TagUploaderProtocol
     private let storage: UserDefaultsStorageProtocol
+    private let logger: ErrorLoggerProtocol
 
     private let storageKey = "com.sahha.diagnostic_report"
 
@@ -17,16 +18,27 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
         sensorStore: SensorStoreProtocol,
         dataLogUploader: DataLogUploaderProtocol,
         tagUploader: TagUploaderProtocol,
-        storage: UserDefaultsStorageProtocol
+        storage: UserDefaultsStorageProtocol,
+        logger: ErrorLoggerProtocol
     ) {
         self.sensorStore = sensorStore
         self.dataLogUploader = dataLogUploader
         self.tagUploader = tagUploader
         self.storage = storage
+        self.logger = logger
     }
 
     func buildReport() async -> DiagnosticReport {
-        let enabledSensors: Set<SahhaSensor> = (try? await sensorStore.getSensors()) ?? []
+        let enabledSensors: Set<SahhaSensor>
+        do {
+            enabledSensors = try await sensorStore.getSensors()
+        } catch {
+            // The report is still built (an empty sensor list IS the dashboard's
+            // "No sensor data reported" signal) — but no longer silently: this
+            // swallow is how a broken store looked identical to a healthy empty one.
+            logger.postError(error)
+            enabledSensors = []
+        }
         let storedStatuses = await sensorStore.getSensorStatuses()
         let sensorStatuses = Self.backfillStatuses(enabled: enabledSensors, statuses: storedStatuses)
 
@@ -45,12 +57,21 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
             )
         )
 
-        try? storage.setObject(report, forKey: storageKey)
+        do {
+            try storage.setObject(report, forKey: storageKey)
+        } catch {
+            logger.postError(SahhaError(message: "Diagnostic report could not be persisted.", error: error))
+        }
         return report
     }
 
     func getLatestReport() async -> DiagnosticReport? {
-        try? storage.object(forKey: storageKey)
+        do {
+            return try storage.object(forKey: storageKey)
+        } catch {
+            logger.postError(SahhaError(message: "Stored diagnostic report could not be decoded.", error: error))
+            return nil
+        }
     }
 
     /// Pure transformation: every sensor in `enabled` gets an entry in the returned map,

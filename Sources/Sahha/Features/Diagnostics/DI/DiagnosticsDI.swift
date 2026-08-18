@@ -5,7 +5,8 @@ enum DiagnosticsDI {
                 sensorStore: try await container.resolve(SensorStoreProtocol.self),
                 dataLogUploader: try await container.resolve(DataLogUploaderProtocol.self),
                 tagUploader: try await container.resolve(TagUploaderProtocol.self),
-                storage: try await container.resolve(UserDefaultsStorageProtocol.self)
+                storage: try await container.resolve(UserDefaultsStorageProtocol.self),
+                logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
         }
         await container.register(DiagnosticUploadServiceProtocol.self) { container in

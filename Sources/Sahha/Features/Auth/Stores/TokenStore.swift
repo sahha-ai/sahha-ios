@@ -21,6 +21,13 @@ actor TokenStore: TokenStoreProtocol {
             Sahha.authSnapshot.profileToken = cached?.profileToken
             Sahha.authSnapshot.profileId = cached.flatMap { JWT.profileId(from: $0.profileToken) }
         } catch {
+            // Previously swallowed. An unreadable keychain leaves the synchronous auth
+            // snapshot unpopulated for the whole session — the fingerprint behind
+            // wrongly rejected deauthentication — so it must be visible on the dashboard.
+            logger.postError(SahhaError(
+                message: "Token store failed to read the persisted session from the keychain.",
+                error: error
+            ))
         }
     }
 
