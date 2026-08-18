@@ -73,6 +73,25 @@ private struct InertSampleQueryService: HealthKitSampleQueryServiceProtocol {
     ) async throws -> [HKSample] { [] }
 }
 
+/// The redesigned check lives in `SensorHealthCheckService`; the listener is a
+/// thin delegate. These tests pin the posting behavior across that seam.
+private func makeHealthCheckListener(
+    sensorStore: SensorStoreProtocol,
+    observerStore: HealthKitObserverStoreProtocol,
+    healthKitManager: HealthKitManagerProtocol,
+    logger: ErrorLoggerProtocol
+) -> SensorHealthCheckLifecycleListener {
+    SensorHealthCheckLifecycleListener(
+        healthCheckService: SensorHealthCheckService(
+            sensorStore: sensorStore,
+            observerStore: observerStore,
+            healthKitManager: healthKitManager,
+            observerService: InertHealthKitObserverService(),
+            logger: logger
+        )
+    )
+}
+
 private func makeManager(
     sensorStore: SensorStoreProtocol,
     dataLogCoordinator: HealthKitDataLogCoordinatorProtocol = InertDataLogCoordinator(),
@@ -165,7 +184,7 @@ struct SilentFailureSitePostingTests {
         let marker = SahhaError(message: "sensor store unreadable")
         let observerStore = MockHealthKitObserverStore()
         let logger = RecordingErrorLogger()
-        let listener = SensorHealthCheckLifecycleListener(
+        let listener = makeHealthCheckListener(
             sensorStore: ThrowingSensorStore(error: marker),
             observerStore: observerStore,
             healthKitManager: MockHealthKitManager(observerStore: observerStore, sensorsToRegister: []),
@@ -190,7 +209,7 @@ struct SilentFailureSitePostingTests {
         try await sensorStore.setSensors([.heart_rate, .sleep])
         let observerStore = MockHealthKitObserverStore()   // empty: both observers missing
         let logger = RecordingErrorLogger()
-        let listener = SensorHealthCheckLifecycleListener(
+        let listener = makeHealthCheckListener(
             sensorStore: sensorStore,
             observerStore: observerStore,
             healthKitManager: MockHealthKitManager(observerStore: observerStore, sensorsToRegister: []),
@@ -215,10 +234,10 @@ struct SilentFailureSitePostingTests {
         try await sensorStore.setSensors([.heart_rate, .sleep])
         let observerStore = MockHealthKitObserverStore()
         let logger = RecordingErrorLogger()
-        let listener = SensorHealthCheckLifecycleListener(
+        let listener = makeHealthCheckListener(
             sensorStore: sensorStore,
             observerStore: observerStore,
-            // resumeSensors re-registers heart_rate; sleep stays missing.
+            // The re-arm re-registers heart_rate; sleep stays missing.
             healthKitManager: MockHealthKitManager(observerStore: observerStore, sensorsToRegister: [.heart_rate]),
             logger: logger
         )

@@ -2,9 +2,22 @@ import HealthKit
 
 actor HealthKitObserverStore: HealthKitObserverStoreProtocol {
     private var observers: [String: HKObserverQuery] = [:]
+    private var deliveryEnabledKeys: Set<String> = []
 
-    func addObserver(_ observer: HKObserverQuery, forKey key: String) {
+    func replaceObserver(
+        _ observer: HKObserverQuery,
+        forKey key: String,
+        stoppingDisplaced stop: (HKObserverQuery) -> Void,
+        executing execute: (HKObserverQuery) -> Void
+    ) {
+        // Stop-displaced → store → execute with no suspension point between the
+        // three, so `executed − stopped == registered` holds across arbitrary
+        // concurrent re-arms and a displaced query can never keep running.
+        if let displaced = observers[key] {
+            stop(displaced)
+        }
         observers[key] = observer
+        execute(observer)
     }
 
     func removeObserver(forKey key: String) -> HKObserverQuery? {
@@ -21,5 +34,21 @@ actor HealthKitObserverStore: HealthKitObserverStoreProtocol {
 
     func getRegisteredKeys() -> Set<String> {
         Set(observers.keys)
+    }
+
+    func recordDeliveryEnabled(forKey key: String) {
+        deliveryEnabledKeys.insert(key)
+    }
+
+    func removeDeliveryRecord(forKey key: String) {
+        deliveryEnabledKeys.remove(key)
+    }
+
+    func removeAllDeliveryRecords() {
+        deliveryEnabledKeys.removeAll()
+    }
+
+    func getDeliveryEnabledKeys() -> Set<String> {
+        deliveryEnabledKeys
     }
 }

@@ -78,8 +78,16 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
                 }
             }
         }
-        await observerStore.addObserver(query, for: sensor)
-        healthStore.execute(query)
+        // Atomic replace: if this sensor already has an executing observer (a
+        // repeated enableSensors, or two arms racing), the displaced query is
+        // stopped in the same store turn that registers and executes the new one.
+        let healthStore = self.healthStore
+        await observerStore.replaceObserver(
+            query,
+            for: sensor,
+            stoppingDisplaced: { healthStore.stop($0) },
+            executing: { healthStore.execute($0) }
+        )
     }
     
     /// Request additional background execution time from iOS
@@ -116,18 +124,51 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     }
     
     func enableBackgroundDelivery(for sensors: Set<SahhaSensor>) async throws {
+        // Per-sensor isolation: one denied type must not abort the rest of the
+        // (unordered) loop. Each success is recorded in the observer store so the
+        // health check can later re-enable exactly the sensors whose delivery is
+        // missing; the failures surface once, aggregated, after every sensor has
+        // been attempted.
+        var failed: [SahhaSensor: Error] = [:]
         for sensor in sensors {
-            if let sampleType = sensor.hkSampleType {
+            guard let sampleType = sensor.hkSampleType else { continue }
+            do {
                 try await healthStore.enableBackgroundDelivery(for: sampleType, frequency: .immediate)
+                await observerStore.recordDeliveryEnabled(for: sensor)
+            } catch {
+                failed[sensor] = error
             }
+        }
+        if !failed.isEmpty {
+            let failures = failed.sorted { $0.key.rawValue < $1.key.rawValue }
+            throw SahhaError(
+                message: "Background delivery could not be enabled for \(failures.count) sensor(s): \(failures.map(\.key.rawValue).joined(separator: ", "))",
+                error: failures.first?.value
+            )
         }
     }
 
     func disableBackgroundDelivery(for sensors: Set<SahhaSensor>) async throws {
+        // The delivery record is dropped whether or not the disable call succeeds:
+        // a record without a live enable would only hide the sensor from the
+        // health check, whereas re-enabling an already-enabled type is a
+        // documented-safe frequency replace.
+        var failed: [SahhaSensor: Error] = [:]
         for sensor in sensors {
-            if let sampleType = sensor.hkSampleType {
+            guard let sampleType = sensor.hkSampleType else { continue }
+            await observerStore.removeDeliveryRecord(for: sensor)
+            do {
                 try await healthStore.disableBackgroundDelivery(for: sampleType)
+            } catch {
+                failed[sensor] = error
             }
+        }
+        if !failed.isEmpty {
+            let failures = failed.sorted { $0.key.rawValue < $1.key.rawValue }
+            throw SahhaError(
+                message: "Background delivery could not be disabled for \(failures.count) sensor(s): \(failures.map(\.key.rawValue).joined(separator: ", "))",
+                error: failures.first?.value
+            )
         }
     }
     
@@ -145,6 +186,7 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     }
 
     private func disableAllBackgroundDeliveries() async {
+        await observerStore.removeAllDeliveryRecords()
         do {
             try await healthStore.disableAllBackgroundDelivery()
         } catch {

@@ -326,11 +326,21 @@ actor MockSensorStoreForHealthCheck: SensorStoreProtocol {
 
 actor MockHealthKitObserverStore: HealthKitObserverStoreProtocol {
     private var registeredKeys: Set<String> = []
+    private var deliveryKeys: Set<String> = []
 
-    /// Test helper: register a key without needing a real HKObserverQuery.
+    /// Test helpers: mark state without needing a real HKObserverQuery.
     func markRegistered(_ key: String) { registeredKeys.insert(key) }
+    func markDeliveryEnabled(_ key: String) { deliveryKeys.insert(key) }
 
-    func addObserver(_ observer: HKObserverQuery, forKey key: String) { registeredKeys.insert(key) }
+    func replaceObserver(
+        _ observer: HKObserverQuery,
+        forKey key: String,
+        stoppingDisplaced stop: (HKObserverQuery) -> Void,
+        executing execute: (HKObserverQuery) -> Void
+    ) {
+        registeredKeys.insert(key)
+        execute(observer)
+    }
     func removeObserver(forKey key: String) -> HKObserverQuery? {
         registeredKeys.remove(key)
         return nil
@@ -340,14 +350,19 @@ actor MockHealthKitObserverStore: HealthKitObserverStoreProtocol {
         return []
     }
     func getRegisteredKeys() -> Set<String> { registeredKeys }
+    func recordDeliveryEnabled(forKey key: String) { deliveryKeys.insert(key) }
+    func removeDeliveryRecord(forKey key: String) { deliveryKeys.remove(key) }
+    func removeAllDeliveryRecords() { deliveryKeys.removeAll() }
+    func getDeliveryEnabledKeys() -> Set<String> { deliveryKeys }
 }
 
 final class MockHealthKitManager: HealthKitManagerProtocol, @unchecked Sendable {
     private let observerStore: MockHealthKitObserverStore
     private let sensorsToRegister: Set<SahhaSensor>
 
-    /// Records invocations so tests can assert `resumeSensors()` was called.
+    /// Records invocations so tests can assert how the check re-armed.
     private(set) var resumeSensorsCallCount = 0
+    private(set) var resumeSensorsForCalls: [Set<SahhaSensor>] = []
 
     init(observerStore: MockHealthKitObserverStore, sensorsToRegister: Set<SahhaSensor>) {
         self.observerStore = observerStore
@@ -356,8 +371,20 @@ final class MockHealthKitManager: HealthKitManagerProtocol, @unchecked Sendable 
 
     func resumeSensors() async {
         resumeSensorsCallCount += 1
+        await arm()
+    }
+
+    func resumeSensors(for sensors: Set<SahhaSensor>) async {
+        resumeSensorsForCalls.append(sensors)
+        await arm()
+    }
+
+    /// A successful arm registers the observer AND records its delivery,
+    /// matching what the real coordinator path leaves in the store.
+    private func arm() async {
         for sensor in sensorsToRegister {
             await observerStore.markRegistered(sensor.rawValue)
+            await observerStore.markDeliveryEnabled(sensor.rawValue)
         }
     }
 
@@ -375,6 +402,16 @@ final class NoopErrorLogger: ErrorLoggerProtocol, @unchecked Sendable {
     func postError(_ error: Error, file: StaticString, function: StaticString, line: UInt) {}
 }
 
+/// Shared inert observer service for health-check tests that never exercise the
+/// delivery-repair path.
+final class InertHealthKitObserverService: HealthKitObserverServiceProtocol, @unchecked Sendable {
+    func startObservers(for sensors: Set<SahhaSensor>, handler: @escaping HealthKitObserverHandler) async throws {}
+    func stopObservers(for sensors: Set<SahhaSensor>) async throws {}
+    func enableBackgroundDelivery(for sensors: Set<SahhaSensor>) async throws {}
+    func disableBackgroundDelivery(for sensors: Set<SahhaSensor>) async throws {}
+    func dispose() async {}
+}
+
 @Test("SensorHealthCheckLifecycleListener: re-registers missing observers on lifecycle event")
 func testHealthCheckListenerRegistersMissingObservers() async throws {
     let sensorStore = MockSensorStoreForHealthCheck()
@@ -383,20 +420,24 @@ func testHealthCheckListenerRegistersMissingObservers() async throws {
     let observerStore = MockHealthKitObserverStore()   // starts empty — observer is "missing"
     let healthKitManager = MockHealthKitManager(
         observerStore: observerStore,
-        sensorsToRegister: [.heart_rate]   // resumeSensors will re-register it
+        sensorsToRegister: [.heart_rate]   // the set-scoped resume will re-register it
     )
 
     let listener = SensorHealthCheckLifecycleListener(
-        sensorStore: sensorStore,
-        observerStore: observerStore,
-        healthKitManager: healthKitManager,
-        logger: NoopErrorLogger()
+        healthCheckService: SensorHealthCheckService(
+            sensorStore: sensorStore,
+            observerStore: observerStore,
+            healthKitManager: healthKitManager,
+            observerService: InertHealthKitObserverService(),
+            logger: NoopErrorLogger()
+        )
     )
 
     await listener.handleLifecycleEvent(.app_foreground)
 
-    // HealthKitManager.resumeSensors() was invoked exactly once.
-    #expect(healthKitManager.resumeSensorsCallCount == 1)
+    // The bounded re-arm asked for exactly the missing sensor, nothing broader.
+    #expect(healthKitManager.resumeSensorsForCalls == [[.heart_rate]])
+    #expect(healthKitManager.resumeSensorsCallCount == 0)
 
     // The missing observer is now registered in the store.
     let keys = await observerStore.getRegisteredKeys()
