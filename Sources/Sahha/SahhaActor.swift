@@ -228,18 +228,20 @@ actor SahhaActor {
 
     // MARK: - Utilities
 
-    private func log(error: Error, message: String) async {
+    private func log(error: Error, message: String, file: StaticString = #fileID, function: StaticString = #function, line: UInt = #line) async {
         if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
-            logger.postError(error)
+            logger.postError(error, file: file, function: function, line: line)
         } else {
             Sahha.log("\(message): \(error)")
         }
     }
-    
-    /// Log an error through the DI-resolved ErrorLogger (for public API error logging)
-    func logError(_ error: Error) async {
+
+    /// Log an error through the DI-resolved ErrorLogger (for public API error logging).
+    /// The file/function/line defaults resolve at the caller, so forwarded errors report
+    /// the reporting site rather than this method.
+    func logError(_ error: Error, file: StaticString = #fileID, function: StaticString = #function, line: UInt = #line) async {
         if let logger = (try? await container?.resolve(ErrorLoggerProtocol.self)) {
-            logger.postError(error)
+            logger.postError(error, file: file, function: function, line: line)
         } else {
             Sahha.log("[Sahha] Error (logger unavailable): \(error)")
         }

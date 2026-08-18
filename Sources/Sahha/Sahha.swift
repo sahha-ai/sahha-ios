@@ -413,11 +413,16 @@ public class Sahha {
     }
 
     /// Helper for async APIs that return a non-optional result via completion handler.
+    /// The file/function/line defaults resolve at the public API call site, so errors
+    /// that carry no origin of their own are logged against the entry point that failed.
     private static func runAsyncWithCallback<T>(
         callback: @escaping (String?, T) -> Void,
         requiresAuth: Bool = false,
         task: @escaping @Sendable () async throws -> T,
-        defaultErrorValue: @autoclosure @escaping @Sendable () -> T
+        defaultErrorValue: @autoclosure @escaping @Sendable () -> T,
+        file: StaticString = #fileID,
+        function: StaticString = #function,
+        line: UInt = #line
     ) {
         let box = CallbackBox(callback: callback)
         Task {
@@ -429,8 +434,8 @@ public class Sahha {
                 }
             } catch {
                 // Log error through the SDK's error logger (respects environment filtering)
-                await actor.logError(error)
-                
+                await actor.logError(error, file: file, function: function, line: line)
+
                 let sahhaError = SahhaError.from(error)
                 DispatchQueue.main.async {
                     box.callback(sahhaError.localizedDescription, defaultErrorValue())
@@ -440,11 +445,16 @@ public class Sahha {
     }
 
     /// Helper for async APIs that return an optional result via completion handler.
+    /// The file/function/line defaults resolve at the public API call site, so errors
+    /// that carry no origin of their own are logged against the entry point that failed.
     private static func runAsyncWithCallback<T>(
         callback: @escaping (String?, T?) -> Void,
         requiresAuth: Bool = false,
         task: @escaping @Sendable () async throws -> T,
-        defaultErrorValue: @autoclosure @escaping @Sendable () -> T? = nil
+        defaultErrorValue: @autoclosure @escaping @Sendable () -> T? = nil,
+        file: StaticString = #fileID,
+        function: StaticString = #function,
+        line: UInt = #line
     ) {
         let box = CallbackBox(callback: callback)
         Task {
@@ -456,8 +466,8 @@ public class Sahha {
                 }
             } catch {
                 // Log error through the SDK's error logger (respects environment filtering)
-                await actor.logError(error)
-                
+                await actor.logError(error, file: file, function: function, line: line)
+
                 let sahhaError = SahhaError.from(error)
                 DispatchQueue.main.async {
                     box.callback(sahhaError.localizedDescription, defaultErrorValue())
