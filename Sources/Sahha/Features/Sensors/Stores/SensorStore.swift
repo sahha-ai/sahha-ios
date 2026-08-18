@@ -32,6 +32,17 @@ actor SensorStore: SensorStoreProtocol, Disposable {
         resolve()
     }
 
+    /// Capture-and-write in one non-async actor method: no suspension between
+    /// the read and the write, so concurrent replaces serialize whole and the
+    /// returned previous-sets chain without loss or duplication. The read side
+    /// is the lenient resolve and cannot throw; only the write can.
+    func replaceSensors(_ sensors: Set<SahhaSensor>) throws -> Set<SahhaSensor> {
+        let previous = resolve()
+        try storage.setObject(sensors, forKey: key)
+        self.sensors = sensors
+        return previous
+    }
+
     func hasSensor(_ sensor: SahhaSensor) -> Bool {
         // Routes through the same lenient read as getSensors: a cache-only
         // check would report every sensor absent until something else resolved
