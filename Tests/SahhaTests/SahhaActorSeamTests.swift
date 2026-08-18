@@ -36,8 +36,10 @@ struct SahhaActorSeamTests {
         // …and its storage side effects landed in the double, not UserDefaults.standard:
         // configure writes the DLQ migration marker through the resolved storage.
         #expect(storage.get(forKey: "dlq_migration_v1_complete") as? Bool == true)
-        // The device-log listener was registered on the injected observer.
-        #expect(await observerSpy.registrationCount == 1)
+        // The device-log and bring-up-retry listeners were registered on the
+        // injected observer (the retry listener registers pre-gate on every
+        // configure, PRD #76 D10).
+        #expect(await observerSpy.registrationCount == 2)
     }
 
     @Test("Configure-time bring-up failures reach the injected error logger")

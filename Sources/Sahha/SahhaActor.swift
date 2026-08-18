@@ -14,16 +14,43 @@ actor SahhaActor {
 
     private let registrar: DependencyRegistrar
     private let lifecycleObserver: any LifecycleObserverProtocol
+    private let retryMonitorFactory: @Sendable () -> NetworkMonitor
+
+    // MARK: Deferred bring-up state (PRD #76 D10)
+
+    /// Scheduling machine for the deferred bring-up. Replaced wholesale on every
+    /// configure ("every configure resets the machine").
+    private var retryPolicy = BringUpRetryPolicy()
+    /// The verdict that caused the current deferral — the unlock trigger treats a
+    /// locked-keychain deferral differently from a network one.
+    private var deferredVerdict: LaunchAuthVerdict?
+    /// Held strongly: the lifecycle observer holds listeners weakly.
+    private var bringUpRetryListener: BringUpRetryLifecycleListener?
+    /// Dedicated connectivity monitor, alive only while a deferral is
+    /// outstanding. Deliberately outside the DI container — `container.reset()`
+    /// can never see it, so it is stopped explicitly on completion, stand-down,
+    /// reconfigure, and deauthentication.
+    private var retryMonitor: NetworkMonitor?
+    /// Single-flight + completed latch for the private bring-up method, shared by
+    /// the launch gate, the public authenticate path, and every retry trigger.
+    private var bringUpTask: Task<Void, Never>?
+    private var bringUpCompleted = false
+    /// Bumped by every configure reset so a bring-up pass that straddles a
+    /// reconfigure cannot latch the fresh machine.
+    private var bringUpGeneration: UInt64 = 0
 
     /// Non-shared instances exist for integration tests: inject a registrar that
-    /// swaps storage/network registrations for doubles, and an observer spy so no
-    /// NotificationCenter observers are installed.
+    /// swaps storage/network registrations for doubles, an observer spy so no
+    /// NotificationCenter observers are installed, and a monitor factory that
+    /// returns a test-controlled `NetworkMonitor`.
     init(
         registrar: @escaping DependencyRegistrar = SahhaActor.registerProductionDependencies,
-        lifecycleObserver: any LifecycleObserverProtocol = LifecycleObserver()
+        lifecycleObserver: any LifecycleObserverProtocol = LifecycleObserver(),
+        retryMonitorFactory: @escaping @Sendable () -> NetworkMonitor = { NetworkMonitor() }
     ) {
         self.registrar = registrar
         self.lifecycleObserver = lifecycleObserver
+        self.retryMonitorFactory = retryMonitorFactory
     }
 
     static func registerProductionDependencies(container: DIContainer, settings: SahhaSettings) async {
@@ -57,6 +84,15 @@ actor SahhaActor {
         self.settings = settings
 
         configurationTask = Task { [settings] in
+            // Every configure resets the deferred bring-up machine (PRD #76 D10):
+            // the fresh container must not inherit backoff windows, attempt
+            // budgets, a completed latch, or a live monitor from its predecessor.
+            await self.resetDeferredBringUp()
+            // The retry listener registers before the auth gate so a deferred
+            // verdict has its triggers in place with no gap; registration is
+            // identity-deduped, so repeat configures do not stack listeners.
+            await self.registerBringUpRetryListener()
+
             let container = DIContainer()
 
             await self.registrar(container, settings)
@@ -88,8 +124,25 @@ actor SahhaActor {
             // failed configure still leaves the actor unconfigured.
             self.container = container
 
-            if  await authManager.hasValidProfileToken() {
+            // Token-refresh piggyback (D10): a successful refresh anywhere in the
+            // SDK proves the session valid and the network reachable — exactly
+            // what a deferred bring-up is waiting on. Dispatched on a fresh task
+            // because the handler runs inside the refresh flight, and re-entering
+            // the auth manager synchronously would self-join that flight.
+            await authManager.setOnRefreshSuccess { [weak self] in
+                Task { await self?.handleTokenRefreshPiggyback() }
+            }
+
+            let verdict = await authManager.launchVerdict()
+            switch verdict {
+            case .valid:
                 await self.startAuthenticatedServices(container)
+            case .unauthenticated, .terminalSessionExpiry:
+                // Nothing a retry could change: signed out, or the session is
+                // already cleared. The retry machine stays dormant.
+                break
+            case .transientRefreshFailure, .tokenStoreUnreadable:
+                await self.deferBringUp(after: verdict)
             }
         }
         
@@ -105,7 +158,33 @@ actor SahhaActor {
         await startAuthenticatedServices(container)
     }
 
+    /// Single-flight bring-up with a completed latch (PRD #76 D10). The launch
+    /// gate, the public authenticate path, and every deferred-retry trigger
+    /// funnel through here; without the shared guard, a retry racing an
+    /// authenticate would run the bring-up twice — and a second pass arms one
+    /// live observer query per sensor through a second door (the leak #86
+    /// closes at the store level). Concurrent callers join the running pass;
+    /// post-completion callers are no-ops until the next configure resets the
+    /// latch.
     private func startAuthenticatedServices(_ container: DIContainer) async {
+        if bringUpCompleted { return }
+        if let bringUpTask {
+            return await bringUpTask.value
+        }
+        let generation = bringUpGeneration
+        let task = Task { await self.runAuthenticatedBringUp(container) }
+        bringUpTask = task
+        await task.value
+        // Only the starter clears the flight, and only when no configure reset
+        // the machine while the pass ran — a pass that straddles a reconfigure
+        // must not latch the fresh machine's gate.
+        if generation == bringUpGeneration {
+            bringUpTask = nil
+            bringUpCompleted = true
+        }
+    }
+
+    private func runAuthenticatedBringUp(_ container: DIContainer) async {
         async let a: Void = startDataCollection(container)
         async let b: Void = forceSyncDeviceInfo(container)
         async let c: Void = setupLifecycleListeners(container)
@@ -121,6 +200,115 @@ actor SahhaActor {
         await postPendingSensorStoreAnomaly(container)
         await runSensorHealthCheck(container)
         await uploadDiagnosticReport(container)
+    }
+
+    // MARK: - Deferred bring-up retry (PRD #76 D10)
+
+    private func resetDeferredBringUp() async {
+        bringUpGeneration &+= 1
+        bringUpTask = nil
+        bringUpCompleted = false
+        retryPolicy = BringUpRetryPolicy()
+        deferredVerdict = nil
+        await stopRetryMonitor()
+    }
+
+    private func registerBringUpRetryListener() async {
+        if bringUpRetryListener == nil {
+            bringUpRetryListener = BringUpRetryLifecycleListener { [weak self] event in
+                await self?.handleBringUpRetryTrigger(event)
+            }
+        }
+        guard let bringUpRetryListener else { return }
+        // Resume and foreground cover ordinary app use; unlock is the designated
+        // signal for the locked-keychain deferral (protected data became
+        // available). One listener, one mechanism.
+        await lifecycleObserver.registerListener(
+            bringUpRetryListener,
+            for: [.app_resume, .app_foreground, .app_unlocked]
+        )
+    }
+
+    private func deferBringUp(after verdict: LaunchAuthVerdict) async {
+        deferredVerdict = verdict
+        retryPolicy.arm(at: Date())
+        await startRetryMonitor()
+        Sahha.log("[SahhaActor] Authenticated bring-up deferred (\(verdict)); retrying on lifecycle, unlock, and network events")
+    }
+
+    private func handleBringUpRetryTrigger(_ event: LifecycleEvent?) async {
+        guard container != nil else { return }
+        // The unlock event is the designated retry signal for a locked-keychain
+        // deferral: the blocking cause is gone by definition, so it does not
+        // wait out a backoff window sized for network failures. (The hard
+        // inter-attempt floor still applies.)
+        if event == .app_unlocked, deferredVerdict == .tokenStoreUnreadable {
+            retryPolicy.noteStateChange(resettingAttempts: false)
+        }
+        guard retryPolicy.admitTrigger(at: Date()) else { return }
+        await runDeferredBringUpAttempt()
+    }
+
+    private func handleNetworkRestored() async {
+        // An offline→online transition is direct evidence the transient cause is
+        // gone: bypass the current backoff window once and grant a fresh attempt
+        // budget (D10).
+        retryPolicy.noteStateChange(resettingAttempts: true)
+        await handleBringUpRetryTrigger(nil)
+    }
+
+    private func handleTokenRefreshPiggyback() async {
+        guard retryPolicy.isArmed else { return }
+        // A successful refresh already proved the session valid and the network
+        // up, so the attempt is admitted directly: the verdict re-read is
+        // answered from the just-saved token without a network call, and the
+        // bring-up's own single-flight latch collapses duplicates. The backoff
+        // gate exists to space out doomed network retries — this path cannot
+        // generate one.
+        await runDeferredBringUpAttempt()
+    }
+
+    private func runDeferredBringUpAttempt() async {
+        guard let container else { return }
+        // The only exit from a locked-keychain deferral is a successful reload;
+        // for every other verdict the reload is a no-op.
+        if let tokenStore = try? await container.resolve(TokenStoreProtocol.self) {
+            await tokenStore.reloadPersistedSession()
+        }
+        guard let authManager = try? await container.resolve(AuthManagerProtocol.self) else { return }
+        let verdict = await authManager.launchVerdict()
+        switch verdict {
+        case .valid:
+            await startAuthenticatedServices(container)
+            retryPolicy.recordSuccess()
+            await stopRetryMonitor()
+        case .unauthenticated, .terminalSessionExpiry:
+            // The deferral outlived the session (deauthenticated, or the refresh
+            // token died for good): stand down for the life of this configure.
+            retryPolicy.standDown()
+            deferredVerdict = nil
+            await stopRetryMonitor()
+        case .transientRefreshFailure, .tokenStoreUnreadable:
+            deferredVerdict = verdict
+            retryPolicy.recordFailure(at: Date())
+        }
+    }
+
+    private func startRetryMonitor() async {
+        guard retryMonitor == nil else { return }
+        let monitor = retryMonitorFactory()
+        retryMonitor = monitor
+        _ = await monitor.onStateChange { [weak self] connected in
+            guard connected else { return }
+            await self?.handleNetworkRestored()
+        }
+        await monitor.startMonitoring()
+    }
+
+    private func stopRetryMonitor() async {
+        guard let monitor = retryMonitor else { return }
+        retryMonitor = nil
+        await monitor.dispose()
     }
 
     /// Posts the anomaly latched by the sensor store's first lenient read (a
@@ -246,6 +434,9 @@ actor SahhaActor {
     func deauthenticate() async throws {
         if let task = configurationTask { _ = try await task.value }
         let (container, settings) = try await requireConfig()
+        // The retry monitor lives outside the container, so reset() cannot stop
+        // it; a deferred retry must not survive deauthentication (PRD #76 D10).
+        await stopRetryMonitor()
         await container.reset()
         DLQMigrator.reset()
         try await configure(with: settings)
