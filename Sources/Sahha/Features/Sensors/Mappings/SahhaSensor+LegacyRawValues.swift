@@ -65,7 +65,9 @@ extension SahhaSensor {
         uniquingKeysWith: { first, _ in first }
     )
 
-    /// Current raw value → legacy raw value, for the round-trip fixture.
+    /// Current raw value → legacy raw value: backs the anchor store's
+    /// read-time alias (a renamed sensor's anchor is found under its old-name
+    /// key) and the round-trip fixture.
     static let currentToLegacyRawValue: [String: String] = Dictionary(
         legacyRenames.map { ($0.current, $0.legacy) },
         uniquingKeysWith: { first, _ in first }
