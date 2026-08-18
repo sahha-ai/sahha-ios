@@ -60,6 +60,10 @@ private struct InertActivitySummaryUploader: HealthKitActivitySummaryUploaderPro
     func postInsights() async {}
 }
 
+private struct InertSensorProbe: SensorProbeServiceProtocol {
+    func runProbe() async {}
+}
+
 private struct InertSampleQueryService: HealthKitSampleQueryServiceProtocol {
     func runSampleQuery(
         for sampleType: HKSampleType,
@@ -238,9 +242,11 @@ struct SilentFailureSitePostingTests {
         let marker = SahhaError(message: "sensor store unreadable")
         let logger = RecordingErrorLogger()
         let listener = SensorProbeLifecycleListener(
-            sensorStore: ThrowingSensorStore(error: marker),
-            sampleQueryService: InertSampleQueryService(),
-            logger: logger
+            probeService: SensorProbeService(
+                sensorStore: ThrowingSensorStore(error: marker),
+                sampleQueryService: InertSampleQueryService(),
+                logger: logger
+            )
         )
 
         await listener.handleLifecycleEvent(.app_foreground)
@@ -261,6 +267,7 @@ struct SilentFailureSitePostingTests {
         let logger = RecordingErrorLogger()
         let builder = DiagnosticReportBuilder(
             sensorStore: ThrowingSensorStore(error: marker),
+            sensorProbe: InertSensorProbe(),
             dataLogUploader: NullDataLogUploader(),
             tagUploader: NullTagUploader(),
             storage: InMemoryStorage(),
@@ -284,6 +291,7 @@ struct SilentFailureSitePostingTests {
         let logger = RecordingErrorLogger()
         let builder = DiagnosticReportBuilder(
             sensorStore: MockSensorStoreForHealthCheck(),
+            sensorProbe: InertSensorProbe(),
             dataLogUploader: NullDataLogUploader(),
             tagUploader: NullTagUploader(),
             storage: storage,

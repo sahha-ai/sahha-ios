@@ -3,6 +3,7 @@ enum DiagnosticsDI {
         await container.register(DiagnosticReportBuilderProtocol.self) { container in
             DiagnosticReportBuilder(
                 sensorStore: try await container.resolve(SensorStoreProtocol.self),
+                sensorProbe: try await container.resolve(SensorProbeServiceProtocol.self),
                 dataLogUploader: try await container.resolve(DataLogUploaderProtocol.self),
                 tagUploader: try await container.resolve(TagUploaderProtocol.self),
                 storage: try await container.resolve(UserDefaultsStorageProtocol.self),

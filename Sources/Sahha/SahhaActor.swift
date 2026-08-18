@@ -112,6 +112,37 @@ actor SahhaActor {
         async let d: Void = syncDemographic(container)
         async let e: Void = startBackgroundCoordinator(container)
         _ = await (a, b, c, d, e)
+        // Deterministic bring-up tail (PRD #76 D8), after every branch above —
+        // observer arming included — so it runs identically on the launch,
+        // authenticate, and deferred-retry paths. Lifecycle listeners cannot
+        // stand in for this: the resume event can fire before listeners
+        // register on cold launch and be lost.
+        await postPendingSensorStoreAnomaly(container)
+        await uploadDiagnosticReport(container)
+    }
+
+    /// Posts the anomaly latched by the sensor store's first lenient read (a
+    /// healed 1.3.7-era set, a foreign value, undecodable data). Latched rather
+    /// than posted at read time so it lands here, authenticated, instead of
+    /// firing pre-auth and being lost.
+    private func postPendingSensorStoreAnomaly(_ container: DIContainer) async {
+        do {
+            let sensorStore = try await container.resolve(SensorStoreProtocol.self)
+            if let anomaly = await sensorStore.drainPendingAnomaly() {
+                await log(error: SahhaError(message: anomaly.description), message: "sensor store anomaly")
+            }
+        } catch {
+            await log(error: error, message: "postPendingSensorStoreAnomaly failed")
+        }
+    }
+
+    private func uploadDiagnosticReport(_ container: DIContainer) async {
+        do {
+            let uploadService = try await container.resolve(DiagnosticUploadServiceProtocol.self)
+            try await uploadService.uploadDiagnosticReport()
+        } catch {
+            await log(error: error, message: "bring-up diagnostic upload failed")
+        }
     }
 
     private func startBackgroundCoordinator(_ container: DIContainer) async {

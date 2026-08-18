@@ -5,11 +5,16 @@ enum SensorDI {
                 storage: try await container.resolve(UserDefaultsStorageProtocol.self)
             )
         }
-        await container.register(SensorProbeLifecycleListener.self) { container in
-            SensorProbeLifecycleListener(
+        await container.register(SensorProbeServiceProtocol.self) { container in
+            SensorProbeService(
                 sensorStore: try await container.resolve(SensorStoreProtocol.self),
                 sampleQueryService: try await container.resolve(HealthKitSampleQueryServiceProtocol.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
+            )
+        }
+        await container.register(SensorProbeLifecycleListener.self) { container in
+            SensorProbeLifecycleListener(
+                probeService: try await container.resolve(SensorProbeServiceProtocol.self)
             )
         }
     }
