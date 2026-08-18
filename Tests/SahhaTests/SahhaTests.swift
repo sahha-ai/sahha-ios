@@ -4,24 +4,6 @@ import HealthKit  // For HealthKit mocks
 import Compression  // For verifying gzip round-trips
 @testable import Sahha  // Access internal SDK components
 
-// MARK: - Mocks (Self-contained for testing; no SDK changes)
-final class MockHKHealthStore: HKHealthStore, @unchecked Sendable {
-    var executedQueries: [HKObserverQuery] = []
-    var stoppedQueries: [HKObserverQuery] = []
-
-    override func execute(_ query: HKQuery) {
-        if let observerQuery = query as? HKObserverQuery {
-            executedQueries.append(observerQuery)
-        }
-    }
-
-    override func stop(_ query: HKQuery) {
-        if let observerQuery = query as? HKObserverQuery {
-            stoppedQueries.append(observerQuery)
-        }
-    }
-}
-
 // MARK: - Tests
 @Test("APIClient: GZIP compression emits valid framing and round-trips to the original bytes")
 func testGZIPCompression() async throws {
@@ -143,32 +125,39 @@ func testDeadLetterQueueCleanup() async throws {
     try? FileManager.default.removeItem(at: tempDir)
 }
 
-@Test("SDK: Configuration succeeds")
-func testSDKConfiguration() async throws {
-    let settings = SahhaSettings(environment: .sandbox)  // Use test settings
-    try await SahhaActor.shared.configure(with: settings)
+/// Tests that drive the SHARED actor are `.serialized`: swift-testing runs tests in
+/// parallel by default, and concurrent tests mutating the developer's real
+/// UserDefaults/Keychain through one shared actor race each other. Prefer a
+/// non-shared `SahhaActor` over doubles (see SahhaActorSeamTests) where possible.
+@Suite("Shared SahhaActor integration", .serialized)
+struct SharedSahhaActorTests {
+    @Test("SDK: Configuration succeeds")
+    func testSDKConfiguration() async throws {
+        let settings = SahhaSettings(environment: .sandbox)  // Use test settings
+        try await SahhaActor.shared.configure(with: settings)
 
-    // requireConfig() throws unless the DI container was built; a clean return
-    // (and the round-tripped environment) proves configuration completed.
-    let (_, resolvedSettings) = try await SahhaActor.shared.requireConfig()
-    #expect(resolvedSettings.environment == .sandbox)
-}
+        // requireConfig() throws unless the DI container was built; a clean return
+        // (and the round-tripped environment) proves configuration completed.
+        let (_, resolvedSettings) = try await SahhaActor.shared.requireConfig()
+        #expect(resolvedSettings.environment == .sandbox)
+    }
 
-@Test("SDK: Authentication rejects empty credentials before any network call")
-func testSDKAuthentication() async throws {
-    try await SahhaActor.shared.configure(with: SahhaSettings(environment: .sandbox))
-    let authManager = try await SahhaActor.shared.authManager()
+    @Test("SDK: Authentication rejects empty credentials before any network call")
+    func testSDKAuthentication() async throws {
+        try await SahhaActor.shared.configure(with: SahhaSettings(environment: .sandbox))
+        let authManager = try await SahhaActor.shared.authManager()
 
-    // Empty appId is rejected by validation before the auth service is contacted,
-    // so this exercises real behavior without depending on the network.
-    await #expect(throws: SahhaError.self) {
-        try await authManager.authenticate(appId: "", appSecret: "test-secret", externalId: "test-external-id")
+        // Empty appId is rejected by validation before the auth service is contacted,
+        // so this exercises real behavior without depending on the network.
+        await #expect(throws: SahhaError.self) {
+            try await authManager.authenticate(appId: "", appSecret: "test-secret", externalId: "test-external-id")
+        }
     }
 }
 
 @Test("SDK: HealthKit observer service registers an observer query")
 func testSDKHealthKitObserver() async throws {
-    let mockHealthStore = MockHKHealthStore()
+    let mockHealthStore = RecordingHealthStore()
     let observerStore = MockHealthKitObserverStore()
     let observerService = HealthKitObserverService(
         healthStore: mockHealthStore,

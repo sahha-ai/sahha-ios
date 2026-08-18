@@ -16,29 +16,6 @@ import Foundation
 @Suite("Deauthentication state reset")
 struct DeauthStateResetTests {
 
-    /// In-memory `UserDefaults` stand-in so the test never touches real storage.
-    private final class InMemoryStorage: UserDefaultsStorageProtocol, @unchecked Sendable {
-        private let lock = NSLock()
-        private var store: [String: Any] = [:]
-
-        func set(_ value: Any?, forKey key: String) {
-            lock.lock(); defer { lock.unlock() }
-            if let value { store[key] = value } else { store.removeValue(forKey: key) }
-        }
-        func get(forKey key: String) -> Any? {
-            lock.lock(); defer { lock.unlock() }
-            return store[key]
-        }
-        func removeObject(forKey key: String) {
-            lock.lock(); defer { lock.unlock() }
-            store.removeValue(forKey: key)
-        }
-        func allKeys() -> [String] {
-            lock.lock(); defer { lock.unlock() }
-            return Array(store.keys)
-        }
-    }
-
     private func makeUploader(
         tempDir: URL,
         sentStore: SentItemStore

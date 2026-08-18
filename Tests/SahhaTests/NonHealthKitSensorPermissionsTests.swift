@@ -107,50 +107,6 @@ struct NonHealthKitSensorPermissionsTests {
 
 // MARK: - Mocks (self-contained for this suite)
 
-/// HKHealthStore stub that records authorization and status requests and answers
-/// them immediately, so tests can assert exactly which read types reached HealthKit.
-private final class RecordingHealthStore: HKHealthStore, @unchecked Sendable {
-    private let lock = NSLock()
-    private var _authorizationRequests: [Set<HKObjectType>] = []
-    private var _statusRequests: [Set<HKObjectType>] = []
-    var statusToReturn: HKAuthorizationRequestStatus = .unnecessary
-
-    var authorizationRequests: [Set<HKObjectType>] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _authorizationRequests
-    }
-
-    var statusRequests: [Set<HKObjectType>] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _statusRequests
-    }
-
-    override func requestAuthorization(
-        toShare typesToShare: Set<HKSampleType>?,
-        read typesToRead: Set<HKObjectType>?,
-        completion: @escaping (Bool, Error?) -> Void
-    ) {
-        lock.lock()
-        _authorizationRequests.append(typesToRead ?? [])
-        lock.unlock()
-        completion(true, nil)
-    }
-
-    override func getRequestStatusForAuthorization(
-        toShare typesToShare: Set<HKSampleType>,
-        read typesToRead: Set<HKObjectType>,
-        completion: @escaping (HKAuthorizationRequestStatus, Error?) -> Void
-    ) {
-        lock.lock()
-        _statusRequests.append(typesToRead)
-        let status = statusToReturn
-        lock.unlock()
-        completion(status, nil)
-    }
-}
-
 /// A HealthKitManager wired with a real permissions service (over the recording
 /// store) and inert stubs for everything else.
 private struct ManagerHarness {
