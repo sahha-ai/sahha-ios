@@ -35,27 +35,58 @@ final class HealthKitManager: HealthKitManagerProtocol {
     
     func enableSensors(_ sensors: Set<SahhaSensor>) async throws {
         let expanded = SahhaSensor.expanded(sensors)
+        // Empty-set guard first, before any write or teardown: a bad call must
+        // not wipe the persisted set and stop collection on its way to the error.
+        guard !expanded.isEmpty else {
+            throw SahhaError(message: "Sensor set cannot be empty.")
+        }
         let tagSensors = expanded.filter { $0.dataLogType == .reproductive || $0.dataLogType == .symptom }
         let dataLogSensors = expanded.subtracting(tagSensors)
 
+        // Write-always store phase: the requested set is persisted unconditionally,
+        // before any teardown that could fail. A store failure is posted and enable
+        // continues off the in-memory set — the empty catch that used to wrap this
+        // phase both hid and perpetuated the poisoned-store incident.
+        var previousSensors: Set<SahhaSensor> = []
         do {
-            // Get existing sensors and overwrite storage
-            let enabledSensors = try await sensorStore.getSensors()
-            // Extract previously enabled sensors and stop data collection
-            let sensorsToStop = enabledSensors.subtracting(expanded)
+            previousSensors = try await sensorStore.replaceSensors(expanded)
+        } catch {
+            logger.postError(SahhaError(message: "The sensor store failed while enabling sensors.", error: error))
+        }
+
+        let previousHealthKitBacked = previousSensors.filter { !$0.hkPermissions.isEmpty }
+        let newHasHealthKitBacked = expanded.contains { !$0.hkPermissions.isEmpty }
+        if !previousHealthKitBacked.isEmpty, !newHasHealthKitBacked {
+            // Zero-HealthKit-backed guard: replacing a HealthKit-backed set with one
+            // containing none is almost always unintended, so the write stands but
+            // HealthKit teardown is skipped and the replacement is reported. Never
+            // throws, and device-side collection below still starts — all-non-HealthKit
+            // sets remain a supported flow on their own.
+            logger.postError(SahhaError(message: "enableSensors replaced \(previousHealthKitBacked.count) HealthKit-backed sensor(s) with a set containing none; the new set was persisted, but HealthKit teardown was skipped and the replaced sensors may keep collecting until the next launch."))
+        } else {
+            // Best-effort teardown of removed sensors, after the write so a stop
+            // failure can never block persistence. Each stop is caught independently —
+            // one coordinator's failure must not skip the other's stop. Fail-open:
+            // sensors whose stop failed keep collecting for this process lifetime.
+            let sensorsToStop = previousSensors.subtracting(expanded)
             if !sensorsToStop.isEmpty {
                 let tagSensorsToStop = sensorsToStop.filter { $0.dataLogType == .reproductive || $0.dataLogType == .symptom }
                 let dataLogSensorsToStop = sensorsToStop.subtracting(tagSensorsToStop)
                 if !dataLogSensorsToStop.isEmpty {
-                    try await dataLogCoordinator.stopDataLogCollection(for: dataLogSensorsToStop)
+                    do {
+                        try await dataLogCoordinator.stopDataLogCollection(for: dataLogSensorsToStop)
+                    } catch {
+                        logger.postError(error)
+                    }
                 }
                 if !tagSensorsToStop.isEmpty {
-                    try await tagCoordinator.stopTagCollection(for: tagSensorsToStop)
+                    do {
+                        try await tagCoordinator.stopTagCollection(for: tagSensorsToStop)
+                    } catch {
+                        logger.postError(error)
+                    }
                 }
             }
-            // Overwrite store with newly enabled sensors (granular list for observers/queries)
-            try await sensorStore.setSensors(expanded)
-        } catch {
         }
 
         // Request permissions and start data collection (one dialog for all nutrition/reproductive types)
@@ -64,19 +95,31 @@ final class HealthKitManager: HealthKitManagerProtocol {
         // Post-grant setup must never leave the caller's callback waiting indefinitely.
         // If it exceeds the timeout, the work continues in the abandoned background task
         // (and observers self-heal via resumeSensors on the next launch); the timeout is
-        // logged rather than thrown. Any other error still propagates as before.
+        // logged rather than thrown. Each side arms independently — the set is already
+        // persisted, so a data-log failure is posted rather than thrown and must not
+        // kill reproductive/symptom arming (or vice versa). The raw error is posted so
+        // a cancelled abandoned task stays filtered out.
         let dataLogCoordinator = self.dataLogCoordinator
         let tagCoordinator = self.tagCoordinator
+        let logger = self.logger
         do {
             try await withAbandoningTimeout(
                 seconds: 60,
                 operationName: "Sensor data collection setup"
             ) {
                 if !dataLogSensors.isEmpty {
-                    try await dataLogCoordinator.startDataLogCollection(for: dataLogSensors)
+                    do {
+                        try await dataLogCoordinator.startDataLogCollection(for: dataLogSensors)
+                    } catch {
+                        logger.postError(error)
+                    }
                 }
                 if !tagSensors.isEmpty {
-                    try await tagCoordinator.startTagCollection(for: tagSensors)
+                    do {
+                        try await tagCoordinator.startTagCollection(for: tagSensors)
+                    } catch {
+                        logger.postError(error)
+                    }
                 }
             }
         } catch let error as AsyncTimeoutError {
@@ -131,7 +174,14 @@ final class HealthKitManager: HealthKitManagerProtocol {
         do {
             enabledSensors = try await sensorStore.getSensors()
         } catch {
-            return .pending
+            // Truthful status (PRD #76 D5a): a store failure surfaces as an error,
+            // not the success-shaped (nil, .pending) that hid the poisoned-store
+            // incident from wrapper SDKs. Posted here too, so the site stays
+            // observable off the public callback path; the shared origin dedups
+            // the facade's own log of the rethrow.
+            let statusError = SahhaError(message: "Sensor status could not be read from the sensor store.", error: error)
+            logger.postError(statusError)
+            throw statusError
         }
         guard expanded.isSubset(of: enabledSensors) else { return .pending }
 
