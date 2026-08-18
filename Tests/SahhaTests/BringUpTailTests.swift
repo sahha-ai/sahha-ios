@@ -306,10 +306,13 @@ struct BringUpTailTests {
         let report = try decodeReport(try #require(apiClient.diagnosticRequests.first))
         #expect(report.enabledSensors == ["sleep", "sugar_intake"])
 
-        // A second bring-up on the same session finds the latch already drained.
+        // A second bring-up call on the same session is a no-op: the completed
+        // latch (PRD #76 D10) admits exactly one pass per configure, so the
+        // drained anomaly latch is never even re-read and no second report is
+        // uploaded.
         try await actor.startAuthenticatedServices()
         #expect(anomalyPosts().isEmpty)
-        #expect(apiClient.diagnosticRequests.count == 2)
+        #expect(apiClient.diagnosticRequests.count == 1)
     }
 
     // MARK: Bring-up-tail health check

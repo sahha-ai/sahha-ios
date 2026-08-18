@@ -119,6 +119,12 @@ actor NetworkMonitor: Disposable {
     func removeCallback(token: CallbackToken) async {
         stateChangeCallbacks.removeValue(forKey: token)
     }
+
+    /// How many state-change callbacks are currently registered. `dispose()`
+    /// clears them all, which is how tests observe that a monitor was stopped.
+    var registeredCallbackCount: Int {
+        stateChangeCallbacks.count
+    }
     
     /// Notify all registered callbacks
     private nonisolated func notifyStateChange(_ connected: Bool) {

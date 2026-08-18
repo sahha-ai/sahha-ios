@@ -8,6 +8,7 @@ final class AuthManager: AuthManagerProtocol, Disposable {
 
     private let refreshTaskActor = SingleThrowingTaskActor<TokenResponse>()
     private let refreshPacer = RefreshPacer()
+    private let refreshSuccessHandler = RefreshSuccessHandlerBox()
 
     private static let unauthenticatedMessage = "Unauthorized. Please call `Sahha.authenticate(...)` first."
     static let sessionExpiredMessage = "Session expired. Please authenticate again."
@@ -86,6 +87,28 @@ final class AuthManager: AuthManagerProtocol, Disposable {
         }
     }
 
+    func launchVerdict() async -> LaunchAuthVerdict {
+        // A nil token behind a failed keychain read means "unknown", not "signed
+        // out" — only a successful store reload can produce a real verdict.
+        if await tokenStore.hasUnreadablePersistedSession() {
+            return .tokenStoreUnreadable
+        }
+        guard await tokenStore.token() != nil else { return .unauthenticated }
+        do {
+            _ = try await getValidProfileToken()
+            return .valid
+        } catch {
+            // The refresh flight's terminal/transient split is already pinned by its
+            // store effect — terminal clears the tokens, transient keeps them — so
+            // read that invariant back rather than re-classifying the error here.
+            return await tokenStore.token() == nil ? .terminalSessionExpiry : .transientRefreshFailure
+        }
+    }
+
+    func setOnRefreshSuccess(_ handler: (@Sendable () -> Void)?) {
+        refreshSuccessHandler.set(handler)
+    }
+
     /// Refreshes the stored token at most once across concurrent callers.
     ///
     /// `staleToken` is the profile token the caller found unusable — either locally expired
@@ -134,6 +157,10 @@ final class AuthManager: AuthManagerProtocol, Disposable {
                 try Task.checkCancellation()
                 try await self.tokenStore.saveToken(response)
                 await self.refreshPacer.recordSuccess()
+                // D10 piggyback: notify synchronously and fire-and-forget — a handler
+                // that awaited back into this manager would self-join the still-open
+                // flight.
+                self.refreshSuccessHandler.invoke()
                 return response
             } catch {
                 if Self.isSessionTerminal(error, refreshToken: current.refreshToken) {
@@ -179,6 +206,25 @@ final class AuthManager: AuthManagerProtocol, Disposable {
 
     func dispose() async {
         await refreshTaskActor.cancel()
+    }
+}
+
+/// Lock-boxed handler storage: `AuthManager` is a plain class shared across tasks,
+/// and the refresh flight reads the handler without a suspension point.
+private final class RefreshSuccessHandlerBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var handler: (@Sendable () -> Void)?
+
+    func set(_ newHandler: (@Sendable () -> Void)?) {
+        lock.lock(); defer { lock.unlock() }
+        handler = newHandler
+    }
+
+    func invoke() {
+        lock.lock()
+        let current = handler
+        lock.unlock()
+        current?()
     }
 }
 
