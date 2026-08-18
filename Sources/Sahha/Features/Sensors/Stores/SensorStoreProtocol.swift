@@ -12,6 +12,10 @@ protocol SensorStoreProtocol: Actor {
     func hasSensor(_ sensor: SahhaSensor) -> Bool
     func setSensorStatuses(_ statuses: [SahhaSensor: SahhaSensorStatus])
     func getSensorStatuses() -> [SahhaSensor: SahhaSensorStatus]
+    /// Lays `statuses` over the existing entries: sensors absent from
+    /// `statuses` keep whatever status they had. Probe results land through
+    /// here, so a partial probe never erases earlier findings.
+    func mergeSensorStatuses(_ statuses: [SahhaSensor: SahhaSensorStatus])
     /// Returns the anomaly latched by the most recent lenient read, exactly
     /// once; nil thereafter. Reads themselves never consume it — the
     /// authenticated bring-up drains and posts it.
@@ -21,6 +25,12 @@ protocol SensorStoreProtocol: Actor {
 extension SensorStoreProtocol {
     /// Default so lightweight test doubles need not track anomalies.
     func drainPendingAnomaly() -> SensorStoreAnomaly? { nil }
+
+    /// Default composed from the status primitives. Actor-isolated with no
+    /// suspension points, so the read-modify-write is one actor turn.
+    func mergeSensorStatuses(_ statuses: [SahhaSensor: SahhaSensorStatus]) {
+        setSensorStatuses(getSensorStatuses().merging(statuses) { _, probed in probed })
+    }
 
     /// Default composed from the read/write primitives. Actor-isolated with no
     /// suspension points, so it is one actor turn even for conformers that rely

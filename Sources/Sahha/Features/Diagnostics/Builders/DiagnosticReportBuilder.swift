@@ -7,6 +7,7 @@ protocol DiagnosticReportBuilderProtocol: Sendable {
 
 actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
     private let sensorStore: SensorStoreProtocol
+    private let sensorProbe: SensorProbeServiceProtocol
     private let dataLogUploader: DataLogUploaderProtocol
     private let tagUploader: TagUploaderProtocol
     private let storage: UserDefaultsStorageProtocol
@@ -16,12 +17,14 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
 
     init(
         sensorStore: SensorStoreProtocol,
+        sensorProbe: SensorProbeServiceProtocol,
         dataLogUploader: DataLogUploaderProtocol,
         tagUploader: TagUploaderProtocol,
         storage: UserDefaultsStorageProtocol,
         logger: ErrorLoggerProtocol
     ) {
         self.sensorStore = sensorStore
+        self.sensorProbe = sensorProbe
         self.dataLogUploader = dataLogUploader
         self.tagUploader = tagUploader
         self.storage = storage
@@ -39,7 +42,17 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
             logger.postError(error)
             enabledSensors = []
         }
-        let storedStatuses = await sensorStore.getSensorStatuses()
+        var storedStatuses = await sensorStore.getSensorStatuses()
+        if storedStatuses.isEmpty, !enabledSensors.isEmpty {
+            // No probe has produced anything yet — the probe's foreground event
+            // does not fire on cold launch, so waiting on the listener would
+            // report every sensor as all-pending forever on some launches. Probe
+            // now, then build. Skipped whenever statuses exist, so warm builds
+            // pay no probe wall-clock cost; skipped when the enabled set is
+            // empty or unreadable, where there is nothing to probe.
+            await sensorProbe.runProbe()
+            storedStatuses = await sensorStore.getSensorStatuses()
+        }
         let sensorStatuses = Self.backfillStatuses(enabled: enabledSensors, statuses: storedStatuses)
 
         let dataLogQueueStats = await dataLogUploader.getDLQStatistics()
