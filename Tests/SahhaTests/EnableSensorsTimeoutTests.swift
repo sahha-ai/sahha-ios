@@ -51,6 +51,30 @@ struct EnableSensorsTimeoutTests {
         }
     }
 
+    @Test("Caller cancellation forwards to the operation and throws CancellationError promptly")
+    func callerCancellationForwards() async {
+        let task = Task {
+            try await withAbandoningTimeout(seconds: 30, operationName: "cancellable") {
+                // Cancellation-responsive park: throws CancellationError once the
+                // forwarded cancellation arrives.
+                try await Task.sleep(nanoseconds: UInt64.max)
+            }
+        }
+        // Let the operation start parking before cancelling.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        let started = Date()
+        task.cancel()
+
+        switch await task.result {
+        case .success:
+            Issue.record("Expected CancellationError")
+        case let .failure(error):
+            #expect(error is CancellationError)
+            // Must not have waited out the 30s timeout.
+            #expect(Date().timeIntervalSince(started) < 5)
+        }
+    }
+
     @Test("Late completion after a timeout is a safe no-op")
     func lateCompletionDoesNotDoubleResume() async throws {
         do {
