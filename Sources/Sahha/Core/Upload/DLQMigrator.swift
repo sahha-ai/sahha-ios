@@ -12,12 +12,10 @@ import Foundation
 /// runs once to verify compatibility and remove any corrupt files that can't
 /// be decoded in the new format.
 enum DLQMigrator {
-    private static let migrationKey = "dlq_migration_v1_complete"
-
-    /// Removes the migration flag so the validation can re-run on the next session.
-    static func reset() {
-        UserDefaults.standard.removeObject(forKey: migrationKey)
-    }
+    // The migration flag is cleared by the deauthentication purge (the key is
+    // part of its enumerated inventory), so the validation re-runs on the next
+    // session after a logout.
+    private static let migrationKey = StorageKeys.UserDefaults.dlqMigration.rawValue
 
     /// Run migration validation once. Safe to call multiple times — no-ops after first run.
     static func migrateIfNeeded(

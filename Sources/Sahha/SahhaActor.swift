@@ -11,10 +11,14 @@ actor SahhaActor {
     private var settings: SahhaSettings?
     private var container: DIContainer?
     private var configurationTask: Task<Void, Error>?
+    /// Serializes deauthentication (PRD #76 D13): concurrent calls join the
+    /// in-flight teardown instead of interleaving two container resets.
+    private var deauthenticationTask: Task<Void, Never>?
 
     private let registrar: DependencyRegistrar
     private let lifecycleObserver: any LifecycleObserverProtocol
     private let retryMonitorFactory: @Sendable () -> NetworkMonitor
+    private let purge: @Sendable () -> Void
 
     // MARK: Deferred bring-up state (PRD #76 D10)
 
@@ -41,16 +45,19 @@ actor SahhaActor {
 
     /// Non-shared instances exist for integration tests: inject a registrar that
     /// swaps storage/network registrations for doubles, an observer spy so no
-    /// NotificationCenter observers are installed, and a monitor factory that
-    /// returns a test-controlled `NetworkMonitor`.
+    /// NotificationCenter observers are installed, a monitor factory that
+    /// returns a test-controlled `NetworkMonitor`, and a purge bound to the
+    /// same storage doubles so deauthentication never touches real storage.
     init(
         registrar: @escaping DependencyRegistrar = SahhaActor.registerProductionDependencies,
         lifecycleObserver: any LifecycleObserverProtocol = LifecycleObserver(),
-        retryMonitorFactory: @escaping @Sendable () -> NetworkMonitor = { NetworkMonitor() }
+        retryMonitorFactory: @escaping @Sendable () -> NetworkMonitor = { NetworkMonitor() },
+        purge: @escaping @Sendable () -> Void = { DeauthenticationPurge.run() }
     ) {
         self.registrar = registrar
         self.lifecycleObserver = lifecycleObserver
         self.retryMonitorFactory = retryMonitorFactory
+        self.purge = purge
     }
 
     static func registerProductionDependencies(container: DIContainer, settings: SahhaSettings) async {
@@ -83,7 +90,7 @@ actor SahhaActor {
 
         self.settings = settings
 
-        configurationTask = Task { [settings] in
+        let task = Task { [settings] in
             // Every configure resets the deferred bring-up machine (PRD #76 D10):
             // the fresh container must not inherit backoff windows, attempt
             // budgets, a completed latch, or a live monitor from its predecessor.
@@ -146,9 +153,12 @@ actor SahhaActor {
             }
         }
         
-        defer { configurationTask = nil }
+        configurationTask = task
+        // Clear only our own handle: deauthentication may already have retired
+        // it and started a fresh configure whose handle must not be clobbered.
+        defer { if configurationTask == task { configurationTask = nil } }
 
-        return try await configurationTask!.value
+        return try await task.value
     }
 
     // MARK: - Authenticated Services
@@ -431,15 +441,59 @@ actor SahhaActor {
 
     // MARK: - Deauthentication
 
-    func deauthenticate() async throws {
-        if let task = configurationTask { _ = try await task.value }
-        let (container, settings) = try await requireConfig()
+    /// Idempotent, total deauthentication (PRD #76 D13). Never throws and
+    /// requires no session or prior configure: logout is a convergent
+    /// operation, and wrappers fire-and-forget it — an error here strands a
+    /// real user signed in.
+    func deauthenticate() async {
+        // Concurrent calls join the in-flight teardown: two interleaved
+        // resets would each reconfigure, orphaning an undisposed container
+        // whose background deliveries are never turned off.
+        if let deauthenticationTask {
+            return await deauthenticationTask.value
+        }
+        let task = Task { await self.runDeauthentication() }
+        deauthenticationTask = task
+        await task.value
+        deauthenticationTask = nil
+    }
+
+    private func runDeauthentication() async {
+        // Join (never adopt) any in-flight configure: a failing configure must
+        // not block logout. Loops because a new configure can land during the
+        // join, and teardown must not overlap one.
+        while let task = configurationTask {
+            _ = try? await task.value
+            // The joined configure's own continuation also clears the slot,
+            // but it may not have resumed yet — and a stale completed handle
+            // would make the reconfigure below join a dead cycle instead of
+            // starting fresh.
+            if configurationTask == task { configurationTask = nil }
+        }
+        // Take the container out of service for the whole teardown window, so
+        // an API call racing this reports "not configured" rather than
+        // resolving against a half-reset container.
+        let container = self.container
+        self.container = nil
         // The retry monitor lives outside the container, so reset() cannot stop
         // it; a deferred retry must not survive deauthentication (PRD #76 D10).
         await stopRetryMonitor()
-        await container.reset()
-        DLQMigrator.reset()
-        try await configure(with: settings)
+        // Hybrid purge, in load-bearing order (D13). Dispose resolved services
+        // first: only dispose stops live observer queries, disables HealthKit
+        // background deliveries (state the OS keeps across process launches —
+        // no key wipe can undo it), and sets the write-back latches. Then the
+        // static purge wipes the enumerated inventory, covering everything a
+        // partially-resolved session's reset cannot reach.
+        if let container {
+            await container.reset()
+        }
+        purge()
+        // Reconfigure so the SDK stays usable; skipped if configure never ran.
+        // Best-effort: the purge is deauthentication's contract, and it has
+        // already completed.
+        if let settings {
+            try? await configure(with: settings)
+        }
     }
 
     // MARK: - Resolvers

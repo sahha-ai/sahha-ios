@@ -44,7 +44,7 @@ enum DataLogDI {
                 ),
                 sentStore: SentItemStore(
                     storage: try await container.resolve(UserDefaultsStorageProtocol.self),
-                    storageKey: StorageKeys.UserDefaults.sentLogIds,
+                    storageKey: StorageKeys.UserDefaults.sentLogIds.rawValue,
                     logLabel: "SentLogStore"
                 ),
                 logLabel: "DataLogUploader"

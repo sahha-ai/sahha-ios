@@ -5,7 +5,7 @@ final class DeviceIdProvider: DeviceIdProviderProtocol {
     private let storage: UserDefaultsStorageProtocol
 
     init(
-        key: String = StorageKeys.UserDefaults.deviceId,
+        key: String = StorageKeys.UserDefaults.deviceId.rawValue,
         storage: UserDefaultsStorageProtocol
     ) {
         self.key = key

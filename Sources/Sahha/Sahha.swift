@@ -80,11 +80,15 @@ public class Sahha {
     }
 
     public static func deauthenticate(callback: @escaping (String?, Bool) -> Void) {
+        // Deliberately no auth guard (PRD #76 D13): logout is convergent and
+        // must succeed whether or not the SDK believes it is authenticated —
+        // the guard's snapshot is populated only when the token store's launch
+        // read succeeded, so an early or keychain-failed session would wrongly
+        // reject a real signed-in user's logout and clean nothing.
         runAsyncWithCallback(
             callback: callback,
-            requiresAuth: true,
             task: {
-                try await actor.deauthenticate()
+                await actor.deauthenticate()
                 return true
             },
             defaultErrorValue: false

@@ -15,7 +15,7 @@ actor TokenStore: TokenStoreProtocol {
     /// means "unknown", not "signed out" (PRD #76 D10).
     private var loadFailed = false
 
-    init(storage: KeychainStorageProtocol, key: String = StorageKeys.Keychain.token, logger: ErrorLoggerProtocol) {
+    init(storage: KeychainStorageProtocol, key: String = StorageKeys.Keychain.token.rawValue, logger: ErrorLoggerProtocol) {
         self.storage = storage
         self.key = key
         self.logger = logger

@@ -30,7 +30,7 @@ private func apiError(_ statusCode: Int) -> APIErrorResponse {
 }
 
 private func seedSensors(_ storage: InMemoryStorage, rawValues: [String]) throws {
-    storage.set(try JSONEncoder().encode(rawValues), forKey: StorageKeys.UserDefaults.sensors)
+    storage.set(try JSONEncoder().encode(rawValues), forKey: StorageKeys.UserDefaults.sensors.rawValue)
 }
 
 private func seedKeychainToken(
@@ -40,7 +40,7 @@ private func seedKeychainToken(
 ) throws {
     try keychain.setObject(
         TokenResponse(profileToken: profileToken, refreshToken: refreshToken),
-        forKey: StorageKeys.Keychain.token
+        forKey: StorageKeys.Keychain.token.rawValue
     )
 }
 
@@ -503,7 +503,11 @@ private func makeActor(
             }
         },
         lifecycleObserver: spy,
-        retryMonitorFactory: { monitorFactory.make() }
+        retryMonitorFactory: { monitorFactory.make() },
+        // This suite asserts dispose-driven teardown only; a no-op purge keeps
+        // deauthentication off the process-global storage. The purge itself is
+        // covered by DeauthenticationTests.
+        purge: {}
     )
 }
 
@@ -576,7 +580,7 @@ struct DeferredBringUpRetryTests {
         // stored pair survived the transient failure, and the dedicated monitor
         // is up.
         #expect(fixture.box.manager == nil)
-        let retained: TokenResponse? = try fixture.keychain.object(forKey: StorageKeys.Keychain.token)
+        let retained: TokenResponse? = try fixture.keychain.object(forKey: StorageKeys.Keychain.token.rawValue)
         #expect(retained?.refreshToken == fixture.staleRefresh)
         #expect(fixture.factory.callCount == 1)
 
@@ -589,7 +593,7 @@ struct DeferredBringUpRetryTests {
         let manager = try #require(fixture.box.manager)
         #expect(manager.armedSets == [[.sleep]])
         #expect(manager.resumeForCalls.isEmpty)     // tail health check found a healthy store
-        let stored: TokenResponse? = try fixture.keychain.object(forKey: StorageKeys.Keychain.token)
+        let stored: TokenResponse? = try fixture.keychain.object(forKey: StorageKeys.Keychain.token.rawValue)
         #expect(stored?.profileToken == fixture.freshProfile)
         #expect(stored?.refreshToken == fixture.rotatedRefresh)
         #expect(await fixture.service.refreshCallCount == 2)
@@ -774,7 +778,7 @@ struct DeferredBringUpRetryTests {
         // Deauthentication stops the monitor explicitly (it lives outside the
         // container) and wipes the keychain, so the re-configure inside it reads
         // a clean signed-out store: dormant machine, no second monitor.
-        try await fixture.actor.deauthenticate()
+        await fixture.actor.deauthenticate()
         #expect(fixture.factory.callCount == 1)
         #expect(await fixture.monitor.registeredCallbackCount == 0)
 
@@ -805,7 +809,7 @@ struct DeferredBringUpRetryTests {
         try await actor.configure(with: SahhaSettings(environment: .sandbox))
 
         #expect(factory.callCount == 0)                          // never deferred
-        #expect(keychain.storedKeys.contains(StorageKeys.Keychain.token) == false)  // session cleared
+        #expect(keychain.storedKeys.contains(StorageKeys.Keychain.token.rawValue) == false)  // session cleared
 
         await spy.fire(.app_resume)
         await spy.fire(.app_unlocked)

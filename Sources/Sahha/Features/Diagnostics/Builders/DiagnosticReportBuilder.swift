@@ -5,7 +5,7 @@ protocol DiagnosticReportBuilderProtocol: Sendable {
     func getLatestReport() async -> DiagnosticReport?
 }
 
-actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
+actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol, Disposable {
     private let sensorStore: SensorStoreProtocol
     private let sensorProbe: SensorProbeServiceProtocol
     private let dataLogUploader: DataLogUploaderProtocol
@@ -13,7 +13,11 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
     private let storage: UserDefaultsStorageProtocol
     private let logger: ErrorLoggerProtocol
 
-    private let storageKey = "com.sahha.diagnostic_report"
+    private let storageKey = StorageKeys.UserDefaults.diagnosticReport.rawValue
+    /// Latched by `dispose()` (container teardown, e.g. deauthentication). A report
+    /// build that resolves after teardown must not persist the departing profile's
+    /// report back behind the purge — the stored report is profile state.
+    private var disposed = false
 
     init(
         sensorStore: SensorStoreProtocol,
@@ -70,12 +74,19 @@ actor DiagnosticReportBuilder: DiagnosticReportBuilderProtocol {
             )
         )
 
-        do {
-            try storage.setObject(report, forKey: storageKey)
-        } catch {
-            logger.postError(SahhaError(message: "Diagnostic report could not be persisted.", error: error))
+        if !disposed {
+            do {
+                try storage.setObject(report, forKey: storageKey)
+            } catch {
+                logger.postError(SahhaError(message: "Diagnostic report could not be persisted.", error: error))
+            }
         }
         return report
+    }
+
+    func dispose() async {
+        disposed = true
+        storage.removeObject(forKey: storageKey)
     }
 
     func getLatestReport() async -> DiagnosticReport? {

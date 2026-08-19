@@ -1,10 +1,11 @@
 import HealthKit
 
 actor HealthKitAnchorStore: HealthKitAnchorStoreProtocol, Disposable {
-    private let prefix = StorageKeys.UserDefaults.hkAnchorPrefix
+    private let prefix = StorageKeys.UserDefaultsPrefix.hkAnchor.rawValue
     /// Pre-rename SDKs prefixed the already-prefixed key again; reads still
-    /// honour those keys and dispose must wipe them too.
-    private let legacyKeyPrefix = "sahha_"
+    /// honour those keys, and dispose and the deauthentication purge must wipe
+    /// them too.
+    private let legacyPrefix = StorageKeys.UserDefaultsPrefix.legacyHkAnchor.rawValue
     private let storage: UserDefaultsStorageProtocol
     /// Latched by `dispose()` (container teardown, e.g. deauthentication). A straggling
     /// anchored query that resolves after teardown must not save its anchor back —
@@ -51,13 +52,12 @@ actor HealthKitAnchorStore: HealthKitAnchorStoreProtocol, Disposable {
         // Wipes the legacy-prefixed family too: a legacy-key anchor that
         // survives deauth would be resurrected by the fallback read.
         let keys = storage.allKeys {
-            $0.hasPrefix(self.prefix) || $0.hasPrefix(self.legacyKeyPrefix + self.prefix)
+            $0.hasPrefix(self.prefix) || $0.hasPrefix(self.legacyPrefix)
         }
         keys.forEach(storage.removeObject)
     }
 
     private func data(forUnprefixedKey key: String) -> Data? {
-        let key = prefix + key
-        return storage.data(forKey: key) ?? storage.data(forKey: legacyKeyPrefix + key)
+        storage.data(forKey: prefix + key) ?? storage.data(forKey: legacyPrefix + key)
     }
 }
