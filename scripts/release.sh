@@ -31,6 +31,9 @@ Publish-only flow (--publish-only):
   verify version + existing tag -> lint -> pod trunk push -> gh release
   (no commit, tag, push or production round-trip; the tag must already point
   at the development tip)
+
+Release notes: the GitHub release uses ReleaseNotes/<version>.md verbatim when
+that file exists, and falls back to --generate-notes otherwise.
 EOF
     exit 1
 }
@@ -204,7 +207,15 @@ echo "==> Publishing to CocoaPods trunk"
 run pod trunk push "$PODSPEC_FILE"
 
 echo "==> Creating GitHub release"
-GH_FLAGS=(--generate-notes --title "$VERSION")
+NOTES_FILE="ReleaseNotes/$VERSION.md"
+GH_FLAGS=(--title "$VERSION")
+if [[ -f "$NOTES_FILE" ]]; then
+    echo "    Using hand-written release notes: $NOTES_FILE"
+    GH_FLAGS+=(--notes-file "$NOTES_FILE")
+else
+    echo "    No $NOTES_FILE found; falling back to generated notes"
+    GH_FLAGS+=(--generate-notes)
+fi
 if [[ "$PRERELEASE" == true ]]; then
     GH_FLAGS+=(--prerelease)
 fi
