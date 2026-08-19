@@ -142,6 +142,18 @@ struct SharedSahhaActorTests {
         #expect(resolvedSettings.environment == .sandbox)
     }
 
+    @Test("SDK: configure captures its task so auth-gated calls can await it")
+    func testConfigureCapturesAwaitableTask() async throws {
+        // The facade capture happens synchronously inside `configure` (PRD #76
+        // D13a), so the handle is already in the box when `configure` returns —
+        // and awaiting it must imply the actor finished configuring.
+        Sahha.configure(SahhaSettings(environment: .sandbox))
+        await Sahha.configurationTaskBox.awaitCurrent()
+
+        let (_, resolvedSettings) = try await SahhaActor.shared.requireConfig()
+        #expect(resolvedSettings.environment == .sandbox)
+    }
+
     @Test("SDK: Authentication rejects empty credentials before any network call")
     func testSDKAuthentication() async throws {
         try await SahhaActor.shared.configure(with: SahhaSettings(environment: .sandbox))

@@ -16,9 +16,43 @@ final class AuthSnapshot: @unchecked Sendable {
     }
 }
 
+/// Holds the most recent `configure` call's task, captured synchronously before
+/// `configure` returns (PRD #76 D13a). Auth-gated calls await it before
+/// evaluating the auth guard: the guard's snapshot is populated by the token
+/// store's keychain read *during* configuration, so judging a call while
+/// configure is still in flight failed authenticated callers. The actor's own
+/// configuration-task property cannot serve here — it is nil both before the
+/// configure task first enters the actor and after it completes, so a racing
+/// call could miss the flight entirely.
+final class ConfigurationTaskBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<Void, Never>?
+
+    /// Runs synchronously inside `configure` before it returns, so any call
+    /// made after `configure` is guaranteed to observe the handle.
+    func capture(_ task: Task<Void, Never>) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.task = task
+    }
+
+    /// Waits for the most recently captured configure to finish. Returns
+    /// immediately when no configure was ever requested.
+    func awaitCurrent() async {
+        await current()?.value
+    }
+
+    private func current() -> Task<Void, Never>? {
+        lock.lock()
+        defer { lock.unlock() }
+        return task
+    }
+}
+
 public class Sahha {
     private static let actor: SahhaActor = .shared
     static let authSnapshot = AuthSnapshot()
+    static let configurationTaskBox = ConfigurationTaskBox()
 
     /// Controls whether internal SDK logs are logged. Off by default.
     nonisolated(unsafe) static var debugLogging = false
@@ -32,7 +66,7 @@ public class Sahha {
     // MARK: - Configuration
     public static func configure(_ settings: SahhaSettings, callback: (() -> Void)? = nil) {
         let box = VoidCallbackBox(callback: callback)
-        Task {
+        let task = Task {
             do {
                 try await actor.configure(with: settings)
                 DispatchQueue.main.async {
@@ -42,6 +76,9 @@ public class Sahha {
                 Sahha.log("[\(SDK.name)] ERROR: Failed to configure Sahha: \(error.localizedDescription)")
             }
         }
+        // Captured before returning, so an auth-gated call made after
+        // `configure` always finds the flight to await (PRD #76 D13a).
+        configurationTaskBox.capture(task)
     }
 
     // MARK: - Authentication
@@ -419,9 +456,14 @@ public class Sahha {
     /// Helper for async APIs that return a non-optional result via completion handler.
     /// The file/function/line defaults resolve at the public API call site, so errors
     /// that carry no origin of their own are logged against the entry point that failed.
-    private static func runAsyncWithCallback<T>(
+    /// The box/snapshot/actor parameters default to the production globals; tests
+    /// inject private instances so the auth-gate contract stays hermetically pinned.
+    static func runAsyncWithCallback<T>(
         callback: @escaping (String?, T) -> Void,
         requiresAuth: Bool = false,
+        configurationTaskBox: ConfigurationTaskBox = Sahha.configurationTaskBox,
+        snapshot: AuthSnapshot = Sahha.authSnapshot,
+        actor: SahhaActor = SahhaActor.shared,
         task: @escaping @Sendable () async throws -> T,
         defaultErrorValue: @autoclosure @escaping @Sendable () -> T,
         file: StaticString = #fileID,
@@ -431,7 +473,14 @@ public class Sahha {
         let box = CallbackBox(callback: callback)
         Task {
             do {
-                if requiresAuth { try authGuard() }
+                if requiresAuth {
+                    // PRD #76 D13a: the guard's snapshot is populated during
+                    // configuration, so an in-flight configure must resolve
+                    // before the call is judged. No configure ever requested
+                    // means nothing to await — the guard evaluates immediately.
+                    await configurationTaskBox.awaitCurrent()
+                    try authGuard(snapshot)
+                }
                 let result = try await task()
                 DispatchQueue.main.async {
                     box.callback(nil, result)
@@ -451,9 +500,14 @@ public class Sahha {
     /// Helper for async APIs that return an optional result via completion handler.
     /// The file/function/line defaults resolve at the public API call site, so errors
     /// that carry no origin of their own are logged against the entry point that failed.
-    private static func runAsyncWithCallback<T>(
+    /// The box/snapshot/actor parameters default to the production globals; tests
+    /// inject private instances so the auth-gate contract stays hermetically pinned.
+    static func runAsyncWithCallback<T>(
         callback: @escaping (String?, T?) -> Void,
         requiresAuth: Bool = false,
+        configurationTaskBox: ConfigurationTaskBox = Sahha.configurationTaskBox,
+        snapshot: AuthSnapshot = Sahha.authSnapshot,
+        actor: SahhaActor = SahhaActor.shared,
         task: @escaping @Sendable () async throws -> T,
         defaultErrorValue: @autoclosure @escaping @Sendable () -> T? = nil,
         file: StaticString = #fileID,
@@ -463,7 +517,14 @@ public class Sahha {
         let box = CallbackBox(callback: callback)
         Task {
             do {
-                if requiresAuth { try authGuard() }
+                if requiresAuth {
+                    // PRD #76 D13a: the guard's snapshot is populated during
+                    // configuration, so an in-flight configure must resolve
+                    // before the call is judged. No configure ever requested
+                    // means nothing to await — the guard evaluates immediately.
+                    await configurationTaskBox.awaitCurrent()
+                    try authGuard(snapshot)
+                }
                 let result = try await task()
                 DispatchQueue.main.async {
                     box.callback(nil, result)
@@ -480,8 +541,8 @@ public class Sahha {
         }
     }
     
-    private static func authGuard() throws {
-        if !isAuthenticated {
+    private static func authGuard(_ snapshot: AuthSnapshot) throws {
+        if !snapshot.isAuthenticated {
             throw SahhaError(message: "Unauthorized. Please call `Sahha.authenticate(...)` first.")
         }
     }
