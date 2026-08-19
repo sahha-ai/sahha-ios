@@ -409,7 +409,7 @@ struct SensorHealthCheckTests {
     @Test("resumeSensors(for:): a data-log failure is posted and does not block tag arming")
     func resumeForDataLogFailureDoesNotBlockTagSide() async throws {
         let storage = InMemoryStorage()
-        storage.set(try JSONEncoder().encode(["sleep", "menstrual_flow"]), forKey: StorageKeys.UserDefaults.sensors)
+        storage.set(try JSONEncoder().encode(["sleep", "menstrual_flow"]), forKey: StorageKeys.UserDefaults.sensors.rawValue)
         let marker = SahhaError(message: "data-log arming failed")
         let observerStore = HealthKitObserverStore()
         let tagCoordinator = ArmingTagCoordinator(observerStore: observerStore)
@@ -432,7 +432,7 @@ struct SensorHealthCheckTests {
     @Test("resumeSensors(for:): a tag failure is posted and does not block data-log arming")
     func resumeForTagFailureDoesNotBlockDataLogSide() async throws {
         let storage = InMemoryStorage()
-        storage.set(try JSONEncoder().encode(["sleep", "menstrual_flow"]), forKey: StorageKeys.UserDefaults.sensors)
+        storage.set(try JSONEncoder().encode(["sleep", "menstrual_flow"]), forKey: StorageKeys.UserDefaults.sensors.rawValue)
         let marker = SahhaError(message: "tag arming failed")
         let observerStore = HealthKitObserverStore()
         let dataLogCoordinator = ArmingDataLogCoordinator(observerStore: observerStore)
@@ -455,7 +455,7 @@ struct SensorHealthCheckTests {
     @Test("Launch resume: a data-log failure is posted and does not block tag arming")
     func launchResumeIsolatesSides() async throws {
         let storage = InMemoryStorage()
-        storage.set(try JSONEncoder().encode(["sleep", "menstrual_flow"]), forKey: StorageKeys.UserDefaults.sensors)
+        storage.set(try JSONEncoder().encode(["sleep", "menstrual_flow"]), forKey: StorageKeys.UserDefaults.sensors.rawValue)
         let marker = SahhaError(message: "data-log arming failed")
         let observerStore = HealthKitObserverStore()
         let tagCoordinator = ArmingTagCoordinator(observerStore: observerStore)
@@ -478,7 +478,7 @@ struct SensorHealthCheckTests {
     @Test("A stale missing set intersects with the fresh store read and arms nothing")
     func staleMissingSetArmsNothing() async throws {
         let storage = InMemoryStorage()
-        storage.set(try JSONEncoder().encode(["sleep"]), forKey: StorageKeys.UserDefaults.sensors)
+        storage.set(try JSONEncoder().encode(["sleep"]), forKey: StorageKeys.UserDefaults.sensors.rawValue)
         let observerStore = HealthKitObserverStore()
         let dataLogCoordinator = ArmingDataLogCoordinator(observerStore: observerStore)
         let tagCoordinator = ArmingTagCoordinator(observerStore: observerStore)
@@ -503,7 +503,7 @@ struct SensorHealthCheckTests {
     @Test("A tag-side missing sensor is armed via the tag coordinator")
     func tagSideMissingSensorArmedViaTagCoordinator() async throws {
         let storage = InMemoryStorage()
-        storage.set(try JSONEncoder().encode(["sleep", "menstrual_flow"]), forKey: StorageKeys.UserDefaults.sensors)
+        storage.set(try JSONEncoder().encode(["sleep", "menstrual_flow"]), forKey: StorageKeys.UserDefaults.sensors.rawValue)
         let sensorStore = SensorStore(storage: storage)
         let observerStore = HealthKitObserverStore()
         await armIntoStore(observerStore, [.sleep])   // the tag sensor is missing

@@ -16,7 +16,7 @@ actor DeviceInfoSyncCache: DeviceInfoSyncCacheProtocol, Disposable {
     private var disposed = false
 
     init(
-        key: String = StorageKeys.UserDefaults.deviceInfo,
+        key: String = StorageKeys.UserDefaults.deviceInfo.rawValue,
         storage: UserDefaultsStorageProtocol,
         ttl: TimeInterval = .hours(1),
         logger: ErrorLoggerProtocol

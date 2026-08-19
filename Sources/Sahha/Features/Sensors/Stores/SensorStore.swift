@@ -18,7 +18,7 @@ actor SensorStore: SensorStoreProtocol, Disposable {
 
     init(
         storage: UserDefaultsStorageProtocol = UserDefaultsStorage(),
-        key: String = StorageKeys.UserDefaults.sensors
+        key: String = StorageKeys.UserDefaults.sensors.rawValue
     ) {
         self.storage = storage
         self.key = key

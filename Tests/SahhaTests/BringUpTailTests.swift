@@ -163,7 +163,7 @@ private func heartRateSample() -> HKQuantitySample {
 }
 
 private func seedSensors(_ storage: InMemoryStorage, rawValues: [String]) throws {
-    storage.set(try JSONEncoder().encode(rawValues), forKey: StorageKeys.UserDefaults.sensors)
+    storage.set(try JSONEncoder().encode(rawValues), forKey: StorageKeys.UserDefaults.sensors.rawValue)
 }
 
 private func decodeReport(_ request: APIRequest) throws -> DiagnosticReport {

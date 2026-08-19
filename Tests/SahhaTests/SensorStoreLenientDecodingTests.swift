@@ -15,7 +15,7 @@ import HealthKit
 @Suite("SensorStore lenient decoding")
 struct SensorStoreLenientDecodingTests {
 
-    private let key = StorageKeys.UserDefaults.sensors
+    private let key = StorageKeys.UserDefaults.sensors.rawValue
 
     /// A byte-level 1.3.7-era blob: JSON array of legacy raw values, exactly as
     /// `JSONEncoder().encode(Set<SahhaSensor>)` persisted it at 1.3.7.
@@ -267,7 +267,7 @@ struct SensorStoreEndToEndSelfHealTests {
 
     @Test("A poisoned blob plus a launch-time resume arms both coordinators with the mapped set")
     func resumeArmsBothCoordinators() async throws {
-        let key = StorageKeys.UserDefaults.sensors
+        let key = StorageKeys.UserDefaults.sensors.rawValue
         let storage = InMemoryStorage()
         storage.set(
             try JSONEncoder().encode(["dietary_sugar", "dietary_fat_total", "cervical_mucus_quality", "sleep"]),

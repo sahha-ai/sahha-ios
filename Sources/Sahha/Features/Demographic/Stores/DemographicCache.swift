@@ -18,7 +18,7 @@ actor DemographicCache: DemographicCacheProtocol {
     private var disposed = false
 
     init(
-        key: String = StorageKeys.Keychain.demographic,
+        key: String = StorageKeys.Keychain.demographic.rawValue,
         storage: KeychainStorageProtocol,
         ttl: TimeInterval = .hours(1),
         logger: ErrorLoggerProtocol

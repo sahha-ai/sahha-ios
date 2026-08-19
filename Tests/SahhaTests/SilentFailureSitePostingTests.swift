@@ -141,10 +141,10 @@ struct SilentFailureSitePostingTests {
         let line = UInt(#line) + 1
         let marker = SahhaError(message: "observer registration failed")
         let storage = InMemoryStorage()
-        storage.set(try JSONEncoder().encode(["sleep"]), forKey: StorageKeys.UserDefaults.sensors)
+        storage.set(try JSONEncoder().encode(["sleep"]), forKey: StorageKeys.UserDefaults.sensors.rawValue)
         let logger = RecordingErrorLogger()
         let manager = makeManager(
-            sensorStore: SensorStore(storage: storage, key: StorageKeys.UserDefaults.sensors),
+            sensorStore: SensorStore(storage: storage, key: StorageKeys.UserDefaults.sensors.rawValue),
             dataLogCoordinator: ThrowingDataLogCoordinator(error: marker),
             logger: logger
         )

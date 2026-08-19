@@ -212,7 +212,7 @@ struct EnableSensorsWriteAlwaysTests {
         let storage = InMemoryStorage()
         storage.set(
             try JSONEncoder().encode(["steps", "energy_consumed"]),
-            forKey: StorageKeys.UserDefaults.sensors
+            forKey: StorageKeys.UserDefaults.sensors.rawValue
         )
         let harness = Harness(sensorStore: SensorStore(storage: storage))
 

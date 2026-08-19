@@ -38,7 +38,7 @@ enum TagDI {
                 ),
                 sentStore: SentItemStore(
                     storage: try await container.resolve(UserDefaultsStorageProtocol.self),
-                    storageKey: StorageKeys.UserDefaults.sentTagIds,
+                    storageKey: StorageKeys.UserDefaults.sentTagIds.rawValue,
                     logLabel: "SentTagStore"
                 ),
                 logLabel: "TagUploader"
