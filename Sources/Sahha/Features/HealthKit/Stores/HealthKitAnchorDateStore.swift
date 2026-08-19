@@ -7,12 +7,17 @@ actor HealthKitAnchorDateStore: HealthKitAnchorDateStoreProtocol, Disposable {
     /// dispose must wipe them too.
     private let legacyKeyPrefix = "date_"
     private let storage: UserDefaultsStorageProtocol
+    /// Latched by `dispose()` (container teardown, e.g. deauthentication). A straggling
+    /// activity-summary upload that resolves after teardown must not save its date
+    /// back — the next session would silently skip the days behind it.
+    private var disposed = false
 
     init(storage: UserDefaultsStorageProtocol) {
         self.storage = storage
     }
 
     func saveAnchorDate(_ date: Date, forKey key: String) {
+        guard !disposed else { return }
         let key = prefix + key
         storage.set(date, forKey: key)
     }
@@ -29,6 +34,7 @@ actor HealthKitAnchorDateStore: HealthKitAnchorDateStoreProtocol, Disposable {
     }
 
     func dispose() async {
+        disposed = true
         // Wipes the legacy-prefixed family too: a legacy-key date that
         // survives deauth would be resurrected by the fallback read.
         let keys = storage.allKeys {

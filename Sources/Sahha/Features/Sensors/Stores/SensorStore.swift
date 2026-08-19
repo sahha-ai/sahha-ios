@@ -10,6 +10,11 @@ actor SensorStore: SensorStoreProtocol, Disposable {
     private var sensors: Set<SahhaSensor>?
     private var sensorStatuses: [SahhaSensor: SahhaSensorStatus] = [:]
     private var pendingAnomaly: SensorStoreAnomaly?
+    /// Latched by `dispose()` (container teardown, e.g. deauthentication). A straggling
+    /// flight that touches a disposed store must not write behind the fresh
+    /// container's back — including the lenient resolve's self-heal rewrite, which
+    /// would otherwise turn a post-teardown *read* into a storage write.
+    private var disposed = false
 
     init(
         storage: UserDefaultsStorageProtocol = UserDefaultsStorage(),
@@ -24,6 +29,9 @@ actor SensorStore: SensorStoreProtocol, Disposable {
     }
 
     func setSensors(_ sensors: Set<SahhaSensor>) throws {
+        guard !disposed else {
+            throw SahhaError(message: "Sensor store has been disposed.")
+        }
         try storage.setObject(sensors, forKey: key)
         self.sensors = sensors
     }
@@ -37,6 +45,9 @@ actor SensorStore: SensorStoreProtocol, Disposable {
     /// returned previous-sets chain without loss or duplication. The read side
     /// is the lenient resolve and cannot throw; only the write can.
     func replaceSensors(_ sensors: Set<SahhaSensor>) throws -> Set<SahhaSensor> {
+        guard !disposed else {
+            throw SahhaError(message: "Sensor store has been disposed.")
+        }
         let previous = resolve()
         try storage.setObject(sensors, forKey: key)
         self.sensors = sensors
@@ -51,6 +62,7 @@ actor SensorStore: SensorStoreProtocol, Disposable {
     }
 
     func setSensorStatuses(_ statuses: [SahhaSensor: SahhaSensorStatus]) {
+        guard !disposed else { return }
         sensorStatuses = statuses
     }
 
@@ -64,6 +76,7 @@ actor SensorStore: SensorStoreProtocol, Disposable {
     }
 
     func dispose() {
+        disposed = true
         storage.removeObject(forKey: key)
         sensors = nil
         sensorStatuses = [:]
@@ -121,9 +134,11 @@ actor SensorStore: SensorStoreProtocol, Disposable {
 
         // Set-based comparison, never byte-based: encoding order of a Set is
         // nondeterministic, so equal sets can have different bytes.
-        if Set(rawValues) != Set(mapped.map(\.rawValue)) {
+        if !disposed, Set(rawValues) != Set(mapped.map(\.rawValue)) {
             // Self-heal: rewrite in canonical form. A failed rewrite is not
-            // fatal — the next store construction repeats the resolve.
+            // fatal — the next store construction repeats the resolve. Never
+            // fires on a disposed store: whatever a straggler reads under this
+            // key post-teardown belongs to someone else now.
             try? storage.setObject(mapped, forKey: key)
         }
 

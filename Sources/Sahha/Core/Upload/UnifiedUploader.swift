@@ -20,6 +20,11 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
     private let chunkQueue = PriorityChunkQueue<Request>()
     private var uploadTask: Task<Void, Never>? = nil
     private var hasLoadedPersistedData = false
+    /// Latched by `dispose()` (container teardown, e.g. deauthentication). An upload
+    /// flight that resolves after teardown must not write batches back into the
+    /// just-purged dead-letter queue — that would resurrect upload state behind the
+    /// fresh container's back.
+    private var disposed = false
 
     init(
         uploadService: @escaping @Sendable ([Request]) async throws -> Void,
@@ -50,12 +55,14 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
     }
 
     func enqueue(_ chunk: UploadChunk<Request>) async {
+        guard !disposed else { return }
         let persistedId = await persistentQueue.persistBatch(chunk, attemptCount: 0, lastError: nil)
         await chunkQueue.enqueue(chunk, persistedId: persistedId)
         await startUploadLoopIfNeeded()
     }
 
     func enqueueItems(_ items: [Item]) async {
+        guard !disposed else { return }
         await streamingProcessor.streamChunks(from: items) { [weak self] chunk in
             guard let self else { return }
             await self.enqueue(chunk)
@@ -63,6 +70,7 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
     }
 
     func retryPendingUploads() async {
+        guard !disposed else { return }
         guard uploadTask == nil else {
             Sahha.log("[\(logLabel)] Upload loop already running, skipping retry")
             return
@@ -86,6 +94,7 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
     }
 
     func dispose() async {
+        disposed = true
         uploadTask?.cancel()
         uploadTask = nil
         await chunkQueue.clear()
@@ -102,7 +111,7 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
     // MARK: - Upload Loop
 
     private func startUploadLoopIfNeeded() async {
-        guard uploadTask == nil else { return }
+        guard !disposed, uploadTask == nil else { return }
 
         if !hasLoadedPersistedData {
             await loadPersistedData()
@@ -196,6 +205,11 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
 
                 let isOffline = !(await networkMonitor.shouldAttemptUpload())
 
+                // Teardown can interleave at the await above. A disposed uploader's
+                // queue has just been purged; persisting or uploading anything more
+                // would write state back behind the fresh container.
+                guard !disposed else { return }
+
                 if isOffline {
                     if !wasOffline {
                         Sahha.log("[\(logLabel)] Device offline, persisting chunk with \(chunk.requests.count) items")
@@ -232,7 +246,13 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
                     await persistentQueue.removeBatch(withId: id)
                 }
                 return
+            } catch is CancellationError {
+                // Cancellation is teardown (dispose cancels the upload loop), not an
+                // upload failure: no retry accounting, no circuit-breaker penalty, no
+                // error post, and nothing written back to the purged queue.
+                return
             } catch {
+                guard !disposed else { return }
                 attempt += 1
                 await circuitBreaker.recordFailure()
                 logger.postError(error)
@@ -254,6 +274,12 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
                 try? await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
             }
         }
+
+        // The loop also exits on cancellation (dispose cancels the upload loop, which
+        // interrupts the backoff sleep). That is teardown, not retry exhaustion: the
+        // queue was just purged, so re-persisting the batch would resurrect it, and a
+        // "max retries" error would be bogus.
+        guard !disposed, !Task.isCancelled else { return }
 
         let errorMessage = "Max retry attempts exceeded for chunk with priority \(chunk.priority)"
         let error = NSError(

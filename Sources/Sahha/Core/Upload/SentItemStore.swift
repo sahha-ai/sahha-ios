@@ -15,6 +15,11 @@ actor SentItemStore: Disposable {
 
     private var sentIds: [String: TimeInterval]?
     private var isLoaded = false
+    /// Latched by `dispose()` (container teardown, e.g. deauthentication). An upload
+    /// flight that resolves after teardown must not write sent-IDs back into the
+    /// wiped dedup store — the next session's re-queried history would be filtered
+    /// as "already sent" and silently never re-upload.
+    private var disposed = false
 
     private let maxEntries: Int
 
@@ -81,7 +86,7 @@ actor SentItemStore: Disposable {
     }
 
     func markSent(_ ids: [String]) {
-        guard !ids.isEmpty else { return }
+        guard !disposed, !ids.isEmpty else { return }
         ensureLoaded()
 
         let now = Date().timeIntervalSince1970
@@ -139,6 +144,7 @@ actor SentItemStore: Disposable {
     }
 
     func dispose() async {
+        disposed = true
         sentIds?.removeAll()
         storage.removeObject(forKey: storageKey)
     }
@@ -146,7 +152,9 @@ actor SentItemStore: Disposable {
     // MARK: - Private Helpers
 
     private func saveToStorage() {
-        guard let sentIds = sentIds, let data = try? JSONEncoder().encode(sentIds) else { return }
+        // The disposed check also covers eviction/cleanup writes: every path that
+        // persists the dedup set funnels through here.
+        guard !disposed, let sentIds = sentIds, let data = try? JSONEncoder().encode(sentIds) else { return }
         storage.set(data, forKey: storageKey)
     }
 
