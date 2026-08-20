@@ -173,8 +173,6 @@ final class HealthKitObserverService: HealthKitObserverServiceProtocol {
     }
     
     func dispose() async {
-        Sahha.log("[HealthKitObserverService] dispose() called")
-        Thread.callStackSymbols.prefix(10).forEach { Sahha.log("  \($0)") }
         await stopAllObservers()
         await disableAllBackgroundDeliveries()
     }
