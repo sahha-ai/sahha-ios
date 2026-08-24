@@ -15,9 +15,9 @@ import HealthKit
 // Three layers, mirroring the design:
 // - `BringUpRetryPolicy` is pure and tested with explicit timestamps;
 // - verdict classification runs against the real `AuthManager` (and, for the
-//   unreadable verdict, the real `TokenStore` — which writes the process-global
-//   `Sahha.authSnapshot`; no other suite asserts on that global, so this stays
-//   parallel-safe);
+//   unreadable verdict, the real `TokenStore` over injected doubles — its only
+//   side channel, the persisted profileId, lands in a private `InMemoryStorage`,
+//   so this stays parallel-safe);
 // - actor-level tests use the non-shared `SahhaActor` seam with a
 //   test-controlled `NetworkMonitor`, an observer spy, and a recording
 //   HealthKit-manager double, so no NotificationCenter observer or live
@@ -303,7 +303,7 @@ struct LaunchAuthVerdictTests {
         keychain.errorToThrow = NSError(domain: "test.keychain", code: -25308)
 
         // The init-time read fails: nil token + latched unreadable state.
-        let store = TokenStore(storage: keychain, logger: NoopErrorLogger())
+        let store = TokenStore(storage: keychain, userDefaults: InMemoryStorage(), logger: NoopErrorLogger())
         let service = MockAuthService(failure: apiError(401))    // must never be called
         let manager = AuthManager(authService: service, tokenStore: store, logger: NoopErrorLogger())
 
@@ -324,7 +324,7 @@ struct LaunchAuthVerdictTests {
         try seedKeychainToken(keychain, profileToken: jwt(expiresIn: 3600), refreshToken: jwt(expiresIn: 86_400))
         keychain.errorToThrow = NSError(domain: "test.keychain", code: -25308)
 
-        let store = TokenStore(storage: keychain, logger: NoopErrorLogger())
+        let store = TokenStore(storage: keychain, userDefaults: InMemoryStorage(), logger: NoopErrorLogger())
         let manager = AuthManager(
             authService: MockAuthService(failure: apiError(401)),
             tokenStore: store,

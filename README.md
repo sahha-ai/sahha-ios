@@ -149,6 +149,8 @@ Sahha.configure(settings)
 public static var isAuthenticated: Bool
 ```
 
+Correct from the moment the app launches — no need to wait for `configure`. Each access performs a live (sub-millisecond) keychain read, so check it at decision points rather than inlining it in per-frame view code.
+
 **Example usage**:
 
 ```swift

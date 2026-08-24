@@ -17,9 +17,12 @@ import Foundation
 /// below — a future key added without an explicit purge decision fails the
 /// suite.
 enum DeauthenticationPurge {
-    /// Whole-value UserDefaults keys the purge removes.
+    /// Whole-value UserDefaults keys the purge removes. `profileId` is the
+    /// data-log identity: it survives session expiry by design, and this purge
+    /// is the one place it dies.
     static let purgedUserDefaultsKeys: [StorageKeys.UserDefaults] = [
         .deviceInfo,
+        .profileId,
         .sensors,
         .sentLogIds,
         .sentTagIds,
@@ -62,8 +65,7 @@ enum DeauthenticationPurge {
     static func run(
         userDefaults: UserDefaultsStorageProtocol = UserDefaultsStorage(),
         keychain: KeychainStorageProtocol = KeychainStorage(),
-        directories: [URL] = DeauthenticationPurge.purgedDirectories,
-        snapshot: AuthSnapshot = Sahha.authSnapshot
+        directories: [URL] = DeauthenticationPurge.purgedDirectories
     ) {
         for key in purgedUserDefaultsKeys {
             userDefaults.removeObject(forKey: key.rawValue)
@@ -81,11 +83,5 @@ enum DeauthenticationPurge {
         for directory in directories {
             try? FileManager.default.removeItem(at: directory)
         }
-        // The synchronous auth snapshot is persistent in-memory state: on a
-        // session whose token store was never resolved, no dispose ever clears
-        // it — the fingerprint behind stale "authenticated" reads outliving a
-        // logout.
-        snapshot.profileToken = nil
-        snapshot.profileId = nil
     }
 }
