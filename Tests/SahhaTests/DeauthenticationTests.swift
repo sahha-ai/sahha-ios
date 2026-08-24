@@ -15,14 +15,14 @@ import HealthKit
 //   explicit purge-or-keep decision, so a future key fails the suite until one
 //   is made;
 // - actor-level tests drive the non-shared `SahhaActor` seam with a purge
-//   bound to the same doubles, so no test touches real storage. Nothing here
-//   asserts on the process-global `Sahha.authSnapshot` (DeferredBringUpTests
-//   owns that); the purge's snapshot effect is asserted on injected instances.
+//   bound to the same doubles, so no test touches real storage or the facade's
+//   global session seam (SessionTruthTests owns that).
 
 // MARK: - Seeding helpers
 
 private func seedPurgedUserDefaults(_ storage: InMemoryStorage) throws {
     storage.set(Data([1]), forKey: StorageKeys.UserDefaults.deviceInfo.rawValue)
+    storage.set("departing-profile-id", forKey: StorageKeys.UserDefaults.profileId.rawValue)
     storage.set(try JSONEncoder().encode(["sleep"]), forKey: StorageKeys.UserDefaults.sensors.rawValue)
     storage.set(Data([2]), forKey: StorageKeys.UserDefaults.sentLogIds.rawValue)
     storage.set(Data([3]), forKey: StorageKeys.UserDefaults.sentTagIds.rawValue)
@@ -64,10 +64,10 @@ private func makeDLQDirs() throws -> [URL] {
 private func expectProfileStatePurged(
     storage: InMemoryStorage,
     keychain: MockKeychainStorage,
-    snapshot: AuthSnapshot,
     dlqDirs: [URL]
 ) {
     #expect(storage.get(forKey: StorageKeys.UserDefaults.deviceInfo.rawValue) == nil)
+    #expect(storage.get(forKey: StorageKeys.UserDefaults.profileId.rawValue) == nil)
     #expect(storage.get(forKey: StorageKeys.UserDefaults.sensors.rawValue) == nil)
     #expect(storage.get(forKey: StorageKeys.UserDefaults.sentLogIds.rawValue) == nil)
     #expect(storage.get(forKey: StorageKeys.UserDefaults.sentTagIds.rawValue) == nil)
@@ -76,8 +76,6 @@ private func expectProfileStatePurged(
     let familySurvivors = storage.allKeys { key in prefixes.contains { key.hasPrefix($0) } }
     #expect(familySurvivors.isEmpty)
     #expect(keychain.storedKeys.isEmpty)
-    #expect(snapshot.profileToken == nil)
-    #expect(snapshot.profileId == nil)
     for dir in dlqDirs {
         #expect(!FileManager.default.fileExists(atPath: dir.path))
     }
@@ -94,24 +92,20 @@ struct DeauthenticationPurgeTests {
     func purgeClearsInventoryWithoutContainer() async throws {
         let storage = InMemoryStorage()
         let keychain = MockKeychainStorage()
-        let snapshot = AuthSnapshot()
         let dlqDirs = try makeDLQDirs()
         defer { dlqDirs.forEach { try? FileManager.default.removeItem(at: $0.deletingLastPathComponent()) } }
         try seedPurgedUserDefaults(storage)
         seedKeptUserDefaults(storage)
         try seedKeychain(keychain)
-        snapshot.profileToken = "departing-profile-token"
-        snapshot.profileId = "departing-profile-id"
 
         // No DIContainer exists anywhere in this test: the purge is total.
         DeauthenticationPurge.run(
             userDefaults: storage,
             keychain: keychain,
-            directories: dlqDirs,
-            snapshot: snapshot
+            directories: dlqDirs
         )
 
-        expectProfileStatePurged(storage: storage, keychain: keychain, snapshot: snapshot, dlqDirs: dlqDirs)
+        expectProfileStatePurged(storage: storage, keychain: keychain, dlqDirs: dlqDirs)
         #expect(storage.get(forKey: StorageKeys.UserDefaults.dlqMigration.rawValue) == nil)
         // Nothing but the keep-list remains.
         #expect(storage.allKeys() == [StorageKeys.UserDefaults.deviceId.rawValue])
@@ -129,8 +123,7 @@ struct DeauthenticationPurgeTests {
         DeauthenticationPurge.run(
             userDefaults: storage,
             keychain: MockKeychainStorage(),
-            directories: [],
-            snapshot: AuthSnapshot()
+            directories: []
         )
 
         #expect(storage.allKeys().isEmpty)
@@ -140,16 +133,15 @@ struct DeauthenticationPurgeTests {
     func purgeIsIdempotent() async throws {
         let storage = InMemoryStorage()
         let keychain = MockKeychainStorage()
-        let snapshot = AuthSnapshot()
         try seedPurgedUserDefaults(storage)
         seedKeptUserDefaults(storage)
         try seedKeychain(keychain)
 
-        DeauthenticationPurge.run(userDefaults: storage, keychain: keychain, directories: [], snapshot: snapshot)
+        DeauthenticationPurge.run(userDefaults: storage, keychain: keychain, directories: [])
         let keysAfterFirst = storage.allKeys().sorted()
         let deviceIdAfterFirst = storage.string(forKey: StorageKeys.UserDefaults.deviceId.rawValue)
 
-        DeauthenticationPurge.run(userDefaults: storage, keychain: keychain, directories: [], snapshot: snapshot)
+        DeauthenticationPurge.run(userDefaults: storage, keychain: keychain, directories: [])
 
         #expect(storage.allKeys().sorted() == keysAfterFirst)
         #expect(storage.string(forKey: StorageKeys.UserDefaults.deviceId.rawValue) == deviceIdAfterFirst)
@@ -160,15 +152,12 @@ struct DeauthenticationPurgeTests {
     func throwingKeychainDoesNotAbortPurge() async throws {
         let storage = InMemoryStorage()
         let keychain = MockKeychainStorage()
-        let snapshot = AuthSnapshot()
         try seedPurgedUserDefaults(storage)
-        snapshot.profileToken = "departing-profile-token"
         keychain.errorToThrow = SahhaError(message: "keychain unavailable")
 
-        DeauthenticationPurge.run(userDefaults: storage, keychain: keychain, directories: [], snapshot: snapshot)
+        DeauthenticationPurge.run(userDefaults: storage, keychain: keychain, directories: [])
 
         #expect(storage.allKeys().isEmpty)
-        #expect(snapshot.profileToken == nil)
     }
 }
 
@@ -205,6 +194,7 @@ struct StorageKeysCompletenessTests {
         // class this PRD remediates).
         #expect(StorageKeys.UserDefaults.deviceId.rawValue == "deviceId")
         #expect(StorageKeys.UserDefaults.deviceInfo.rawValue == "deviceInfo")
+        #expect(StorageKeys.UserDefaults.profileId.rawValue == "profileId")
         #expect(StorageKeys.UserDefaults.sensors.rawValue == "sensors")
         #expect(StorageKeys.UserDefaults.sentLogIds.rawValue == "sentLogIds")
         #expect(StorageKeys.UserDefaults.sentTagIds.rawValue == "sentTagIds")
@@ -381,7 +371,6 @@ private func waitUntil(timeout: Double = 5, _ condition: @Sendable () async -> B
 private struct DeauthFixture {
     let storage: InMemoryStorage
     let keychain: MockKeychainStorage
-    let snapshot: AuthSnapshot
     let dlqDirs: [URL]
     let purgeCount: Counter
     let registrarCount: Counter
@@ -396,7 +385,6 @@ private struct DeauthFixture {
     ) throws {
         let storage = InMemoryStorage()
         let keychain = MockKeychainStorage()
-        let snapshot = AuthSnapshot()
         let dlqDirs = try makeDLQDirs()
         let purgeCount = Counter()
         let registrarCount = Counter()
@@ -405,7 +393,6 @@ private struct DeauthFixture {
 
         self.storage = storage
         self.keychain = keychain
-        self.snapshot = snapshot
         self.dlqDirs = dlqDirs
         self.purgeCount = purgeCount
         self.registrarCount = registrarCount
@@ -445,8 +432,7 @@ private struct DeauthFixture {
                 DeauthenticationPurge.run(
                     userDefaults: storage,
                     keychain: keychain,
-                    directories: dlqDirs,
-                    snapshot: snapshot
+                    directories: dlqDirs
                 )
             }
         )
@@ -456,8 +442,6 @@ private struct DeauthFixture {
         try seedPurgedUserDefaults(storage)
         seedKeptUserDefaults(storage)
         try seedKeychain(keychain)
-        snapshot.profileToken = "departing-profile-token"
-        snapshot.profileId = "departing-profile-id"
     }
 
     func cleanUp() {
@@ -480,7 +464,7 @@ struct IdempotentDeauthenticationTests {
 
         expectProfileStatePurged(
             storage: fixture.storage, keychain: fixture.keychain,
-            snapshot: fixture.snapshot, dlqDirs: fixture.dlqDirs
+            dlqDirs: fixture.dlqDirs
         )
         #expect(fixture.purgeCount.count == 1)
         #expect(fixture.registrarCount.count == 0)  // no settings, no reconfigure
@@ -509,7 +493,7 @@ struct IdempotentDeauthenticationTests {
 
         expectProfileStatePurged(
             storage: fixture.storage, keychain: fixture.keychain,
-            snapshot: fixture.snapshot, dlqDirs: fixture.dlqDirs
+            dlqDirs: fixture.dlqDirs
         )
         #expect(fixture.purgeCount.count == 1)
         #expect(fixture.registrarCount.count == 2)  // initial configure + one reconfigure
@@ -537,7 +521,7 @@ struct IdempotentDeauthenticationTests {
         await #expect(throws: (any Error).self) { try await configureTask.value }
         expectProfileStatePurged(
             storage: fixture.storage, keychain: fixture.keychain,
-            snapshot: fixture.snapshot, dlqDirs: fixture.dlqDirs
+            dlqDirs: fixture.dlqDirs
         )
         #expect(fixture.purgeCount.count == 1)
         #expect(fixture.registrarCount.count == 2)  // failed configure + failed (swallowed) reconfigure
@@ -609,13 +593,12 @@ struct IdempotentDeauthenticationTests {
         #expect(fixture.registrarCount.count == 3)  // configure + one reconfigure per deauth
     }
 
-    @Test("Deauth during an in-flight authenticate: keychain empty, snapshot cleared, authenticate reports failure")
+    @Test("Deauth during an in-flight authenticate: keychain empty, persisted profileId gone, authenticate reports failure")
     func deauthDuringInFlightAuthenticate() async throws {
         let service = GatedAuthService()
         let fixture = try DeauthFixture(authService: service)
         defer { fixture.cleanUp() }
-        fixture.snapshot.profileToken = "stale-token"
-        fixture.snapshot.profileId = "stale-id"
+        fixture.storage.set("stale-id", forKey: StorageKeys.UserDefaults.profileId.rawValue)
         try await fixture.actor.configure(with: SahhaSettings(environment: .sandbox))
 
         let authTask = Task { () -> Bool in
@@ -632,7 +615,9 @@ struct IdempotentDeauthenticationTests {
 
         await fixture.actor.deauthenticate()
         // The service answers after teardown: the token save must hit the
-        // disposed store and fail the authenticate, not resurrect a session.
+        // disposed store and fail the authenticate, not resurrect a session —
+        // in the keychain or in the persisted profileId (the disposed guard
+        // rejects the save before either write).
         await service.release(.success(
             TokenResponse(profileToken: jwt(expiresIn: 3600), refreshToken: jwt(expiresIn: 86_400))
         ))
@@ -640,8 +625,7 @@ struct IdempotentDeauthenticationTests {
         let succeeded = await authTask.value
         #expect(succeeded == false)
         #expect(fixture.keychain.storedKeys.isEmpty)
-        #expect(fixture.snapshot.profileToken == nil)
-        #expect(fixture.snapshot.profileId == nil)
+        #expect(fixture.storage.get(forKey: StorageKeys.UserDefaults.profileId.rawValue) == nil)
     }
 
     @Test("Deauth then re-auth: the store is empty, resume arms nothing, a fresh enable works")

@@ -2,28 +2,14 @@ import Foundation
 import UIKit
 import BackgroundTasks
 
-/// Synchronous auth for legacy API - updated from TokenStore
-final class AuthSnapshot: @unchecked Sendable {
-    var profileToken: String?
-    /// Cached from the profile token's JWT claim on save. Survives a session-expiry
-    /// `clearToken()` (unlike `profileToken`) so data logs generated while signed out keep a
-    /// stable identity — their deterministic IDs embed the profile id. Cleared only on full
-    /// teardown (`deauthenticate()`).
-    var profileId: String?
-    var isAuthenticated: Bool {
-        guard let profileToken else { return false }
-        return !profileToken.isEmpty
-    }
-}
-
 /// Holds the most recent `configure` call's task, captured synchronously before
 /// `configure` returns (PRD #76 D13a). Auth-gated calls await it before
-/// evaluating the auth guard: the guard's snapshot is populated by the token
-/// store's keychain read *during* configuration, so judging a call while
-/// configure is still in flight failed authenticated callers. The actor's own
-/// configuration-task property cannot serve here — it is nil both before the
-/// configure task first enters the actor and after it completes, so a racing
-/// call could miss the flight entirely.
+/// entering the actor: a gated call issued right after `configure()` could
+/// otherwise reach the actor before the configure task registers there and
+/// throw "not configured". The actor's own configuration-task property cannot
+/// serve here — it is nil both before the configure task first enters the
+/// actor and after it completes, so a racing call could miss the flight
+/// entirely.
 final class ConfigurationTaskBox: @unchecked Sendable {
     private let lock = NSLock()
     private var task: Task<Void, Never>?
@@ -51,8 +37,12 @@ final class ConfigurationTaskBox: @unchecked Sendable {
 
 public class Sahha {
     private static let actor: SahhaActor = .shared
-    static let authSnapshot = AuthSnapshot()
     static let configurationTaskBox = ConfigurationTaskBox()
+
+    /// The synchronous session read behind `isAuthenticated`/`profileToken` and
+    /// the auth guard. Swapped only by `.serialized` tests (the same seam
+    /// pattern as `debugLogging`).
+    nonisolated(unsafe) static var session: SessionReading = SessionReader()
 
     /// Controls whether internal SDK logs are logged. Off by default.
     nonisolated(unsafe) static var debugLogging = false
@@ -82,12 +72,17 @@ public class Sahha {
     }
 
     // MARK: - Authentication
+
+    /// Whether a non-empty profile token exists in the persisted session. A live
+    /// keychain read (well under a millisecond), correct from the moment the app
+    /// launches — no `configure` required. Read it at decision points rather
+    /// than inlining it in per-frame view code.
     public static var isAuthenticated: Bool {
-        authSnapshot.isAuthenticated
+        session.profileToken()?.isEmpty == false
     }
 
     public static var profileToken: String? {
-        authSnapshot.profileToken
+        session.profileToken()
     }
 
     public static func authenticate(appId: String, appSecret: String, externalId: String, callback: @escaping (String?, Bool) -> Void) {
@@ -119,9 +114,9 @@ public class Sahha {
     public static func deauthenticate(callback: @escaping (String?, Bool) -> Void) {
         // Deliberately no auth guard (PRD #76 D13): logout is convergent and
         // must succeed whether or not the SDK believes it is authenticated —
-        // the guard's snapshot is populated only when the token store's launch
-        // read succeeded, so an early or keychain-failed session would wrongly
-        // reject a real signed-in user's logout and clean nothing.
+        // the guard reads the persisted session from the keychain, so an
+        // unreadable keychain would wrongly reject a real signed-in user's
+        // logout and clean nothing.
         runAsyncWithCallback(
             callback: callback,
             task: {
@@ -456,13 +451,13 @@ public class Sahha {
     /// Helper for async APIs that return a non-optional result via completion handler.
     /// The file/function/line defaults resolve at the public API call site, so errors
     /// that carry no origin of their own are logged against the entry point that failed.
-    /// The box/snapshot/actor parameters default to the production globals; tests
+    /// The box/session/actor parameters default to the production globals; tests
     /// inject private instances so the auth-gate contract stays hermetically pinned.
     static func runAsyncWithCallback<T>(
         callback: @escaping (String?, T) -> Void,
         requiresAuth: Bool = false,
         configurationTaskBox: ConfigurationTaskBox = Sahha.configurationTaskBox,
-        snapshot: AuthSnapshot = Sahha.authSnapshot,
+        session: SessionReading = Sahha.session,
         actor: SahhaActor = SahhaActor.shared,
         task: @escaping @Sendable () async throws -> T,
         defaultErrorValue: @autoclosure @escaping @Sendable () -> T,
@@ -474,12 +469,13 @@ public class Sahha {
         Task {
             do {
                 if requiresAuth {
-                    // PRD #76 D13a: the guard's snapshot is populated during
-                    // configuration, so an in-flight configure must resolve
-                    // before the call is judged. No configure ever requested
-                    // means nothing to await — the guard evaluates immediately.
+                    // PRD #76 D13a: awaiting the captured configure keeps a call
+                    // issued right after `configure()` from reaching the actor
+                    // before the flight registers there and throwing "not
+                    // configured". No configure ever requested means nothing to
+                    // await — the guard evaluates immediately.
                     await configurationTaskBox.awaitCurrent()
-                    try authGuard(snapshot)
+                    try authGuard(session)
                 }
                 let result = try await task()
                 DispatchQueue.main.async {
@@ -500,13 +496,13 @@ public class Sahha {
     /// Helper for async APIs that return an optional result via completion handler.
     /// The file/function/line defaults resolve at the public API call site, so errors
     /// that carry no origin of their own are logged against the entry point that failed.
-    /// The box/snapshot/actor parameters default to the production globals; tests
+    /// The box/session/actor parameters default to the production globals; tests
     /// inject private instances so the auth-gate contract stays hermetically pinned.
     static func runAsyncWithCallback<T>(
         callback: @escaping (String?, T?) -> Void,
         requiresAuth: Bool = false,
         configurationTaskBox: ConfigurationTaskBox = Sahha.configurationTaskBox,
-        snapshot: AuthSnapshot = Sahha.authSnapshot,
+        session: SessionReading = Sahha.session,
         actor: SahhaActor = SahhaActor.shared,
         task: @escaping @Sendable () async throws -> T,
         defaultErrorValue: @autoclosure @escaping @Sendable () -> T? = nil,
@@ -518,12 +514,13 @@ public class Sahha {
         Task {
             do {
                 if requiresAuth {
-                    // PRD #76 D13a: the guard's snapshot is populated during
-                    // configuration, so an in-flight configure must resolve
-                    // before the call is judged. No configure ever requested
-                    // means nothing to await — the guard evaluates immediately.
+                    // PRD #76 D13a: awaiting the captured configure keeps a call
+                    // issued right after `configure()` from reaching the actor
+                    // before the flight registers there and throwing "not
+                    // configured". No configure ever requested means nothing to
+                    // await — the guard evaluates immediately.
                     await configurationTaskBox.awaitCurrent()
-                    try authGuard(snapshot)
+                    try authGuard(session)
                 }
                 let result = try await task()
                 DispatchQueue.main.async {
@@ -541,8 +538,8 @@ public class Sahha {
         }
     }
     
-    private static func authGuard(_ snapshot: AuthSnapshot) throws {
-        if !snapshot.isAuthenticated {
+    private static func authGuard(_ session: SessionReading) throws {
+        guard session.profileToken()?.isEmpty == false else {
             throw SahhaError(message: "Unauthorized. Please call `Sahha.authenticate(...)` first.")
         }
     }

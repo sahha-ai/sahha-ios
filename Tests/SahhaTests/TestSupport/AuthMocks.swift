@@ -92,7 +92,7 @@ actor MockAuthService: AuthServiceProtocol {
 
 // MARK: - Token stores
 
-/// In-memory token store (no keychain, no global authSnapshot).
+/// In-memory token store (no keychain, no persisted profileId).
 actor MockTokenStore: TokenStoreProtocol {
     private var current: TokenResponse?
     private(set) var saveCount = 0
