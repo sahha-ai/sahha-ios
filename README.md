@@ -224,6 +224,19 @@ Sahha.deauthenticate { error, success in
 }
 ```
 
+`deauthenticate` signs the profile out and clears all profile-scoped state, including the
+enabled sensor set — sensor choices belong to the account, not the device. After a later
+re-authentication (same or different profile), call [`enableSensors(...)`](#enablesensors)
+again: the SDK starts with no sensors enabled and does not restore the previous set.
+
+Deauthentication always succeeds. It does not require the SDK to be authenticated — or even
+configured — and repeating it is harmless, so a sign-out flow can call it unconditionally.
+
+> **Note for 1.3.9 upgraders**: installs that deauthenticated while their stored sensor set
+> was still affected by the 1.3.7 → 1.3.9 sensor-rename decoding issue are already clean — an
+> empty store needs no repair. Just follow the normal flow: authenticate, then
+> [`enableSensors(...)`](#enablesensors).
+
 ---
 
 ### profileToken
@@ -310,6 +323,11 @@ Sahha.getSensorStatus(sensors) { error, status in
 public static func enableSensors(_ sensors: Set<SahhaSensor>, callback: @escaping (String?, SahhaSensorStatus)->Void)
 ```
 
+> **Note**: `enableSensors` is declarative — the set you pass **replaces** the enabled set, it
+> does not add to it. This includes narrowing: sensors missing from the passed set stop
+> collecting. To add a sensor later, pass the complete set you want enabled, not just the new
+> sensor.
+
 **Example usage**:
 
 ```swift
@@ -334,6 +352,12 @@ Sahha.enableSensors(sensors) { error, status in
     print(status)
 }
 ```
+
+Umbrella sensors are expanded to their granular sensors before the set is stored, so the
+enabled set in the diagnostic report always lists the expanded granular set — a single
+umbrella sensor appears as its full expansion. That is also what makes an accidental
+narrowing visible to support: a profile whose report once listed the expanded set and now
+lists a smaller one was narrowed by a later `enableSensors` call.
 
 ---
 
