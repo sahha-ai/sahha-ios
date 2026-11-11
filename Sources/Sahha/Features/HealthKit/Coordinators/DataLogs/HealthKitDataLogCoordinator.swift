@@ -1,30 +1,19 @@
 import HealthKit
 
-enum HealthKitDataLogCoordinatorError: LocalizedError {
-    case queryTimeout(sensor: SahhaSensor, seconds: TimeInterval)
-
-    var errorDescription: String? {
-        switch self {
-        case let .queryTimeout(sensor, seconds):
-            return "HealthKit anchor query timed out for sensor \(sensor.rawValue) after \(Int(seconds))s"
-        }
-    }
-}
-
 actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposable {
     private let observerService: HealthKitObserverServiceProtocol
-    private let anchorQueryService: HealthKitAnchorQueryServiceProtocol
     private let anchorStore: HealthKitAnchorStoreProtocol
     private let normaliser: HKSampleToDataLogNormaliserProtocol
     private let profileIdProvider: ProfileIdProviderProtocol
     private let dataLogPipeline: DataLogPipelineProtocol
     private let circuitBreaker: CircuitBreaker?
     private let logger: ErrorLoggerProtocol
-    private let queryLimit: Int
-    private let queryTimeout: TimeInterval
+    private let pager: AnchoredQueryPager
 
     private let queryTasks = SingleTaskActorMap<String, SensorQueryResult>()
 
+    /// - Parameter querySlots: Anchored-query slots. Production shares one pool between
+    ///   the data-log and tag coordinators (see `HealthKitDI`); the default is private.
     init(
         observerService: HealthKitObserverServiceProtocol,
         anchorQueryService: HealthKitAnchorQueryServiceProtocol,
@@ -35,18 +24,25 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
         circuitBreaker: CircuitBreaker? = nil,
         logger: ErrorLoggerProtocol,
         queryLimit: Int = 500,
-        queryTimeout: TimeInterval = 30
+        queryTimeout: TimeInterval = 30,
+        querySlots: AsyncSemaphore = AsyncSemaphore(value: AnchoredQueryPager.defaultConcurrencyLimit),
+        appStateProvider: ApplicationStateProviding? = nil
     ) {
         self.observerService = observerService
-        self.anchorQueryService = anchorQueryService
         self.anchorStore = anchorStore
         self.normaliser = normaliser
         self.profileIdProvider = profileIdProvider
         self.dataLogPipeline = dataLogPipeline
         self.circuitBreaker = circuitBreaker
         self.logger = logger
-        self.queryLimit = queryLimit
-        self.queryTimeout = queryTimeout
+        self.pager = AnchoredQueryPager(
+            logLabel: "HealthKitDataLogCoordinator",
+            service: anchorQueryService,
+            slots: querySlots,
+            fullPageSize: queryLimit,
+            timeout: queryTimeout,
+            appStateProvider: appStateProvider
+        )
     }
 
     func startDataLogCollection(for sensors: Set<SahhaSensor>) async throws {
@@ -174,16 +170,23 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                     Sahha.log("[HealthKitDataLogCoordinator] Initial sync for \(sensor.rawValue). Limiting to 30 days history.")
                 }
 
+                var pagesCompleted = 0
                 while !Task.isCancelled {
                     let (samples, newAnchor) = try await runAnchorQueryWithTimeout(
                         for: sampleType,
                         startDate: startDate,
                         endDate: endDate,
                         anchor: anchor,
-                        limit: queryLimit,
-                        sensor: sensor
+                        sensor: sensor,
+                        pagesCompleted: pagesCompleted
                     )
-                    guard !samples.isEmpty else { break }
+                    guard !samples.isEmpty else {
+                        // Caught up: a sensor whose pages shrank after a timeout goes
+                        // back to full-size pages.
+                        await self.pager.sensorCaughtUp(sensor)
+                        break
+                    }
+                    pagesCompleted += 1
 
                     totalSamples += samples.count
 
@@ -247,38 +250,35 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
         await queryTasks.cancelAll()
     }
 
+    /// One page through the shared pager. Timeouts are posted here, so the report
+    /// names this coordinator.
     private func runAnchorQueryWithTimeout(
         for sampleType: HKSampleType,
-        startDate: Date? = nil,
-        endDate: Date? = nil,
+        startDate: Date?,
+        endDate: Date?,
         anchor: HKQueryAnchor?,
-        limit: Int,
-        sensor: SahhaSensor
+        sensor: SahhaSensor,
+        pagesCompleted: Int
     ) async throws -> ([HKSample], HKQueryAnchor?) {
-        let service = anchorQueryService
         do {
-            // Abandoning timeout rather than a task-group race: a group awaits ALL
-            // of its children, so a query whose result handler never fires would
-            // hang the caller — and with it the sensor's task slot and the
-            // observer's completion handler — past the deadline. On timeout the
-            // work task is cancelled, which stops the underlying HealthKit query
-            // via the service's cancellation handler, and then abandoned.
-            return try await withAbandoningTimeout(seconds: queryTimeout, operationName: "anchor query") {
-                var predicate: NSPredicate?
-                if let startDate, let endDate {
-                    predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
-                }
-                return try await service.runAnchorQuery(
-                    for: sampleType,
-                    predicate: predicate,
-                    anchor: anchor,
-                    limit: limit
-                )
+            return try await pager.fetchPage(
+                for: sensor,
+                sampleType: sampleType,
+                startDate: startDate,
+                endDate: endDate,
+                anchor: anchor,
+                pagesCompleted: pagesCompleted
+            )
+        } catch let timeout as AnchoredQueryTimeoutError {
+            // Two call sites on purpose: the logger posts each call site only once, so
+            // this reports both the first timeout and the first one at the minimum page
+            // size, which shows that shrinking pages did not help.
+            if timeout.isAtMinimumPageSize {
+                logger.postError(timeout)
+            } else {
+                logger.postError(timeout)
             }
-        } catch is AsyncTimeoutError {
-            let timeoutError = HealthKitDataLogCoordinatorError.queryTimeout(sensor: sensor, seconds: queryTimeout)
-            logger.postError(timeoutError)
-            throw timeoutError
+            throw timeout
         }
     }
 }
