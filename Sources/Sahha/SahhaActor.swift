@@ -90,7 +90,7 @@ actor SahhaActor {
 
         self.settings = settings
 
-        let task = Task { [settings] in
+        let task = Task { [self, settings] in
             // Every configure resets the deferred bring-up machine (PRD #76 D10):
             // the fresh container must not inherit backoff windows, attempt
             // budgets, a completed latch, or a live monitor from its predecessor.
