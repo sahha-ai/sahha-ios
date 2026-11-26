@@ -40,8 +40,12 @@ tuist generate --no-open --path "$here" >/dev/null
 only=()
 [[ -n "$suite" ]] && only=(-only-testing:"SahhaDeviceTests/$suite")
 
-results="$here/results/$(date +%Y%m%d-%H%M%S)"
+run_id="$(date +%Y%m%d-%H%M%S)"
+results="$here/results/$run_id"
 mkdir -p "$results"
+# The tests write this run's reports to their own folder on the phone, and remove
+# earlier runs' reports, so only this run's measurements come back.
+export TEST_RUNNER_SAHHA_RUN_ID="$run_id"
 
 status=0
 xcodebuild test \
@@ -52,11 +56,11 @@ xcodebuild test \
   -resultBundlePath "$results/SahhaDeviceTests.xcresult" \
   ${only[@]+"${only[@]}"} || status=$?
 
-# The tests write their measurements into the host app's Documents folder.
+# Only this run's folder: a run that recorded nothing finds none and copies nothing.
 xcrun devicectl device copy from --device "$udid" \
   --domain-type appDataContainer --domain-identifier ai.sahha.sdk.devicetests \
-  --source Documents/device-test-results --destination "$results" >/dev/null 2>&1 \
+  --source "Documents/device-test-results/$run_id" --destination "$results" >/dev/null 2>&1 \
   && echo "Measurements: $results" \
-  || echo "No measurements copied (a suite that records none, or the run stopped early)."
+  || echo "No measurements from this run (its suites record none, or it stopped before recording)."
 
 exit "$status"

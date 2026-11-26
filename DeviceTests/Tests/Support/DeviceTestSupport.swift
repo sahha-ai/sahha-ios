@@ -91,18 +91,39 @@ final class DeviceHealthStore: @unchecked Sendable {
         }
     }
 
-    /// Deletes every step sample this app has written, a month at a time from the oldest
-    /// possible seed onward. One delete of millions of samples ran past half an hour on an
-    /// iPhone 14 and could not be interrupted; month-sized deletes make progress, and a
-    /// stopped run leaves a smaller remainder for the next one. Returns how many went.
+    /// The start of the oldest step sample this app has written, or nil when it has none.
+    func oldestSeededSampleStart() async throws -> Date? {
+        try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: steps,
+                predicate: ownSamples,
+                limit: 1,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
+            ) { _, samples, error in
+                if let error = error as? HKError, error.code == .errorNoData {
+                    continuation.resume(returning: nil)
+                } else if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: samples?.first?.startDate)
+                }
+            }
+            store.execute(query)
+        }
+    }
+
+    /// Deletes every step sample this app has written, a month at a time from its oldest
+    /// sample onward, so no seed length can leave samples behind. A single delete of 1.75M
+    /// samples ran for over two hours on an iPhone 14 and blocked every other HealthKit
+    /// query from the app; month-sized deletes make progress, and a stopped run leaves a
+    /// smaller remainder for the next one. Returns how many went.
     @discardableResult
-    func deleteSeeded(
-        since earliest: Date = Calendar.current.date(byAdding: .year, value: -11, to: Date())!,
-        progress: ((_ deletedSoFar: Int) -> Void)? = nil
-    ) async throws -> Int {
+    func deleteSeeded(progress: ((_ deletedSoFar: Int) -> Void)? = nil) async throws -> Int {
+        guard let oldest = try await oldestSeededSampleStart() else { return 0 }
         let calendar = Calendar.current
         let now = Date().addingTimeInterval(86_400)
-        var chunkStart = earliest
+        // A day early, so the first chunk's range certainly covers the oldest sample.
+        var chunkStart = oldest.addingTimeInterval(-86_400)
         var deleted = 0
         while chunkStart < now {
             let chunkEnd = min(calendar.date(byAdding: .month, value: 1, to: chunkStart)!, now)
@@ -167,8 +188,13 @@ final class DeviceHealthStore: @unchecked Sendable {
 
 // MARK: - Results
 
-/// Writes each test's measurements to the host app's Documents/device-test-results
-/// folder (copied back to the Mac by scripts/run-device-tests.sh) and to the console.
+/// Writes each test's measurements to the console and to the host app's
+/// Documents/device-test-results/<run id>/ folder, which DeviceTests/run.sh copies back.
+///
+/// The folder persists on the phone between runs, so each run writes to its own
+/// subfolder (named by SAHHA_RUN_ID, which run.sh sets) and clears every other run's on
+/// its first write. Otherwise a run that records nothing, or fails early, would collect
+/// the reports an earlier run left behind.
 enum DeviceTestReport {
     static func record(_ name: String, _ values: [String: Any]) {
         var report = values
@@ -176,14 +202,31 @@ enum DeviceTestReport {
         report["device"] = deviceModel()
         report["system"] = "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)"
         report["sdkVersion"] = SDK.version
+        report["runId"] = runId
 
         let data = (try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])) ?? Data()
-        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("device-test-results", isDirectory: true)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try? data.write(to: folder.appendingPathComponent("\(name).json"))
+        try? data.write(to: runFolder.appendingPathComponent("\(name).json"))
         print("[DeviceTestReport] \(name)\n\(String(decoding: data, as: UTF8.self))")
     }
+
+    /// Unique per process when run from Xcode without run.sh, so those runs don't mix either.
+    private static let runId: String = DeviceTestEnv.string("SAHHA_RUN_ID")
+        ?? "manual-\(Int(Date().timeIntervalSince1970))"
+
+    /// Created, and every other run's reports removed, on the first write of the process.
+    /// A static let initialises once, thread-safely.
+    private static let runFolder: URL = {
+        let fileManager = FileManager.default
+        let root = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("device-test-results", isDirectory: true)
+        let folder = root.appendingPathComponent(runId, isDirectory: true)
+        for entry in (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        where entry.lastPathComponent != runId {
+            try? fileManager.removeItem(at: entry)
+        }
+        try? fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }()
 
     private static func deviceModel() -> String {
         var systemInfo = utsname()
