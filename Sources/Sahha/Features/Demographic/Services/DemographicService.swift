@@ -10,7 +10,11 @@ final class DemographicService: DemographicServiceProtocol {
             endpoint: APIEndpoints.demographic,
             requiresAuth: true
         )
-       return try await apiClient.send(request)
+        // A profile with no demographic stored yet answers 204. That is the empty
+        // state, not a failure: treating it as one stopped syncDemographic before it
+        // could backfill gender and birth date from HealthKit.
+        let demographic: SahhaDemographic? = try await apiClient.sendOptional(request)
+        return demographic ?? SahhaDemographic()
     }
     
     func patchDemographic(_ demographic: SahhaDemographic) async throws {

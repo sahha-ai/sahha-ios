@@ -88,6 +88,10 @@ enum HealthKitDI {
 
     // MARK: - Coordinators
     private static func registerCoordinators(container: DIContainer) async {
+        // One pool of anchored-query slots for both coordinators: data-log and tag
+        // sensors query the same HealthKit daemon, so they queue for the same slots.
+        let anchoredQuerySlots = AsyncSemaphore(value: AnchoredQueryPager.defaultConcurrencyLimit)
+        let appStateProvider = UIKitApplicationStateProvider()
         await container.register(HealthKitDataLogCoordinatorProtocol.self) { container in
             HealthKitDataLogCoordinator(
                 observerService: try await container.resolve(HealthKitObserverServiceProtocol.self),
@@ -97,7 +101,9 @@ enum HealthKitDI {
                 profileIdProvider: try await container.resolve(ProfileIdProviderProtocol.self),
                 dataLogPipeline: try await container.resolve(DataLogPipelineProtocol.self),
                 circuitBreaker: try? await container.resolve(CircuitBreaker.self),
-                logger: try await container.resolve(ErrorLoggerProtocol.self)
+                logger: try await container.resolve(ErrorLoggerProtocol.self),
+                querySlots: anchoredQuerySlots,
+                appStateProvider: appStateProvider
             )
         }
         await container.register(HealthKitSahhaSampleCoordinatorProtocol.self) { container in
@@ -117,7 +123,9 @@ enum HealthKitDI {
                 profileIdProvider: try await container.resolve(ProfileIdProviderProtocol.self),
                 tagPipeline: try await container.resolve(TagPipelineProtocol.self),
                 circuitBreaker: try? await container.resolve(CircuitBreaker.self),
-                logger: try await container.resolve(ErrorLoggerProtocol.self)
+                logger: try await container.resolve(ErrorLoggerProtocol.self),
+                querySlots: anchoredQuerySlots,
+                appStateProvider: appStateProvider
             )
         }
         await container.register(HealthKitSahhaStatCoordinatorProtocol.self) { container in
