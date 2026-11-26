@@ -132,10 +132,13 @@ public class Sahha {
         runAsyncWithCallback(
             callback: callback,
             requiresAuth: true,
-            task: {
+            task: { () async throws -> SahhaDemographic? in
                 let demographicManager = try await actor.demographicManager()
-                return try await demographicManager.getDemographic()
-            }
+                // No demographic stored yet (the API answers 204) is a normal state, not
+                // an error: return nil with no error, matching the Android SDK.
+                return try await demographicManager.getDemographic().nilIfEmpty
+            },
+            defaultErrorValue: nil
         )
     }
 

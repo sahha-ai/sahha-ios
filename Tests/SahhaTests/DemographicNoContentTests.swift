@@ -138,6 +138,21 @@ struct DemographicNoContentTests {
         #expect(demographic.isEmpty)
     }
 
+    @Test("Public getDemographic value is nil, not an empty demographic, on 204 (Android parity)")
+    func publicValueIsNilOn204() async throws {
+        let transport = ScriptedTransport()
+        transport.reply(status: 204)
+        let service = DemographicService(apiClient: makeClient(transport))
+
+        #expect(try await service.getDemographic().nilIfEmpty == nil)
+    }
+
+    @Test("Public getDemographic value keeps a partly filled demographic")
+    func publicValueKeepsPartialDemographic() {
+        #expect(SahhaDemographic(gender: "female").nilIfEmpty == SahhaDemographic(gender: "female"))
+        #expect(SahhaDemographic(birthDate: "1990-01-01").nilIfEmpty == SahhaDemographic(birthDate: "1990-01-01"))
+    }
+
     @Test("Manager on 204: returns empty, caches it, and the HealthKit backfill PATCHes")
     func managerBackfillsAfterNoContent() async throws {
         let transport = ScriptedTransport()
