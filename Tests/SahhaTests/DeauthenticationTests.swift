@@ -266,6 +266,9 @@ private final class NullAPIClient: APIClientProtocol, @unchecked Sendable {
     func send<T: Decodable>(_ request: APIRequest) async throws -> T {
         throw SahhaError(message: "typed send is not scripted in NullAPIClient")
     }
+    func sendOptional<T: Decodable>(_ request: APIRequest) async throws -> T? {
+        throw SahhaError(message: "typed send is not scripted in NullAPIClient")
+    }
 }
 
 private struct EmptySampleQueryService: HealthKitSampleQueryServiceProtocol {
