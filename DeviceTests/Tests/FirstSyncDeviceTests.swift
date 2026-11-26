@@ -39,10 +39,7 @@ struct FirstSyncDeviceTests {
         var removedBefore = 0
         var seeded = 0
         var seedSeconds: TimeInterval = 0
-        if reuse {
-            seeded = try await health.seededSampleCount()
-            try #require(seeded > 0, "SAHHA_REUSE_SEEDED=1, but this app has no seeded samples on the phone. Seed first with SAHHA_KEEP_SEEDED=1.")
-        } else {
+        if !reuse {
             removedBefore = try await health.deleteSeeded()
             let seedStarted = Date()
             seeded = try await health.seedStepHistory(days: days, samplesPerDay: perDay, endingAt: seedEnd)
@@ -51,6 +48,14 @@ struct FirstSyncDeviceTests {
 
         do {
             let run = try await runFirstSync(windowStart: windowStart, now: now)
+
+            // A reused seed is counted only after the timed sync. The count reads every
+            // seeded sample, so counting first would warm the very history this mode
+            // measures cold.
+            if reuse {
+                seeded = try await health.seededSampleCount()
+                try #require(seeded > 0, "SAHHA_REUSE_SEEDED=1, but this app has no seeded samples on the phone. Seed first with SAHHA_KEEP_SEEDED=1.")
+            }
 
             // For the predicate-free first sync that is still on the table: the same
             // first page with no date predicate, which the simulator found fast.

@@ -76,39 +76,60 @@ final class DeviceHealthStore: @unchecked Sendable {
     /// How many step samples this app has in HealthKit. Every seeded sample is 12 steps,
     /// so the sum gives the count without fetching millions of objects.
     func seededSampleCount() async throws -> Int {
-        try await withCheckedThrowingContinuation { continuation in
-            let query = HKStatisticsQuery(quantityType: steps, quantitySamplePredicate: ownSamples, options: .cumulativeSum) { _, statistics, error in
+        try await run { finish in
+            HKStatisticsQuery(quantityType: self.steps, quantitySamplePredicate: self.ownSamples, options: .cumulativeSum) { _, statistics, error in
                 if let error = error as? HKError, error.code == .errorNoData {
-                    continuation.resume(returning: 0)
+                    finish(.success(0))
                 } else if let error {
-                    continuation.resume(throwing: error)
+                    finish(.failure(error))
                 } else {
                     let total = statistics?.sumQuantity()?.doubleValue(for: .count()) ?? 0
-                    continuation.resume(returning: Int((total / 12).rounded()))
+                    finish(.success(Int((total / 12).rounded())))
                 }
             }
-            store.execute(query)
         }
     }
 
     /// The start of the oldest step sample this app has written, or nil when it has none.
     func oldestSeededSampleStart() async throws -> Date? {
-        try await withCheckedThrowingContinuation { continuation in
-            let query = HKSampleQuery(
-                sampleType: steps,
-                predicate: ownSamples,
+        try await run { finish in
+            HKSampleQuery(
+                sampleType: self.steps,
+                predicate: self.ownSamples,
                 limit: 1,
                 sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
             ) { _, samples, error in
                 if let error = error as? HKError, error.code == .errorNoData {
-                    continuation.resume(returning: nil)
+                    finish(.success(nil))
                 } else if let error {
-                    continuation.resume(throwing: error)
+                    finish(.failure(error))
                 } else {
-                    continuation.resume(returning: samples?.first?.startDate)
+                    finish(.success(samples?.first?.startDate))
                 }
             }
-            store.execute(query)
+        }
+    }
+
+    /// Runs the query `makeQuery` builds, which hands its result to `finish`. Cancelling
+    /// the task stops the query and throws CancellationError. Without that, a `.timeLimit`
+    /// cancels the test but leaves it waiting on HealthKit forever, because
+    /// `HKHealthStore.stop` never calls the query's handler. That wait is what happens
+    /// behind a long delete still running inside HealthKit.
+    private func run<T>(
+        _ makeQuery: (_ finish: @escaping @Sendable (Result<T, Error>) -> Void) -> HKQuery
+    ) async throws -> T {
+        let pending = PendingQuery<T>()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let query = makeQuery { result in pending.finish(result) }
+                if pending.start(query, continuation) {
+                    store.execute(query)
+                }
+            }
+        } onCancel: {
+            if let query = pending.cancel() {
+                store.stop(query)
+            }
         }
     }
 
@@ -183,6 +204,52 @@ final class DeviceHealthStore: @unchecked Sendable {
             saved += batch.count
         }
         return saved
+    }
+}
+
+/// One query's continuation, resumed exactly once by whichever comes first: the query's
+/// result or the task's cancellation.
+private final class PendingQuery<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+    private var query: HKQuery?
+    private var cancelled = false
+
+    /// Whether to execute the query. False when the task was already cancelled, in which
+    /// case the continuation has been resumed with CancellationError.
+    func start(_ query: HKQuery, _ continuation: CheckedContinuation<T, Error>) -> Bool {
+        lock.lock()
+        guard !cancelled else {
+            lock.unlock()
+            continuation.resume(throwing: CancellationError())
+            return false
+        }
+        self.query = query
+        self.continuation = continuation
+        lock.unlock()
+        return true
+    }
+
+    func finish(_ result: Result<T, Error>) {
+        lock.lock()
+        let continuation = self.continuation
+        self.continuation = nil
+        query = nil
+        lock.unlock()
+        continuation?.resume(with: result)
+    }
+
+    /// Resumes with CancellationError and returns the query to stop, if one is running.
+    func cancel() -> HKQuery? {
+        lock.lock()
+        cancelled = true
+        let continuation = self.continuation
+        let query = self.query
+        self.continuation = nil
+        self.query = nil
+        lock.unlock()
+        continuation?.resume(throwing: CancellationError())
+        return query
     }
 }
 
