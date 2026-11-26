@@ -66,6 +66,34 @@ private func makeClient(_ transport: ScriptedTransport) -> APIClient {
 
 private let demographicRequest = APIRequest(endpoint: APIEndpoints.demographic, requiresAuth: true)
 
+private struct SignedInSession: SessionReading {
+    func profileToken() -> String? { "test-profile-token" }
+}
+
+/// Drives the public `getDemographic` callback path over the scripted transport,
+/// with a private session, configuration box and never-configured actor so the
+/// facade's globals are untouched.
+private func callPublicGetDemographic(_ transport: ScriptedTransport) async -> (String?, SahhaDemographic?) {
+    let manager = DemographicManager(
+        demographicService: DemographicService(apiClient: makeClient(transport)),
+        cache: DemographicCache(
+            key: "test.demographic.public",
+            storage: MockKeychainStorage(),
+            logger: NoopErrorLogger()
+        ),
+        logger: NoopErrorLogger()
+    )
+    return await withCheckedContinuation { continuation in
+        Sahha.getDemographic(
+            callback: { continuation.resume(returning: ($0, $1)) },
+            configurationTaskBox: ConfigurationTaskBox(),
+            session: SignedInSession(),
+            actor: SahhaActor(),
+            demographicManager: { manager }
+        )
+    }
+}
+
 // MARK: - Tests
 
 /// A profile with no demographic stored yet answers GET demographic with 204.
@@ -136,6 +164,36 @@ struct DemographicNoContentTests {
         let demographic = try await service.getDemographic()
         #expect(demographic == SahhaDemographic())
         #expect(demographic.isEmpty)
+    }
+
+    @Test("Public getDemographic calls back (nil, nil) on 204 (Android parity)")
+    func publicCallbackIsNilNilOn204() async throws {
+        let transport = ScriptedTransport()
+        transport.reply(status: 204)
+
+        let (error, demographic) = await callPublicGetDemographic(transport)
+        #expect(error == nil)
+        #expect(demographic == nil)
+    }
+
+    @Test("Public getDemographic passes a partly filled demographic through unchanged")
+    func publicCallbackKeepsPartialDemographic() async throws {
+        let transport = ScriptedTransport()
+        transport.reply(status: 200, body: #"{"gender":"female"}"#)
+
+        let (error, demographic) = await callPublicGetDemographic(transport)
+        #expect(error == nil)
+        #expect(demographic == SahhaDemographic(gender: "female"))
+    }
+
+    @Test("Public getDemographic still reports a real failure as an error")
+    func publicCallbackReportsErrorStatus() async throws {
+        let transport = ScriptedTransport()
+        transport.reply(status: 500, body: "boom")
+
+        let (error, demographic) = await callPublicGetDemographic(transport)
+        #expect(error != nil)
+        #expect(demographic == nil)
     }
 
     @Test("Manager on 204: returns empty, caches it, and the HealthKit backfill PATCHes")

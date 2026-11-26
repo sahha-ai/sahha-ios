@@ -129,13 +129,40 @@ public class Sahha {
 
     // MARK: - Demographic
     public static func getDemographic(callback: @escaping (String?, SahhaDemographic?) -> Void) {
+        getDemographic(
+            callback: callback,
+            demographicManager: { try await actor.demographicManager() }
+        )
+    }
+
+    /// Seam for `getDemographic(callback:)`: tests inject the manager, session and
+    /// configuration box. `file`/`function`/`line` default at the public call site,
+    /// so logged errors still name `getDemographic(callback:)`.
+    static func getDemographic(
+        callback: @escaping (String?, SahhaDemographic?) -> Void,
+        configurationTaskBox: ConfigurationTaskBox = Sahha.configurationTaskBox,
+        session: SessionReading = Sahha.session,
+        actor: SahhaActor = SahhaActor.shared,
+        demographicManager: @escaping @Sendable () async throws -> DemographicManagerProtocol,
+        file: StaticString = #fileID,
+        function: StaticString = #function,
+        line: UInt = #line
+    ) {
         runAsyncWithCallback(
             callback: callback,
             requiresAuth: true,
-            task: {
-                let demographicManager = try await actor.demographicManager()
-                return try await demographicManager.getDemographic()
-            }
+            configurationTaskBox: configurationTaskBox,
+            session: session,
+            actor: actor,
+            task: { () async throws -> SahhaDemographic? in
+                // No demographic stored yet (the API answers 204) is a normal state, not
+                // an error: return nil with no error, matching the Android SDK.
+                try await demographicManager().getDemographic().nilIfEmpty
+            },
+            defaultErrorValue: nil,
+            file: file,
+            function: function,
+            line: line
         )
     }
 

@@ -13,6 +13,12 @@ extension SahhaDemographic {
         return gender == nil && birthDate == nil
     }
     
+    /// What the public `getDemographic` returns: `nil` when nothing is stored (the
+    /// API answers 204), matching the Android SDK, instead of an all-nil value.
+    var nilIfEmpty: SahhaDemographic? {
+        isEmpty ? nil : self
+    }
+
     var isComplete: Bool {
         return gender != nil && birthDate != nil
     }
