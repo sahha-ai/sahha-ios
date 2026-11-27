@@ -1,3 +1,4 @@
+import CryptoKit
 import SwiftUI
 import UIKit
 // Only for `Sahha.debugLogging`, which is internal. Everything else here is public API,
@@ -53,7 +54,7 @@ final class WakeCheckAppDelegate: NSObject, UIApplicationDelegate {
 
     func applicationWillTerminate(_ application: UIApplication) {
         WakeLog.shared.record("will terminate")
-        WakeLog.shared.flush()
+        WakeLog.shared.flushBeforeExit()
     }
 
     private func observeLifecycle() {
@@ -77,6 +78,8 @@ enum WakeCheckSession {
     static let sensors: Set<SahhaSensor> = [.steps, .heart_rate]
 
     private static let environmentKey = "wakecheck.environment"
+    /// The environment and app (a hash of its ID) the current session was signed in with.
+    private static let signedInWithKey = "wakecheck.signedInWith"
 
     static var refreshTaskIdentifier: String {
         Bundle.main.object(forInfoDictionaryKey: "SahhaWakeCheckRefreshTask") as? String
@@ -110,15 +113,64 @@ enum WakeCheckSession {
 
         // Registered before launch finishes, as BGTaskScheduler requires.
         Sahha.enableBackgroundRefresh(identifier: refreshTaskIdentifier)
+
+        guard !appId.isEmpty, !appSecret.isEmpty else {
+            // Any launch but an install's: start the SDK with the session it has.
+            configure(environment, name: name, signIn: nil)
+            return
+        }
+
+        // An install's launch. A session signed in with other settings (another
+        // environment or app), or with unknown ones, is signed out first, before the SDK
+        // starts, so nothing is collected or sent with it. Signing out needs no configure.
+        let settings = "\(name)|\(fingerprint(of: appId))"
+        let signIn = SignIn(appId: appId, appSecret: appSecret, settings: settings)
+        guard Sahha.isAuthenticated,
+              UserDefaults.standard.string(forKey: signedInWithKey) != settings else {
+            configure(environment, name: name, signIn: signIn)
+            return
+        }
+        WakeLog.shared.record("install settings differ from the current session's: signing out first")
+        Sahha.deauthenticate { error, success in
+            guard success, !Sahha.isAuthenticated else {
+                WakeLog.shared.record("sign-out failed, so the SDK isn't started: \(error ?? "no error given")")
+                return
+            }
+            signedOut()
+            WakeLog.shared.record("signed out of the previous session")
+            configure(environment, name: name, signIn: signIn)
+        }
+    }
+
+    /// Forgets which settings the session was signed in with, after a sign-out.
+    static func signedOut() {
+        UserDefaults.standard.removeObject(forKey: signedInWithKey)
+    }
+
+    private struct SignIn {
+        let appId: String
+        let appSecret: String
+        let settings: String
+    }
+
+    private static func configure(_ environment: SahhaEnvironment, name: String, signIn: SignIn?) {
         Sahha.configure(SahhaSettings(environment: environment)) {
             WakeLog.shared.record("configured for \(name), signed in: \(Sahha.isAuthenticated)")
-            guard !Sahha.isAuthenticated, !appId.isEmpty, !appSecret.isEmpty else { return }
-            Sahha.authenticate(appId: appId, appSecret: appSecret, externalId: externalId) { error, success in
+            guard let signIn, !Sahha.isAuthenticated else { return }
+            Sahha.authenticate(appId: signIn.appId, appSecret: signIn.appSecret, externalId: externalId) { error, success in
+                if success {
+                    UserDefaults.standard.set(signIn.settings, forKey: signedInWithKey)
+                }
                 WakeLog.shared.record(success
                     ? "signed in as \(externalId)"
                     : "sign-in failed: \(error ?? "no error given")")
             }
         }
+    }
+
+    /// Enough of the app ID to tell two apart, without keeping the ID itself.
+    private static func fingerprint(of appId: String) -> String {
+        SHA256.hash(data: Data(appId.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
     }
 }
 

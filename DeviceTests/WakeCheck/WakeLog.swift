@@ -89,9 +89,33 @@ final class WakeLog: @unchecked Sendable {
         }
     }
 
-    /// Waits until everything recorded so far is in the file.
-    func flush() {
-        queue.sync { try? handle?.synchronize() }
+    /// For just before the process ends: gets everything printed or recorded so far into
+    /// the file. Stops the capture, so call it only on the way out.
+    ///
+    /// Waiting on the queue alone isn't enough: lines can still be in stdio's buffer or
+    /// in the pipe, not yet read by the readability handler.
+    func flushBeforeExit() {
+        fflush(stdout)
+        queue.sync { pipe?.fileHandleForReading.readabilityHandler = nil }
+        // Lets a handler call that had already read from the pipe queue its data first.
+        usleep(50_000)
+        queue.sync {
+            if let pipe {
+                let fd = pipe.fileHandleForReading.fileDescriptor
+                _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+                var buffer = [UInt8](repeating: 0, count: 16_384)
+                while true {
+                    let count = read(fd, &buffer, buffer.count)
+                    guard count > 0 else { break }
+                    consumeStdout(Data(buffer[0..<count]), arrivedAt: Date())
+                }
+                if !partialLine.isEmpty {
+                    write(String(decoding: partialLine, as: UTF8.self), at: Date(), echo: false)
+                    partialLine.removeAll()
+                }
+            }
+            try? handle?.synchronize()
+        }
     }
 
     // MARK: - On the queue

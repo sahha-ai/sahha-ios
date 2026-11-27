@@ -42,7 +42,7 @@ struct WakeCheckView: View {
             .confirmationDialog("Quit the app?", isPresented: $confirmingQuit, titleVisibility: .visible) {
                 Button("Quit", role: .destructive) {
                     WakeLog.shared.record("quitting, as iOS would end the app")
-                    WakeLog.shared.flush()
+                    WakeLog.shared.flushBeforeExit()
                     exit(0)
                 }
             } message: {
@@ -91,6 +91,7 @@ struct WakeCheckView: View {
 
     private func signOut() {
         Sahha.deauthenticate { error, success in
+            if success { WakeCheckSession.signedOut() }
             WakeLog.shared.record(success ? "signed out" : "sign-out failed: \(error ?? "no error given")")
             DispatchQueue.main.async { refreshStatus() }
         }

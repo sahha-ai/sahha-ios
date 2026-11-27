@@ -109,7 +109,13 @@ KEY = re.compile(
     r"|Background refresh task|Stored batch|Upload failed|\[Sahha Error\]|Session expired"
 )
 DELIVERY = "Background delivery triggered for "
-UPLOADED = re.compile(r"Successfully uploaded chunk with (\d+) items|\[Background Upload\] Task succeeded")
+# Logged after the query a delivery triggers: its status and how many logs it produced.
+QUERY = re.compile(r"Background observer query completed for (\w+): (\w+), samples: (\d+), logs: (\d+)")
+# The uploader sends one priority per chunk: steps go as critical, other HealthKit data
+# as high, and device logs (one at every launch, among others) as normal. Only the first
+# two are evidence that health data went up.
+UPLOADED = re.compile(r"Successfully uploaded chunk with (\d+) items \(priority: (\w+)\)")
+HEALTH_PRIORITIES = {"critical", "high"}
 # "Stored batch … while offline" isn't counted: at launch the network monitor hasn't
 # reported yet, and the batch goes up a second later. It's still listed above.
 ERROR = re.compile(r"\[Sahha Error\]|Background query error|Upload failed|sign-in failed|Session expired")
@@ -140,20 +146,44 @@ show(key_rows[-60:], lambda i: "   (after reopening)" if reopen is not None and 
 launches = [t for t, m in before if "[WakeCheck] launch" in m
             and not (reopened_at and reopened_at - t < timedelta(seconds=5))]
 deliveries = [m.split(DELIVERY, 1)[1] for _, m in before if DELIVERY in m]
-uploads = [m for _, m in before if UPLOADED.search(m)]
-items = sum(int(x.group(1)) for x in (UPLOADED.search(m) for m in uploads) if x and x.group(1))
+queries = [(t, q.group(1), q.group(2), int(q.group(4))) for t, m in before if (q := QUERY.search(m))]
+# Queries that collected new health data, and the health uploads after the first of them.
+collected = [(t, sensor, logs) for t, sensor, status, logs in queries if status == "success" and logs > 0]
+first_collected = collected[0][0] if collected else None
+health_uploaded = sum(
+    int(u.group(1)) for t, m in before
+    if first_collected and t >= first_collected
+    and (u := UPLOADED.search(m)) and u.group(2) in HEALTH_PRIORITIES
+)
+device_uploads = sum(1 for _, m in before if (u := UPLOADED.search(m)) and u.group(2) not in HEALTH_PRIORITIES)
+logs_collected = sum(logs for _, _, logs in collected)
 errors = [m for _, m in before if ERROR.search(m)]
+
+by_sensor = {}
+for _, sensor, logs in collected:
+    by_sensor[sensor] = by_sensor.get(sensor, 0) + logs
+results = sorted({f"{sensor} {status}" + (f" {logs} logs" if logs else "") for _, sensor, status, logs in queries})
 
 print()
 print(f"Before {'reopening at ' + f'{reopened_at:%H:%M:%S}' if reopened_at else 'now (not reopened yet)'}:")
 print(f"  background launches by iOS: {len(launches)}")
 print(f"  HealthKit deliveries: {len(deliveries)}" + (f" ({', '.join(sorted(set(deliveries)))})" if deliveries else ""))
-print(f"  uploads: {len(uploads)}" + (f" ({items} items)" if items else ""))
+print(f"  query results: {', '.join(results) if results else 'none'}")
+print(f"  new health logs collected: {logs_collected}"
+      + (f" ({', '.join(f'{s} {n}' for s, n in sorted(by_sensor.items()))})" if by_sensor else ""))
+print(f"  health items uploaded after that: {health_uploaded}"
+      + (f" (device-log uploads, not counted: {device_uploads})" if device_uploads else ""))
 print(f"  errors: {len(errors)}")
-if deliveries and uploads and (launches or not quit_):
-    print("PASS: iOS woke the app for new data and the SDK uploaded it before the app was reopened.")
+if logs_collected and health_uploaded >= logs_collected and (launches or not quit_):
+    print("PASS: iOS woke the app, a query collected the new health data, and the SDK uploaded it "
+          "before the app was reopened.")
+elif logs_collected and health_uploaded:
+    print(f"NOT YET: {logs_collected} new health logs were collected but only {health_uploaded} items uploaded. "
+          "Check the errors above.")
+elif logs_collected:
+    print(f"NOT YET: {logs_collected} new health logs were collected, but none were uploaded. Check the errors above.")
 elif deliveries:
-    print("NOT YET: iOS delivered new data, but nothing was uploaded. Check the errors above.")
+    print("NOT YET: iOS delivered updates, but no query collected new health data. See the query results.")
 elif quit_ and launches:
     print("NOT YET: iOS launched the app, but no HealthKit delivery arrived.")
 else:
