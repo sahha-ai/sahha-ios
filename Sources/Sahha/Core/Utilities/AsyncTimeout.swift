@@ -57,9 +57,10 @@ func withAbandoningTimeout<T: Sendable>(
     }
 }
 
-/// Relays the caller's cancellation to the unstructured work task, whichever of
-/// registration and cancellation happens first.
-private final class CancellationRelay: @unchecked Sendable {
+/// Relays a cancellation to an unstructured task, whichever of registration and
+/// cancellation happens first: a `cancel()` that arrives before `register(_:)`
+/// cancels the task as soon as it is registered.
+final class CancellationRelay: @unchecked Sendable {
     private let lock = NSLock()
     private var task: Task<Void, Never>?
     private var cancelled = false

@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 /// Generic uploader that handles the full upload lifecycle for any data type:
 /// ingestion → batching → priority queuing → upload with retry → dead letter queue.
@@ -14,11 +13,15 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
     private let persistentQueue: UnifiedDeadLetterQueue<Request>
     private let streamingProcessor: StreamingChunkProcessor<Item, Request>
     private let sentStore: SentItemStore
+    private let backgroundTasks: BackgroundTaskProviding
     private let uploadSemaphore: AsyncSemaphore
     private let maxRetries: Int
     private let logLabel: String
     private let chunkQueue = PriorityChunkQueue<Request>()
     private var uploadTask: Task<Void, Never>? = nil
+    /// Set when work arrives while a loop that expiry cancelled is still stopping.
+    /// That loop won't pick the work up, so it starts a fresh loop as it stops.
+    private var startLoopWhenStopped = false
     private var hasLoadedPersistedData = false
     /// Latched by `dispose()` (container teardown, e.g. deauthentication). An upload
     /// flight that resolves after teardown must not write batches back into the
@@ -34,6 +37,7 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
         persistentQueue: UnifiedDeadLetterQueue<Request>,
         streamingProcessor: StreamingChunkProcessor<Item, Request>,
         sentStore: SentItemStore,
+        backgroundTasks: BackgroundTaskProviding = UIKitBackgroundTaskProvider(),
         logLabel: String = "UnifiedUploader",
         config: UploadConfig = .default
     ) {
@@ -44,6 +48,7 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
         self.persistentQueue = persistentQueue
         self.streamingProcessor = streamingProcessor
         self.sentStore = sentStore
+        self.backgroundTasks = backgroundTasks
         self.logLabel = logLabel
         self.uploadSemaphore = AsyncSemaphore(value: max(config.maxConcurrentUploads, 1))
         self.maxRetries = max(config.maxRetries, 1)
@@ -71,8 +76,17 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
 
     func retryPendingUploads() async {
         guard !disposed else { return }
-        guard uploadTask == nil else {
-            Sahha.log("[\(logLabel)] Upload loop already running, skipping retry")
+        if let uploadTask {
+            if uploadTask.isCancelled {
+                // A loop that expiry cancelled can still be stopping when the app
+                // next wakes: iOS may suspend the app before the loop clears
+                // uploadTask. It won't pick anything up, so it starts a fresh loop
+                // as it stops (see runUploadLoop).
+                startLoopWhenStopped = true
+                Sahha.log("[\(logLabel)] Upload loop is stopping; a fresh loop starts once it has")
+            } else {
+                Sahha.log("[\(logLabel)] Upload loop already running, skipping retry")
+            }
             return
         }
 
@@ -93,8 +107,15 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
         await persistentQueue.getStatistics()
     }
 
+    /// Whether an upload loop is running. Tests use it to tell when a loop has
+    /// stopped.
+    var isUploadLoopRunning: Bool {
+        uploadTask != nil
+    }
+
     func dispose() async {
         disposed = true
+        startLoopWhenStopped = false
         uploadTask?.cancel()
         uploadTask = nil
         await chunkQueue.clear()
@@ -111,37 +132,61 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
     // MARK: - Upload Loop
 
     private func startUploadLoopIfNeeded() async {
-        guard !disposed, uploadTask == nil else { return }
+        guard !disposed else { return }
+        if let uploadTask {
+            // As in retryPendingUploads: a loop that expiry cancelled won't dequeue
+            // this work, so it starts a fresh loop as it stops.
+            if uploadTask.isCancelled { startLoopWhenStopped = true }
+            return
+        }
 
         if !hasLoadedPersistedData {
             await loadPersistedData()
             hasLoadedPersistedData = true
         }
 
-        uploadTask = Task { [weak self] in
+        let expiry = CancellationRelay()
+        let task = Task { [weak self] in
             guard let self else { return }
 
-            let bgTaskId = await Self.beginUploadBackgroundTask(label: self.logLabel)
+            // The loop runs under a UIKit background task, and UIKit terminates an
+            // app that still holds one when its background time runs out. A loop
+            // easily outlasts that time: a failed upload backs off for a minute or
+            // more, and offline the loop waits up to 60 seconds for connectivity.
+            // So the lease ends the task from the expiration handler if the loop
+            // hasn't finished by then.
+            //
+            // The lease's `onEnd` also stops the loop at expiry. Stopping loses
+            // nothing. The batch in flight goes back on the queue (see
+            // runUploadLoop), the batches behind it stay there, and each keeps the
+            // file written when it was enqueued, which is removed only once it has
+            // been sent. The next loop, started by the next enqueue or by
+            // retryPendingUploads() on the next resume, foreground or unlock, sends
+            // them under a background task of its own, and after a relaunch they
+            // are loaded from their files. Left running, the loop would freeze when
+            // the app suspends and carry on at the next wake without a background
+            // task, and since uploadTask would still be set, no new loop could
+            // begin one either. The request it was in the middle of would also
+            // likely come back as a failure, counted against the circuit breaker
+            // and posted as an error.
+            //
+            // When the loop finishes first, `onEnd` runs as the task ends and
+            // cancels a loop that has already returned, which does nothing.
+            let backgroundTask = await BackgroundTaskLease.begin(
+                named: "Sahha.\(self.logLabel).Upload",
+                provider: self.backgroundTasks,
+                onEnd: { expiry.cancel() }
+            )
 
             await self.networkMonitor.startMonitoring()
             await self.runUploadLoop()
 
-            Self.endUploadBackgroundTask(bgTaskId)
+            await backgroundTask.end()
         }
-    }
-
-    @MainActor
-    private static func beginUploadBackgroundTask(label: String) -> UIBackgroundTaskIdentifier {
-        return UIApplication.shared.beginBackgroundTask(withName: "Sahha.\(label).Upload") {
-            Sahha.log("[\(label)] Background upload task expiring")
-        }
-    }
-
-    private static func endUploadBackgroundTask(_ taskId: UIBackgroundTaskIdentifier) {
-        guard taskId != .invalid else { return }
-        Task { @MainActor in
-            UIApplication.shared.endBackgroundTask(taskId)
-        }
+        // The relay also covers an expiry that runs inside beginBackgroundTask,
+        // before this line: it cancels the task as it is registered.
+        expiry.register(task)
+        uploadTask = task
     }
 
     private func loadPersistedData() async {
@@ -164,9 +209,24 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
             await uploadSemaphore.wait()
             await uploadChunk(chunk)
             await uploadSemaphore.signal()
+
+            // Cancelled but not disposed: the background task ran out (see
+            // startUploadLoopIfNeeded), possibly in the middle of this batch. Put
+            // it back so the next loop resends it. Its file is still on disk unless
+            // it was sent after all, and then the next loop finds its IDs in the
+            // sent store and drops it.
+            if Task.isCancelled, !disposed {
+                await chunkQueue.enqueue(chunk.chunk, persistedId: chunk.persistedId)
+            }
         }
         await networkMonitor.stopMonitoring()
         uploadTask = nil
+        // Work arrived while this loop was stopping after expiry, so the app is
+        // awake again: start a fresh loop, under a background task of its own.
+        if startLoopWhenStopped {
+            startLoopWhenStopped = false
+            await startUploadLoopIfNeeded()
+        }
     }
 
     private func uploadChunk(_ queuedChunk: QueuedChunk<Request>) async {
@@ -247,12 +307,19 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
                 }
                 return
             } catch is CancellationError {
-                // Cancellation is teardown (dispose cancels the upload loop), not an
-                // upload failure: no retry accounting, no circuit-breaker penalty, no
-                // error post, and nothing written back to the purged queue.
+                // Cancellation is teardown (dispose cancels the upload loop) or the
+                // end of the loop's background time, not an upload failure: no retry
+                // accounting, no circuit-breaker penalty, no error post, and nothing
+                // written back to the queue. After dispose the queue was just purged;
+                // after expiry the batch is still persisted and runUploadLoop
+                // requeues it.
                 return
             } catch {
-                guard !disposed else { return }
+                // A request cut off by that cancellation doesn't throw
+                // CancellationError: URLSession throws URLError(.cancelled), which
+                // APIClient wraps in an APIErrorResponse. Whatever a cancelled loop's
+                // upload throws is the cancellation, not a failure.
+                guard !disposed, !Task.isCancelled else { return }
                 attempt += 1
                 await circuitBreaker.recordFailure()
                 logger.postError(error)
@@ -275,10 +342,11 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
             }
         }
 
-        // The loop also exits on cancellation (dispose cancels the upload loop, which
-        // interrupts the backoff sleep). That is teardown, not retry exhaustion: the
-        // queue was just purged, so re-persisting the batch would resurrect it, and a
-        // "max retries" error would be bogus.
+        // The loop also exits on cancellation (dispose, or the background task running
+        // out, interrupts the backoff sleep). That is not retry exhaustion, so a "max
+        // retries" error would be bogus. Nor should the batch be persisted again: after
+        // dispose the queue was just purged, so that would resurrect it, and after
+        // expiry it is still persisted and runUploadLoop requeues it.
         guard !disposed, !Task.isCancelled else { return }
 
         let errorMessage = "Max retry attempts exceeded for chunk with priority \(chunk.priority)"
