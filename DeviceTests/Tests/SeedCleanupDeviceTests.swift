@@ -20,8 +20,8 @@ struct SeedCleanupDeviceTests {
     func probeHealthKitResponsiveness() async throws {
         try await health.authorize()
         let started = Date()
-        let (samples, _) = try await HealthKitAnchorQueryService(healthStore: health.store)
-            .runAnchorQuery(for: health.steps, predicate: nil, anchor: nil, limit: 1)
+        let samples = try await HealthKitAnchorQueryService(healthStore: health.store)
+            .runAnchorQuery(for: health.steps, predicate: nil, anchor: nil, limit: 1).samples
         DeviceTestReport.record("healthkit-probe", [
             "samples": samples.count,
             "seconds": DeviceTestReport.seconds(Date().timeIntervalSince(started)),

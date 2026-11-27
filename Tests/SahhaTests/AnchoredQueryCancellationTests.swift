@@ -54,7 +54,7 @@ struct AnchoredQueryCancellationTests {
         let service = HealthKitAnchorQueryService(healthStore: store)
         let type = heartRateType
 
-        let task = Task { () throws -> ([HKSample], HKQueryAnchor?) in
+        let task = Task { () throws -> AnchoredQueryPage in
             // Hold until cancellation is definitely delivered, then call.
             while !Task.isCancelled { await Task.yield() }
             return try await service.runAnchorQuery(for: type, predicate: nil, anchor: nil, limit: 10)

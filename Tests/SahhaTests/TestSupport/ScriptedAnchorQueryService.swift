@@ -14,12 +14,15 @@ final class ScriptedAnchorQueryService: HealthKitAnchorQueryServiceProtocol, @un
         /// Return this batch on this call and on every call after it — the
         /// endless identical page produced by an anchor that never advances.
         case repeatingBatch([HKSample], HKQueryAnchor?)
+        /// Return a page of this many deleted objects and no samples, with this
+        /// anchor — what HealthKit sends after a run of deletions longer than a page.
+        case deletions(Int, HKQueryAnchor?)
         /// Never return, ignoring task cancellation — the worst-case wedged
         /// query whose result handler never fires.
         case parkForever
     }
 
-    private typealias Continuation = CheckedContinuation<([HKSample], HKQueryAnchor?), Never>
+    private typealias Continuation = CheckedContinuation<AnchoredQueryPage, Never>
 
     private let lock = NSLock()
     private var script: [Step]
@@ -64,14 +67,16 @@ final class ScriptedAnchorQueryService: HealthKitAnchorQueryServiceProtocol, @un
         predicate: NSPredicate?,
         anchor: HKQueryAnchor?,
         limit: Int
-    ) async throws -> ([HKSample], HKQueryAnchor?) {
+    ) async throws -> AnchoredQueryPage {
         switch nextStep(recording: predicate, limit: limit) {
         case let .batch(samples, anchor)?, let .repeatingBatch(samples, anchor)?:
-            return (samples, anchor)
+            return AnchoredQueryPage(samples: samples, anchor: anchor)
+        case let .deletions(count, anchor)?:
+            return AnchoredQueryPage(samples: [], deletedObjectCount: count, anchor: anchor)
         case .parkForever?:
             return await withCheckedContinuation { park($0) }
         case nil:
-            return ([], nil)
+            return AnchoredQueryPage(samples: [], anchor: nil)
         }
     }
 

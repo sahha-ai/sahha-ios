@@ -33,6 +33,7 @@ struct TokenRefreshDeviceTests {
         // token count as expiring, so the next call has to refresh, exactly as a token
         // inside its last 30 minutes does in the field.
         let manager = AuthManager(authService: service, tokenStore: store, logger: SilentErrorLogger(), expiryOffset: .days(400))
+        try await waitForNextTokenSecond()
         let started = Date()
         let refreshedToken = try await manager.getValidProfileToken()
         let refreshSeconds = Date().timeIntervalSince(started)
@@ -74,8 +75,10 @@ struct TokenRefreshDeviceTests {
 
         // Separate managers: one manager will not refresh the same token twice within
         // 10 seconds by design, and this test wants two real round trips.
+        try await waitForNextTokenSecond()
         let first = try await AuthManager(authService: service, tokenStore: store, logger: SilentErrorLogger(), expiryOffset: .days(400))
             .getValidProfileToken()
+        try await waitForNextTokenSecond()
         let second = try await AuthManager(authService: service, tokenStore: store, logger: SilentErrorLogger(), expiryOffset: .days(400))
             .getValidProfileToken()
 
@@ -102,6 +105,14 @@ struct TokenRefreshDeviceTests {
         let error = await #expect(throws: APIErrorResponse.self) { _ = try await manager.getValidProfileToken() }
         #expect(error?.statusCode == 400)
         #expect(await store.token()?.refreshToken == forged, "A 400 is not proof the session is dead")
+    }
+
+    /// Profile tokens carry no issued-at time or id, only an expiry to the second, and
+    /// the server signs deterministically: a token minted in the same second as the last
+    /// one is byte-identical to it. Waiting past the second lets "the token changed"
+    /// prove a real round trip. (Seen on development, 2026-11-27.)
+    private func waitForNextTokenSecond() async throws {
+        try await Task.sleep(nanoseconds: 1_100_000_000)
     }
 
     /// A well-formed JWT with a future expiry and a bogus signature.

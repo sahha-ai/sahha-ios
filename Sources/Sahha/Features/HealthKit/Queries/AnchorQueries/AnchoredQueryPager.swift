@@ -67,7 +67,7 @@ actor AnchoredQueryPager {
         endDate: Date?,
         anchor: HKQueryAnchor?,
         pagesCompleted: Int
-    ) async throws -> ([HKSample], HKQueryAnchor?) {
+    ) async throws -> AnchoredQueryPage {
         let limit = pageSize(for: sensor)
         let queuedAt = Date()
         try await slots.cancellableWait()
@@ -97,7 +97,7 @@ actor AnchoredQueryPager {
             await slots.signal()
             let duration = AnchoredQueryTimeoutContext.format(Date().timeIntervalSince(startedAt))
             let waited = AnchoredQueryTimeoutContext.format(waitedForSlot)
-            Sahha.log("[\(logLabel)] \(sensor.rawValue) page \(pagesCompleted + 1): \(page.0.count) samples in \(duration) (limit \(limit), waited \(waited) for a query slot)")
+            Sahha.log("[\(logLabel)] \(sensor.rawValue) page \(pagesCompleted + 1): \(page.samples.count) samples, \(page.deletedObjectCount) deletions in \(duration) (limit \(limit), waited \(waited) for a query slot)")
             return page
         } catch is AsyncTimeoutError {
             let elapsed = Date().timeIntervalSince(startedAt)

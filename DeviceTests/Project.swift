@@ -33,6 +33,10 @@ let project = Project(
             entitlements: .dictionary([
                 "com.apple.developer.healthkit": true,
                 "com.apple.developer.healthkit.access": [],
+                // Lets the SDK enable background delivery, as a host app does, so
+                // `enableBackgroundDelivery` is exercised rather than failing for want
+                // of the entitlement.
+                "com.apple.developer.healthkit.background-delivery": true,
             ])
         ),
         .target(
@@ -47,6 +51,22 @@ let project = Project(
                 .target(name: "SahhaDeviceHost"),
                 .package(product: "Sahha"),
             ]
+        ),
+    ],
+    schemes: [
+        // Declared rather than left to Tuist's generated default, to pin one thing: the
+        // suites run one at a time. Every suite shares this app's HealthKit store,
+        // keychain and live test profile, and `.serialized` only orders tests within a
+        // suite, so suites running side by side would delete each other's samples
+        // (first-sync clean-up removes every step this app wrote) and skew the timings.
+        .scheme(
+            name: "SahhaDeviceTests",
+            shared: true,
+            buildAction: .buildAction(targets: ["SahhaDeviceTests"]),
+            testAction: .targets(
+                [.testableTarget(target: "SahhaDeviceTests", parallelization: .disabled)],
+                configuration: .debug
+            )
         ),
     ]
 )

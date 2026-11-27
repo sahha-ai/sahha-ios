@@ -55,12 +55,12 @@ final class HealthKitActivitySummaryUploader: HealthKitActivitySummaryUploaderPr
             guard let sampleType = sensor.hkObjectType as? HKSampleType else { return }
             let predicate = calendarPredicate(from: startDate, to: endDate)
             do {
-                let (samples, _) = try await queryService.runAnchorQuery(
+                let samples = try await queryService.runAnchorQuery(
                     for: sampleType,
                     predicate: predicate,
                     anchor: nil,
                     limit: HKObjectQueryNoLimit
-                )
+                ).samples
                 guard !samples.isEmpty else { return }
 
                 let profileId = profileIdProvider.profileId()

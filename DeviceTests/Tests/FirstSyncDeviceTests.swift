@@ -75,6 +75,8 @@ struct FirstSyncDeviceTests {
                 "slowestPageSeconds": DeviceTestReport.seconds(run.pageSeconds.max() ?? 0),
                 "totalSeconds": DeviceTestReport.seconds(run.pageSeconds.reduce(0, +)),
                 "firstPageWithoutPredicateSeconds": DeviceTestReport.seconds(unpredicated),
+                "deletedObjectsPaged": run.deletedObjects,
+                "deletionOnlyPages": run.deletionOnlyPages,
                 "timeoutSeconds": 30,
             ])
 
@@ -96,10 +98,16 @@ struct FirstSyncDeviceTests {
     private struct FirstSyncRun {
         var pageSeconds: [TimeInterval] = []
         var samples = 0
+        /// Deleted objects HealthKit returned on the way, from earlier runs' clean-ups.
+        var deletedObjects = 0
+        var deletionOnlyPages = 0
     }
 
     /// The data-log coordinator's first-sync loop: no anchor, the 30-day predicate, pages
-    /// of up to 500 through the shared pager until an empty page.
+    /// of up to 500 through the shared pager until a page with neither samples nor
+    /// deletions. Earlier runs' clean-ups leave deleted objects that HealthKit returns
+    /// first, as pages with no samples, so stopping at the first sample-free page would
+    /// time those instead of the scan of the older history.
     private func runFirstSync(windowStart: Date, now: Date) async throws -> FirstSyncRun {
         let pager = AnchoredQueryPager(
             logLabel: "DeviceTest",
@@ -113,7 +121,7 @@ struct FirstSyncDeviceTests {
         var anchor: HKQueryAnchor?
         while true {
             let started = Date()
-            let (samples, newAnchor) = try await pager.fetchPage(
+            let page = try await pager.fetchPage(
                 for: .steps,
                 sampleType: health.steps,
                 startDate: windowStart,
@@ -122,9 +130,11 @@ struct FirstSyncDeviceTests {
                 pagesCompleted: run.pageSeconds.count
             )
             run.pageSeconds.append(Date().timeIntervalSince(started))
-            guard !samples.isEmpty else { break }
-            run.samples += samples.count
-            anchor = newAnchor
+            guard !page.isEmpty else { break }
+            run.samples += page.samples.count
+            run.deletedObjects += page.deletedObjectCount
+            if page.samples.isEmpty { run.deletionOnlyPages += 1 }
+            anchor = page.anchor
         }
         return run
     }

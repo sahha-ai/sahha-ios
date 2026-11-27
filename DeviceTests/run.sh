@@ -13,9 +13,20 @@
 #   TEST_RUNNER_SAHHA_SEED_PER_DAY   samples per day (default 288, one every 5 minutes)
 #   TEST_RUNNER_SAHHA_KEEP_SEEDED=1  leave the seeded samples in HealthKit after the run
 #   TUIST_DEVELOPMENT_TEAM           signing team (default DFT926V374, Sahha Pty Ltd)
+#
+# Any of these can also live in DeviceTests/.env.local (git-ignored), one NAME=value per
+# line, which this script loads first. Keep app credentials there rather than in your
+# shell history.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
+
+if [[ -f "$here/.env.local" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$here/.env.local"
+  set +a
+fi
 udid="${1:-}"
 suite="${2:-}"
 
@@ -48,10 +59,13 @@ mkdir -p "$results"
 export TEST_RUNNER_SAHHA_RUN_ID="$run_id"
 
 status=0
+# One suite at a time, whatever the scheme or a test plan says: the suites share the
+# app's HealthKit store, keychain and live profile (see the scheme in Project.swift).
 xcodebuild test \
   -workspace "$here/SahhaDeviceTests.xcworkspace" \
   -scheme SahhaDeviceTests \
   -destination "id=$udid" \
+  -parallel-testing-enabled NO \
   -allowProvisioningUpdates \
   -resultBundlePath "$results/SahhaDeviceTests.xcresult" \
   ${only[@]+"${only[@]}"} || status=$?
