@@ -6,8 +6,15 @@ import ProjectDescription
 // The host app exists for its entitlements: package test bundles cannot carry
 // HealthKit, so the tests are injected into this app's process instead. Only the test
 // bundle links Sahha, so there is one copy of the SDK in the process.
+//
+// SahhaWakeCheck is a separate app that integrates the SDK the way a customer's app does,
+// for the background checks in MANUAL_CHECKLIST.md that XCTest can't drive. It has its own
+// bundle id, so its keychain, Health permissions and profile are separate from the tests'.
 
 let teamId = Environment.developmentTeam.getString(default: "DFT926V374")
+
+/// Shared by the wake-check app's Info.plist and the identifier it registers with the SDK.
+let wakeCheckRefreshTask = "ai.sahha.sdk.wakecheck.refresh"
 
 let project = Project(
     name: "SahhaDeviceTests",
@@ -52,6 +59,33 @@ let project = Project(
                 .package(product: "Sahha"),
             ]
         ),
+        .target(
+            name: "SahhaWakeCheck",
+            destinations: [.iPhone],
+            product: .app,
+            bundleId: "ai.sahha.sdk.wakecheck",
+            deploymentTargets: .iOS("16.0"),
+            infoPlist: .extendingDefault(with: [
+                "CFBundleDisplayName": "Wake Check",
+                "UILaunchScreen": [:],
+                "NSHealthShareUsageDescription": "Reads steps and heart rate so the Sahha SDK wake check can upload them.",
+                "NSHealthUpdateUsageDescription": "The Sahha SDK wake check does not write health data.",
+                // The SDK's background refresh: the identifier must be permitted here, and
+                // BGAppRefreshTask needs the fetch mode.
+                "BGTaskSchedulerPermittedIdentifiers": [.string(wakeCheckRefreshTask)],
+                "UIBackgroundModes": ["fetch"],
+                "SahhaWakeCheckRefreshTask": .string(wakeCheckRefreshTask),
+            ]),
+            sources: ["WakeCheck/**"],
+            entitlements: .dictionary([
+                "com.apple.developer.healthkit": true,
+                "com.apple.developer.healthkit.access": [],
+                "com.apple.developer.healthkit.background-delivery": true,
+            ]),
+            dependencies: [
+                .package(product: "Sahha"),
+            ]
+        ),
     ],
     schemes: [
         // Declared rather than left to Tuist's generated default, to pin one thing: the
@@ -67,6 +101,12 @@ let project = Project(
                 [.testableTarget(target: "SahhaDeviceTests", parallelization: .disabled)],
                 configuration: .debug
             )
+        ),
+        .scheme(
+            name: "SahhaWakeCheck",
+            shared: true,
+            buildAction: .buildAction(targets: ["SahhaWakeCheck"]),
+            runAction: .runAction(configuration: .debug, executable: "SahhaWakeCheck")
         ),
     ]
 )
