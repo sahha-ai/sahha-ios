@@ -23,11 +23,13 @@ the `ai.sahha.sdk.devicetests` app id with HealthKit.
 **First run only:** the Health permission sheet appears on the phone. Tap
 **Turn On All**, then **Allow**. The answer sticks for this app on that phone.
 
-The live-API suite runs only with sandbox credentials in your shell:
+The live-API suites run only with app credentials. Put them in `DeviceTests/.env.local`,
+which `run.sh` loads and git ignores, so they stay out of your shell history:
 
 ```bash
-export TEST_RUNNER_SAHHA_APP_ID=…
-export TEST_RUNNER_SAHHA_APP_SECRET=…
+TEST_RUNNER_SAHHA_ENVIRONMENT=development   # or sandbox (the default); production is refused
+TEST_RUNNER_SAHHA_APP_ID=…
+TEST_RUNNER_SAHHA_APP_SECRET=…
 ```
 
 Every setting is listed at the top of `run.sh`.
@@ -38,6 +40,8 @@ Every setting is listed at the top of `run.sh`.
 |---|---|---|
 | `FirstSyncDeviceTests` | A first sync pages through the 30-day window under a large step history without a page timing out (and under half the budget); records page times, and the first page without a date predicate for comparison | The first page scans every older sample, so its cost depends on the phone and the history. 1.4.0 field report; PR #108 |
 | `KeychainSessionDeviceTests` | The session survives a fresh store, is readable by `isAuthenticated`, is stored as readable after first unlock, and clears | The simulator keychain has no data protection |
+| `DataCollectionDeviceTests` | Collection end to end through the real coordinator: first sync of six sensors (sleep sessions included), incremental sync, observer delivery with background delivery enabled, a burst of saves, deletions longer than a page, and every sensor queried at once. Needs two Health sheets answered on the first run | Real HealthKit on the OS under test |
+| `LiveUploadDeviceTests` | What a first sync and an observed save collect is accepted by the live API through the SDK's real uploader (only with credentials) | The live API from the phone's network |
 | `TokenRefreshDeviceTests` | A real refresh through the SDK's AuthManager, the new token authorising a request, a chained refresh, and a 400 keeping the session | The live API from the phone's network, not mocks |
 | `SeedCleanupDeviceTests` | Deletes every sample this app wrote and confirms none remain. Runs only with `TEST_RUNNER_SAHHA_CLEANUP=1` | Recovery after a stopped run |
 | `PermissionSheetDeviceTests` | Two permission requests back to back (weight, then height): the second shows its sheet and completes instead of timing out. Runs only with `TEST_RUNNER_SAHHA_PERMISSION_SHEETS=1`; you answer both sheets | HealthKit's real sheet. On iOS 27 a request made while the previous sheet dismissed was never shown |

@@ -13,9 +13,20 @@
 #   TEST_RUNNER_SAHHA_SEED_PER_DAY   samples per day (default 288, one every 5 minutes)
 #   TEST_RUNNER_SAHHA_KEEP_SEEDED=1  leave the seeded samples in HealthKit after the run
 #   TUIST_DEVELOPMENT_TEAM           signing team (default DFT926V374, Sahha Pty Ltd)
+#
+# Any of these can also live in DeviceTests/.env.local (git-ignored), one NAME=value per
+# line, which this script loads first. Keep app credentials there rather than in your
+# shell history.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
+
+if [[ -f "$here/.env.local" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$here/.env.local"
+  set +a
+fi
 udid="${1:-}"
 suite="${2:-}"
 

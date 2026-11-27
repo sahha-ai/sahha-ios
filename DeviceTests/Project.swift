@@ -33,6 +33,10 @@ let project = Project(
             entitlements: .dictionary([
                 "com.apple.developer.healthkit": true,
                 "com.apple.developer.healthkit.access": [],
+                // Lets the SDK enable background delivery, as a host app does, so
+                // `enableBackgroundDelivery` is exercised rather than failing for want
+                // of the entitlement.
+                "com.apple.developer.healthkit.background-delivery": true,
             ])
         ),
         .target(

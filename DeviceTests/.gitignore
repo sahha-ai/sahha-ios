@@ -2,3 +2,5 @@
 *.xcworkspace
 Derived/
 results/
+# Local settings and credentials for run.sh. Never commit.
+.env.local
