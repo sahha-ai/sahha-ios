@@ -299,25 +299,19 @@ struct UploaderBackgroundTaskTests {
             }
         }
 
-        // An uploader's first loop also loads the persisted queue, which holds a
-        // second copy of every batch enqueued so far. Run one batch through first,
-        // so the loop under test starts with only what is queued in memory.
-        await uploader.enqueue(makeChunk(["w"]))
-        #expect(await waitUntil { log.events.contains(.ended(1)) })
-
         await uploader.enqueue(makeChunk(["a"]))
         try #require(await waitUntil { await inFlight.isOpen }, "The upload never started")
         await provider.expire()
         #expect(await waitUntil { !(await uploader.isUploadLoopRunning) })
-        #expect(log.events.contains(.ended(2)))
+        #expect(log.events.contains(.ended(1)))
         #expect(log.events.contains(.uploadCancelled(["a"])))
         let atStop = log.events
 
         // The next enqueue starts a fresh loop under a fresh task, and that loop
         // sends the cut-off batch ahead of the new one.
         await uploader.enqueue(makeChunk(["b"]))
-        #expect(await waitUntil { log.events.contains(.ended(3)) })
-        #expect(log.events == atStop + [.began(taskName), .uploadSent(["a"]), .uploadSent(["b"]), .ended(3)])
+        #expect(await waitUntil { log.events.contains(.ended(2)) })
+        #expect(log.events == atStop + [.began(taskName), .uploadSent(["a"]), .uploadSent(["b"]), .ended(2)])
         #expect(await uploader.getDLQStatistics().totalBatches == 0)
 
         await uploader.dispose()
@@ -358,15 +352,10 @@ struct UploaderBackgroundTaskTests {
             log.record(.uploadSent(ids))
         }
 
-        // Run one batch through first, as in the test above, so the loop under test
-        // starts with only what is queued in memory.
-        await uploader.enqueue(makeChunk(["w"]))
-        #expect(await waitUntil { log.events.contains(.ended(1)) })
-
         await uploader.enqueue(makeChunk(["a"]))
         try #require(await waitUntil { await inFlight.isOpen }, "The upload never started")
         await provider.expire()
-        #expect(log.events.contains(.ended(2)))
+        #expect(log.events.contains(.ended(1)))
         let atExpiry = log.events
 
         // The app wakes while the expired loop is still stopping.
@@ -381,7 +370,7 @@ struct UploaderBackgroundTaskTests {
         // Once it stops, a fresh loop under a fresh task sends what is queued.
         await stopping.open()
         #expect(
-            await waitUntil { log.events.contains(.ended(3)) },
+            await waitUntil { log.events.contains(.ended(2)) },
             "No fresh loop started after the expired loop stopped"
         )
         let afterExpiry = log.events.dropFirst(atExpiry.count)

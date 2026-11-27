@@ -63,7 +63,7 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
         guard !disposed else { return }
         let persistedId = await persistentQueue.persistBatch(chunk, attemptCount: 0, lastError: nil)
         await chunkQueue.enqueue(chunk, persistedId: persistedId)
-        await startUploadLoopIfNeeded()
+        startUploadLoopIfNeeded()
     }
 
     func enqueueItems(_ items: [Item]) async {
@@ -90,17 +90,23 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
             return
         }
 
+        // This reads the whole dead-letter queue, including whatever earlier
+        // processes left there, so the loop it starts has no need to read it again.
+        hasLoadedPersistedData = true
         let persistedBatches = await persistentQueue.loadAllBatches()
+        guard !disposed else { return }
         guard !persistedBatches.isEmpty else {
             Sahha.log("[\(logLabel)] No pending batches to retry")
             return
         }
 
         Sahha.log("[\(logLabel)] Retrying \(persistedBatches.count) pending batches on app wake")
+        // A batch already queued or being uploaded (a loop may have started during
+        // the read above) is skipped: see PriorityChunkQueue.
         for batch in persistedBatches {
             await chunkQueue.enqueue(batch.chunk, persistedId: batch.id)
         }
-        await startUploadLoopIfNeeded()
+        startUploadLoopIfNeeded()
     }
 
     func getDLQStatistics() async -> PersistenceStatistics {
@@ -111,6 +117,12 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
     /// stopped.
     var isUploadLoopRunning: Bool {
         uploadTask != nil
+    }
+
+    /// How many chunks are waiting in the queue, not counting one being uploaded.
+    /// Tests use it to check that no chunk is queued twice.
+    var queuedChunkCount: Int {
+        get async { await chunkQueue.count }
     }
 
     func dispose() async {
@@ -131,18 +143,20 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
 
     // MARK: - Upload Loop
 
-    private func startUploadLoopIfNeeded() async {
+    /// Starts an upload loop unless one is running. It is synchronous on purpose:
+    /// with no suspension point between the check of `uploadTask` and setting it,
+    /// two callers can't both find no loop and both start one. They used to, when
+    /// the first loop of a process awaited its read of the dead-letter queue here
+    /// and a second enqueue arrived meanwhile (two sensors' observers firing on the
+    /// same background wake). The two loops then sent the same chunks at the same
+    /// time, before either marked them sent, so each reached the server twice.
+    private func startUploadLoopIfNeeded() {
         guard !disposed else { return }
         if let uploadTask {
             // As in retryPendingUploads: a loop that expiry cancelled won't dequeue
             // this work, so it starts a fresh loop as it stops.
             if uploadTask.isCancelled { startLoopWhenStopped = true }
             return
-        }
-
-        if !hasLoadedPersistedData {
-            await loadPersistedData()
-            hasLoadedPersistedData = true
         }
 
         let expiry = CancellationRelay()
@@ -178,6 +192,10 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
                 onEnd: { expiry.cancel() }
             )
 
+            // The first loop of a process also queues the batches earlier processes
+            // left in the dead-letter queue. It does so even when expiry has
+            // already stopped it, so that the next loop finds them queued.
+            await self.loadPersistedDataIfNeeded()
             await self.networkMonitor.startMonitoring()
             await self.runUploadLoop()
 
@@ -189,15 +207,25 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
         uploadTask = task
     }
 
-    private func loadPersistedData() async {
-        let persistedBatches = await persistentQueue.loadAllBatches()
+    private func loadPersistedDataIfNeeded() async {
+        guard !hasLoadedPersistedData else { return }
+        hasLoadedPersistedData = true
 
+        let persistedBatches = await persistentQueue.loadAllBatches()
+        guard !disposed else { return }
+
+        // The read also finds the chunks this process has persisted, such as the
+        // one whose enqueue started this loop. Those are queued already, so they
+        // are skipped: see PriorityChunkQueue.
+        var alreadyQueuedCount = 0
         for batch in persistedBatches {
-            await chunkQueue.enqueue(batch.chunk, persistedId: batch.id)
+            if !(await chunkQueue.enqueue(batch.chunk, persistedId: batch.id)) {
+                alreadyQueuedCount += 1
+            }
         }
 
         let failedCount = persistedBatches.filter { $0.hasFailed }.count
-        Sahha.log("[\(logLabel)] Loaded \(persistedBatches.count) persisted batches (\(failedCount) previously failed)")
+        Sahha.log("[\(logLabel)] Loaded \(persistedBatches.count) persisted batches (\(alreadyQueuedCount) already queued, \(failedCount) previously failed)")
     }
 
     private func runUploadLoop() async {
@@ -216,7 +244,9 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
             // it was sent after all, and then the next loop finds its IDs in the
             // sent store and drops it.
             if Task.isCancelled, !disposed {
-                await chunkQueue.enqueue(chunk.chunk, persistedId: chunk.persistedId)
+                await chunkQueue.requeue(chunk)
+            } else {
+                await chunkQueue.finish(chunk)
             }
         }
         await networkMonitor.stopMonitoring()
@@ -225,7 +255,7 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
         // awake again: start a fresh loop, under a background task of its own.
         if startLoopWhenStopped {
             startLoopWhenStopped = false
-            await startUploadLoopIfNeeded()
+            startUploadLoopIfNeeded()
         }
     }
 
@@ -376,12 +406,43 @@ private struct QueuedChunk<Request: UploadableRequest> {
 
 private actor PriorityChunkQueue<Request: UploadableRequest> {
     private var storage: [UploadPriority: [QueuedChunk<Request>]] = [:]
+    /// The persisted IDs of the batches that are queued or being uploaded.
+    ///
+    /// A batch can reach the queue more than once: the enqueue that persists it
+    /// queues it, and so can any read of the dead-letter queue that finds its file
+    /// (the first loop of a process, `retryPendingUploads()`). The loop would then
+    /// handle the batch twice: the sent store skips the second copy once the first
+    /// is sent, but a batch whose upload fails is retried twice over.
+    private var tracked: Set<String> = []
 
-    func enqueue(_ chunk: UploadChunk<Request>, persistedId: String? = nil) {
+    /// Queues `chunk`, unless the batch persisted as `persistedId` is already
+    /// queued or being uploaded. Returns whether it was queued.
+    @discardableResult
+    func enqueue(_ chunk: UploadChunk<Request>, persistedId: String? = nil) -> Bool {
+        if let persistedId {
+            guard tracked.insert(persistedId).inserted else { return false }
+        }
         let item = QueuedChunk(chunk: chunk, persistedId: persistedId)
         storage[chunk.priority, default: []].append(item)
+        return true
     }
 
+    /// Puts back a chunk taken by `dequeue()`, at the end of its priority's queue.
+    func requeue(_ item: QueuedChunk<Request>) {
+        storage[item.chunk.priority, default: []].append(item)
+    }
+
+    /// Done with a chunk taken by `dequeue()`: it was sent, or skipped as already
+    /// sent, or failed and stays in the dead-letter queue. A later read of that
+    /// queue may queue it again.
+    func finish(_ item: QueuedChunk<Request>) {
+        if let persistedId = item.persistedId {
+            tracked.remove(persistedId)
+        }
+    }
+
+    /// Takes the next chunk, highest priority first. Its batch still counts as
+    /// queued until `finish(_:)` or `requeue(_:)`.
     func dequeue() -> QueuedChunk<Request>? {
         for priority in [UploadPriority.critical, .high, .normal, .low] {
             if var queue = storage[priority], !queue.isEmpty {
@@ -393,7 +454,12 @@ private actor PriorityChunkQueue<Request: UploadableRequest> {
         return nil
     }
 
+    var count: Int {
+        storage.values.reduce(0) { $0 + $1.count }
+    }
+
     func clear() {
         storage.removeAll()
+        tracked.removeAll()
     }
 }
