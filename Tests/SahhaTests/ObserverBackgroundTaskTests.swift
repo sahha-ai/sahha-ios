@@ -93,7 +93,7 @@ private final class FakeBackgroundTaskProvider: BackgroundTaskProviding {
 
 /// A one-shot signal: `wait()` returns once `open()` has been called.
 private actor Latch {
-    private var isOpen = false
+    private(set) var isOpen = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
     func wait() async {
@@ -108,6 +108,18 @@ private actor Latch {
         }
         waiters.removeAll()
     }
+}
+
+/// Polls `condition` until it holds or `timeout` elapses; returns the final result.
+/// Tests wait for a handler to start with this rather than `Latch.wait()`, so a
+/// handler that never runs fails the test instead of hanging the run.
+private func waitUntil(timeout: Double = 5, _ condition: @Sendable () async -> Bool) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if await condition() { return true }
+        try? await Task.sleep(nanoseconds: 20_000_000)
+    }
+    return await condition()
 }
 
 /// An observer handler that records its start and its return around `body`.
@@ -182,7 +194,7 @@ struct ObserverBackgroundTaskTests {
                 }
             )
         }
-        await started.wait()
+        try #require(await waitUntil { await started.isOpen }, "The observer handler never started")
 
         // UIKit calls the expiration handler synchronously on the main thread and
         // terminates the app if the task is still held when time runs out, so the
@@ -217,7 +229,7 @@ struct ObserverBackgroundTaskTests {
                     }
                 )
             })
-            await started.wait()
+            try #require(await waitUntil { await started.isOpen }, "An observer handler never started")
         }
 
         await provider.expire()
