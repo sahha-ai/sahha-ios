@@ -40,6 +40,18 @@ Every setting is listed at the top of `run.sh`.
 | `KeychainSessionDeviceTests` | The session survives a fresh store, is readable by `isAuthenticated`, is stored as readable after first unlock, and clears | The simulator keychain has no data protection |
 | `TokenRefreshDeviceTests` | A real refresh through the SDK's AuthManager, the new token authorising a request, a chained refresh, and a 400 keeping the session | The live API from the phone's network, not mocks |
 | `SeedCleanupDeviceTests` | Deletes every sample this app wrote and confirms none remain. Runs only with `TEST_RUNNER_SAHHA_CLEANUP=1` | Recovery after a stopped run |
+| `PermissionSheetDeviceTests` | Two permission requests back to back (weight, then height): the second shows its sheet and completes instead of timing out. Runs only with `TEST_RUNNER_SAHHA_PERMISSION_SHEETS=1`; you answer both sheets | HealthKit's real sheet. On iOS 27 a request made while the previous sheet dismissed was never shown |
+
+The permission-sheet test works once per install, because each type is only ever asked
+for once. Delete the host app to run it again. It also runs on a simulator, where the
+host app is reset with `simctl`:
+
+```bash
+xcrun simctl uninstall <simulator id> ai.sahha.sdk.devicetests
+TEST_RUNNER_SAHHA_PERMISSION_SHEETS=1 xcodebuild test \
+  -workspace DeviceTests/SahhaDeviceTests.xcworkspace -scheme SahhaDeviceTests \
+  -destination 'id=<simulator id>' -only-testing:SahhaDeviceTests/PermissionSheetDeviceTests
+```
 
 ## History size and run time
 
