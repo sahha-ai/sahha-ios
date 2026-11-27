@@ -3,15 +3,17 @@ import Foundation
 @testable import Sahha
 
 /// PRD #76 D13a: auth-gated public calls await the in-flight configuration
-/// before the auth guard evaluates. The guard's snapshot is populated by the
-/// token store's keychain read *during* configure, so judging a call while
-/// configure was still in flight failed genuinely authenticated callers with
-/// a spurious "Unauthorized".
+/// before proceeding. The await's original job (waiting for configure to
+/// populate the old auth cache) is gone — the guard now reads the persisted
+/// session directly — but the box's synchronous capture still closes the
+/// configure→actor-entry race: a gated call issued right after `configure()`
+/// could otherwise reach the actor before the configure task registers there
+/// and throw "not configured". These tests keep the await order pinned.
 ///
 /// Every test runs against a private `ConfigurationTaskBox`, a private
-/// `AuthSnapshot`, and a fresh non-shared `SahhaActor` (never configured, so
-/// its error logging stays inert) — nothing touches the process-global
-/// `Sahha.authSnapshot` (DeferredBringUpTests owns that) or the facade's
+/// injected `SessionReading` fake, and a fresh non-shared `SahhaActor` (never
+/// configured, so its error logging stays inert) — nothing touches the
+/// facade's global session seam (SessionTruthTests owns that) or the facade's
 /// global box (the shared-actor test in SahhaTests.swift covers the capture
 /// wiring). That keeps the suite parallel-safe without `.serialized`.
 @Suite("Auth-gated calls await configuration (D13a)")
@@ -21,14 +23,15 @@ struct AuthGatedConfigurationAwaitTests {
 
     @Test("A call during an in-flight configure is judged on the resolved auth state (value overload)")
     func gatedCallAwaitsInFlightConfigureValueOverload() async throws {
-        let snapshot = AuthSnapshot()
+        let session = FakeSessionReader()
         let box = ConfigurationTaskBox()
         let gate = DeauthGate()
-        // Stand-in for a configure whose token-store keychain read has not
-        // landed yet: the snapshot authenticates only once the gate opens.
+        // Stand-in for a configure that lands a session before resolving: the
+        // reader authenticates only once the gate opens, so an eager guard
+        // (judging before the awaited configure finished) is observable.
         box.capture(Task {
             await gate.waitUntilOpen()
-            snapshot.profileToken = "restored-session-token"
+            session.setProfileToken("restored-session-token")
         })
 
         let recorder = CallbackRecorder<Int>()
@@ -36,14 +39,14 @@ struct AuthGatedConfigurationAwaitTests {
             callback: { recorder.record($0, $1) },
             requiresAuth: true,
             configurationTaskBox: box,
-            snapshot: snapshot,
+            session: session,
             actor: SahhaActor(),
             task: { 42 },
             defaultErrorValue: -1
         )
 
         // Give a wrongly-eager guard every chance to fire: judged before the
-        // configure resolved, the still-unauthenticated snapshot would have
+        // configure resolved, the still-unauthenticated reader would have
         // produced an "Unauthorized" callback well within this window.
         try? await Task.sleep(nanoseconds: 200_000_000)
         #expect(recorder.count == 0)
@@ -59,12 +62,12 @@ struct AuthGatedConfigurationAwaitTests {
 
     @Test("A call during an in-flight configure is judged on the resolved auth state (optional overload)")
     func gatedCallAwaitsInFlightConfigureOptionalOverload() async throws {
-        let snapshot = AuthSnapshot()
+        let session = FakeSessionReader()
         let box = ConfigurationTaskBox()
         let gate = DeauthGate()
         box.capture(Task {
             await gate.waitUntilOpen()
-            snapshot.profileToken = "restored-session-token"
+            session.setProfileToken("restored-session-token")
         })
 
         let recorder = CallbackRecorder<String?>()
@@ -72,7 +75,7 @@ struct AuthGatedConfigurationAwaitTests {
             callback: { recorder.record($0, $1) },
             requiresAuth: true,
             configurationTaskBox: box,
-            snapshot: snapshot,
+            session: session,
             actor: SahhaActor(),
             task: { "scores-payload" }
         )
@@ -93,7 +96,7 @@ struct AuthGatedConfigurationAwaitTests {
 
     @Test("A genuinely unauthenticated caller keeps the exact error contract (value overload)")
     func unauthenticatedContractUnchangedValueOverload() async {
-        let snapshot = AuthSnapshot()  // signed out
+        let session = FakeSessionReader()  // signed out
         let box = ConfigurationTaskBox()
         // A configure that ran and resolved without producing a session.
         box.capture(Task {})
@@ -103,7 +106,7 @@ struct AuthGatedConfigurationAwaitTests {
                 callback: { continuation.resume(returning: ($0, $1)) },
                 requiresAuth: true,
                 configurationTaskBox: box,
-                snapshot: snapshot,
+                session: session,
                 actor: SahhaActor(),
                 task: { 42 },
                 defaultErrorValue: -1
@@ -116,7 +119,7 @@ struct AuthGatedConfigurationAwaitTests {
 
     @Test("A genuinely unauthenticated caller keeps the exact error contract (optional overload)")
     func unauthenticatedContractUnchangedOptionalOverload() async {
-        let snapshot = AuthSnapshot()
+        let session = FakeSessionReader()
         let box = ConfigurationTaskBox()
         box.capture(Task {})
 
@@ -125,7 +128,7 @@ struct AuthGatedConfigurationAwaitTests {
                 callback: { continuation.resume(returning: ($0, $1)) },
                 requiresAuth: true,
                 configurationTaskBox: box,
-                snapshot: snapshot,
+                session: session,
                 actor: SahhaActor(),
                 task: { "never-produced" }
             )
@@ -137,9 +140,9 @@ struct AuthGatedConfigurationAwaitTests {
 
     // MARK: - Before any configure (acceptance criterion 3)
 
-    @Test("A call before any configure evaluates the guard immediately")
+    @Test("A signed-out call before any configure evaluates the guard immediately")
     func preConfigureCallDoesNotHang() async {
-        let snapshot = AuthSnapshot()
+        let session = FakeSessionReader()
         let box = ConfigurationTaskBox()  // nothing ever captured
 
         let outcome: (String?, Int) = await withCheckedContinuation { (continuation: CheckedContinuation<(String?, Int), Never>) in
@@ -147,7 +150,7 @@ struct AuthGatedConfigurationAwaitTests {
                 callback: { continuation.resume(returning: ($0, $1)) },
                 requiresAuth: true,
                 configurationTaskBox: box,
-                snapshot: snapshot,
+                session: session,
                 actor: SahhaActor(),
                 task: { 9 },
                 defaultErrorValue: -1
@@ -155,15 +158,17 @@ struct AuthGatedConfigurationAwaitTests {
         }
 
         // Completing at all proves the empty box falls through rather than
-        // hanging; the outcome is today's unauthorized contract.
+        // hanging; a signed-OUT pre-configure call keeps today's unauthorized
+        // contract exactly. (A signed-IN pre-configure call now passes this
+        // guard and reports "not configured" instead — pinned by
+        // SessionTruthTests.)
         #expect(outcome.0 == "Unauthorized. Please call `Sahha.authenticate(...)` first.")
         #expect(outcome.1 == -1)
     }
 
     @Test("With no configure requested, an authenticated caller proceeds straight to the task")
     func emptyBoxFallsThroughToTheTask() async {
-        let snapshot = AuthSnapshot()
-        snapshot.profileToken = "already-authenticated"
+        let session = FakeSessionReader(profileToken: "already-authenticated")
         let box = ConfigurationTaskBox()
 
         let outcome: (String?, Int) = await withCheckedContinuation { (continuation: CheckedContinuation<(String?, Int), Never>) in
@@ -171,7 +176,7 @@ struct AuthGatedConfigurationAwaitTests {
                 callback: { continuation.resume(returning: ($0, $1)) },
                 requiresAuth: true,
                 configurationTaskBox: box,
-                snapshot: snapshot,
+                session: session,
                 actor: SahhaActor(),
                 task: { 7 },
                 defaultErrorValue: -1
@@ -186,20 +191,20 @@ struct AuthGatedConfigurationAwaitTests {
 
     @Test("A reconfigure supersedes a wedged earlier configure for waiting calls")
     func boxFollowsTheLatestConfigure() async {
-        let snapshot = AuthSnapshot()
+        let session = FakeSessionReader()
         let box = ConfigurationTaskBox()
         let gate = DeauthGate()
         // The original configure never resolves (wedged on the gate)…
         box.capture(Task { await gate.waitUntilOpen() })
         // …but a reconfigure lands and authenticates promptly.
-        box.capture(Task { snapshot.profileToken = "reconfigured-token" })
+        box.capture(Task { session.setProfileToken("reconfigured-token") })
 
         let outcome: (String?, Int) = await withCheckedContinuation { (continuation: CheckedContinuation<(String?, Int), Never>) in
             Sahha.runAsyncWithCallback(
                 callback: { continuation.resume(returning: ($0, $1)) },
                 requiresAuth: true,
                 configurationTaskBox: box,
-                snapshot: snapshot,
+                session: session,
                 actor: SahhaActor(),
                 task: { 5 },
                 defaultErrorValue: -1
@@ -214,7 +219,7 @@ struct AuthGatedConfigurationAwaitTests {
 
     @Test("Calls without the auth guard never wait on configuration")
     func nonAuthCallsDoNotAwaitTheBox() async {
-        let snapshot = AuthSnapshot()  // signed out — irrelevant without the guard
+        let session = FakeSessionReader()  // signed out — irrelevant without the guard
         let box = ConfigurationTaskBox()
         let gate = DeauthGate()
         box.capture(Task { await gate.waitUntilOpen() })  // configure wedged
@@ -224,7 +229,7 @@ struct AuthGatedConfigurationAwaitTests {
                 callback: { continuation.resume(returning: ($0, $1)) },
                 requiresAuth: false,
                 configurationTaskBox: box,
-                snapshot: snapshot,
+                session: session,
                 actor: SahhaActor(),
                 task: { 3 },
                 defaultErrorValue: -1
@@ -241,6 +246,29 @@ struct AuthGatedConfigurationAwaitTests {
 }
 
 // MARK: - Helpers
+
+/// Injectable session reader whose token is swapped mid-test — from inside a
+/// captured configure task — so it is a lock-boxed class, not a struct.
+private final class FakeSessionReader: SessionReading, @unchecked Sendable {
+    private let lock = NSLock()
+    private var token: String?
+
+    init(profileToken: String? = nil) {
+        token = profileToken
+    }
+
+    func profileToken() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return token
+    }
+
+    func setProfileToken(_ newToken: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        token = newToken
+    }
+}
 
 /// Records `(error, value)` callback invocations so tests can observe "not
 /// fired yet" — a continuation can only observe the first fire.

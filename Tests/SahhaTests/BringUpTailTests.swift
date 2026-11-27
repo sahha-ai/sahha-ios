@@ -43,6 +43,11 @@ private final class RecordingAPIClient: APIClientProtocol, @unchecked Sendable {
         throw SahhaError(message: "typed send is not scripted in RecordingAPIClient")
     }
 
+    func sendOptional<T: Decodable>(_ request: APIRequest) async throws -> T? {
+        record(request)
+        throw SahhaError(message: "typed send is not scripted in RecordingAPIClient")
+    }
+
     private func record(_ request: APIRequest) {
         lock.lock(); defer { lock.unlock() }
         recorded.append(request)

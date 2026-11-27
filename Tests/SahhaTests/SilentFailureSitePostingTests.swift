@@ -336,7 +336,7 @@ struct SilentFailureSitePostingTests {
         keychain.errorToThrow = NSError(domain: "keychain.test", code: -25300)
         let logger = RecordingErrorLogger()
 
-        _ = TokenStore(storage: keychain, logger: logger)
+        _ = TokenStore(storage: keychain, userDefaults: InMemoryStorage(), logger: logger)
 
         let posted = logger.drain()
         #expect(posted.count == 1)

@@ -24,6 +24,7 @@ final class ScriptedAnchorQueryService: HealthKitAnchorQueryServiceProtocol, @un
     private let lock = NSLock()
     private var script: [Step]
     private var _capturedPredicates: [NSPredicate?] = []
+    private var _capturedLimits: [Int] = []
     private var _callCount = 0
     // Parked continuations are retained so the eternal suspension is deliberate
     // rather than a CheckedContinuation leak.
@@ -45,6 +46,13 @@ final class ScriptedAnchorQueryService: HealthKitAnchorQueryServiceProtocol, @un
         return _capturedPredicates
     }
 
+    /// The page size of every call, in order.
+    var capturedLimits: [Int] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _capturedLimits
+    }
+
     var callCount: Int {
         lock.lock()
         defer { lock.unlock() }
@@ -57,7 +65,7 @@ final class ScriptedAnchorQueryService: HealthKitAnchorQueryServiceProtocol, @un
         anchor: HKQueryAnchor?,
         limit: Int
     ) async throws -> ([HKSample], HKQueryAnchor?) {
-        switch nextStep(recording: predicate) {
+        switch nextStep(recording: predicate, limit: limit) {
         case let .batch(samples, anchor)?, let .repeatingBatch(samples, anchor)?:
             return (samples, anchor)
         case .parkForever?:
@@ -70,10 +78,11 @@ final class ScriptedAnchorQueryService: HealthKitAnchorQueryServiceProtocol, @un
     // Locking lives in synchronous helpers: NSLock is unavailable from async
     // contexts.
 
-    private func nextStep(recording predicate: NSPredicate?) -> Step? {
+    private func nextStep(recording predicate: NSPredicate?, limit: Int) -> Step? {
         lock.lock()
         defer { lock.unlock() }
         _capturedPredicates.append(predicate)
+        _capturedLimits.append(limit)
         _callCount += 1
         guard let step = script.first else { return nil }
         if case .repeatingBatch = step {} else { script.removeFirst() }

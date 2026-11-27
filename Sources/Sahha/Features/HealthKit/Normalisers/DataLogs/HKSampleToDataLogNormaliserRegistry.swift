@@ -35,4 +35,26 @@ final class HKSampleToDataLogNormaliserRegistry: HKSampleToDataLogNormaliserProt
             return Self.quantityFallback.normalise(sample, profileId: profileId)
         }
     }
+
+    func normalise(_ samples: [HKSample], profileId: String?) -> [DataLog] {
+        // Sleep sessions are derived by clustering the batch, so sleep samples
+        // must reach their normaliser together rather than one at a time.
+        let sleepKey = HKCategoryTypeIdentifier.sleepAnalysis.rawValue
+        var sleepSamples: [HKSample] = []
+        var logs: [DataLog] = []
+
+        for sample in samples {
+            if sample.sampleType.identifier == sleepKey {
+                sleepSamples.append(sample)
+            } else {
+                logs.append(contentsOf: normalise(sample, profileId: profileId))
+            }
+        }
+
+        if !sleepSamples.isEmpty, let sleepNormaliser = Self.normalisers[sleepKey] {
+            logs.append(contentsOf: sleepNormaliser.normalise(sleepSamples, profileId: profileId))
+        }
+
+        return logs
+    }
 }

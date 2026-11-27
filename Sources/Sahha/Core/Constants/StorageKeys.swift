@@ -9,6 +9,13 @@ enum StorageKeys {
     enum UserDefaults: String, CaseIterable {
         case deviceId
         case deviceInfo
+        /// The data-log identity (a pseudonymous profile GUID), written only by
+        /// `TokenStore`. Survives session expiry — and, unlike its in-memory
+        /// predecessor, process restarts — so data logs collected while signed
+        /// out keep deriving the same deterministic IDs; purged on deauth.
+        /// Deliberately UserDefaults, not keychain: it must stay readable in
+        /// exactly the windows the keychain is not (pre-first-unlock launches).
+        case profileId
         case sensors
         case sentLogIds
         case sentTagIds

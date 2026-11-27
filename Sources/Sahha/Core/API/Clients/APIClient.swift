@@ -17,15 +17,22 @@ final class APIClient: APIClientProtocol {
     }
 
     func send<T: Decodable>(_ request: APIRequest) async throws -> T {
-        let (data, response) = try await executePipeline(request: request)
-
-        if response.statusCode == 204 || data.isEmpty {
+        guard let value: T = try await sendOptional(request) else {
             throw APIErrorResponse(
                 title: "No Content",
                 statusCode: 204,
                 location: "APIClient.send",
                 errors: [.init(origin: "Decoding", errors: ["No content for type \(T.self)"])]
             )
+        }
+        return value
+    }
+
+    func sendOptional<T: Decodable>(_ request: APIRequest) async throws -> T? {
+        let (data, response) = try await executePipeline(request: request)
+
+        if response.statusCode == 204 || data.isEmpty {
+            return nil
         }
 
         do {

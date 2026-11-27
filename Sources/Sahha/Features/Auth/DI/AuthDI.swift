@@ -3,6 +3,7 @@ enum AuthDI {
         await container.register(TokenStoreProtocol.self) { container in
             TokenStore(
                 storage: try await container.resolve(KeychainStorageProtocol.self),
+                userDefaults: try await container.resolve(UserDefaultsStorageProtocol.self),
                 logger: try await container.resolve(ErrorLoggerProtocol.self)
             )
         }

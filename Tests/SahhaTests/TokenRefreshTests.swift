@@ -19,9 +19,10 @@ import Foundation
 /// - the reactive interceptor: a 401'd authed request forces exactly one refresh and one
 ///   retry; nothing else (4xx/5xx/transport errors) triggers a refresh or replays a request.
 ///
-/// The auth doubles live in TestSupport/AuthMocks.swift; no test touches process-global
-/// state (`Sahha.authSnapshot` is written only by the real `TokenStore`, which these tests
-/// never construct), so the file is safe under parallel suite execution.
+/// The auth doubles live in TestSupport/AuthMocks.swift; no test touches process-global or
+/// persisted state (the real `TokenStore` — the one writer of the keychain session and the
+/// persisted profileId — is never constructed here), so the file is safe under parallel
+/// suite execution.
 
 // MARK: - Helpers
 

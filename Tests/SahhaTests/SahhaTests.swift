@@ -154,6 +154,46 @@ struct SharedSahhaActorTests {
         #expect(resolvedSettings.environment == .sandbox)
     }
 
+    @Test("SDK: isAuthenticated and profileToken read the persisted session live (#106)")
+    func testFacadePropertiesReadThePersistedSession() throws {
+        // Swaps the process-global `Sahha.session` seam, hence this `.serialized`
+        // suite. The reader-level truth matrix lives in SessionTruthTests.
+        let keychain = MockKeychainStorage()
+        try keychain.setObject(
+            TokenResponse(profileToken: "restored-session-token", refreshToken: "refresh"),
+            forKey: StorageKeys.Keychain.token.rawValue
+        )
+        let original = Sahha.session
+        defer { Sahha.session = original }
+        Sahha.session = SessionReader(keychain: keychain)
+
+        // True from the first read — no configure involved anywhere.
+        #expect(Sahha.isAuthenticated)
+        #expect(Sahha.profileToken == "restored-session-token")
+
+        // And the read is live: clearing the keychain flips the very next read.
+        try keychain.removeObject(forKey: StorageKeys.Keychain.token.rawValue)
+        #expect(Sahha.isAuthenticated == false)
+        #expect(Sahha.profileToken == nil)
+    }
+
+    @Test("SDK: an empty-string profile token does not read as signed in (#106)")
+    func testEmptyTokenIsNotAuthenticated() throws {
+        let keychain = MockKeychainStorage()
+        try keychain.setObject(
+            TokenResponse(profileToken: "", refreshToken: "refresh"),
+            forKey: StorageKeys.Keychain.token.rawValue
+        )
+        let original = Sahha.session
+        defer { Sahha.session = original }
+        Sahha.session = SessionReader(keychain: keychain)
+
+        // The non-empty check survives the cache deletion: only the direct-token
+        // authenticate path validates non-emptiness before saving.
+        #expect(Sahha.isAuthenticated == false)
+        #expect(Sahha.profileToken == "")
+    }
+
     @Test("SDK: Authentication rejects empty credentials before any network call")
     func testSDKAuthentication() async throws {
         try await SahhaActor.shared.configure(with: SahhaSettings(environment: .sandbox))
