@@ -33,8 +33,9 @@ Run it twice, once for each way of leaving the app in step 3.
      instead: iOS doesn't launch an app in the background after the user force-quits it.
 4. In the Health app, add a heart rate reading and some steps (Browse → Heart → Heart Rate →
    Add Data, and the same for Steps), or walk about 200 steps. Lock the phone.
-5. Wait without opening Wake Check. iOS delivers some types, steps among them, at most once
-   an hour, so allow up to an hour.
+5. Wait without opening Wake Check. On iOS 27.2.1, entries added by hand arrived within
+   seconds. Apple documents some types, steps among them, as delivered at most hourly, so
+   allow up to an hour before calling it a fail.
 6. Unlock the phone, still without opening Wake Check, and run `DeviceTests/wake-check.sh log`.
    It saves the timeline to `DeviceTests/results/` and sums up what happened since the app
    left the foreground. Run it as often as you like.
