@@ -90,11 +90,11 @@ private final class ConcurrencyProbeAnchorQueryService: HealthKitAnchorQueryServ
         predicate: NSPredicate?,
         anchor: HKQueryAnchor?,
         limit: Int
-    ) async throws -> ([HKSample], HKQueryAnchor?) {
+    ) async throws -> AnchoredQueryPage {
         enter()
         defer { leave() }
         try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-        return ([], nil)
+        return AnchoredQueryPage(samples: [], anchor: nil)
     }
 
     // Locking lives in synchronous helpers: NSLock is unavailable from async contexts.

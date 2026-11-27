@@ -6,7 +6,7 @@ protocol HealthKitAnchorQueryServiceProtocol: Sendable {
         predicate: NSPredicate?,
         anchor: HKQueryAnchor?,
         limit: Int
-    ) async throws -> ([HKSample], HKQueryAnchor?)
+    ) async throws -> AnchoredQueryPage
 }
 
 extension HealthKitAnchorQueryServiceProtocol {
@@ -15,7 +15,7 @@ extension HealthKitAnchorQueryServiceProtocol {
         predicate: NSPredicate? = nil,
         anchor: HKQueryAnchor? = nil,
         limit: Int = HKObjectQueryNoLimit
-    ) async throws -> ([HKSample], HKQueryAnchor?) {
+    ) async throws -> AnchoredQueryPage {
         try await runAnchorQuery(
             for: sampleType,
             predicate: predicate,

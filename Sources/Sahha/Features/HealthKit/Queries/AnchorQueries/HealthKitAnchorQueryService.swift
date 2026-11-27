@@ -12,7 +12,7 @@ final class HealthKitAnchorQueryService: HealthKitAnchorQueryServiceProtocol {
         predicate: NSPredicate?,
         anchor: HKQueryAnchor?,
         limit: Int
-    ) async throws -> ([HKSample], HKQueryAnchor?) {
+    ) async throws -> AnchoredQueryPage {
         // The query object is created inside the continuation closure but must be
         // reachable from the cancellation handler, so the two sides rendezvous on a
         // lock-protected lifecycle box that arbitrates which of them resumes.
@@ -24,12 +24,18 @@ final class HealthKitAnchorQueryService: HealthKitAnchorQueryServiceProtocol {
                     predicate: predicate,
                     anchor: anchor,
                     limit: limit
-                ) { _, samplesOrNil, _, newAnchor, errorOrNil in
+                ) { _, samplesOrNil, deletedOrNil, newAnchor, errorOrNil in
                     guard let continuation = lifecycle.claimForResult() else { return }
                     if let error = errorOrNil {
                         continuation.resume(throwing: error)
                     } else {
-                        continuation.resume(returning: (samplesOrNil ?? [], newAnchor))
+                        // The deletions count toward the page limit, so the callers
+                        // need their number to tell a deletion-only page from the end.
+                        continuation.resume(returning: AnchoredQueryPage(
+                            samples: samplesOrNil ?? [],
+                            deletedObjectCount: deletedOrNil?.count ?? 0,
+                            anchor: newAnchor
+                        ))
                     }
                 }
                 if lifecycle.register(query, continuation: continuation) {
@@ -54,7 +60,7 @@ final class HealthKitAnchorQueryService: HealthKitAnchorQueryServiceProtocol {
 /// cancellation: whichever side claims first resumes the continuation, and the
 /// loser becomes a no-op.
 private final class AnchorQueryLifecycle: @unchecked Sendable {
-    typealias Continuation = CheckedContinuation<([HKSample], HKQueryAnchor?), Error>
+    typealias Continuation = CheckedContinuation<AnchoredQueryPage, Error>
 
     private let lock = NSLock()
     private var query: HKAnchoredObjectQuery?

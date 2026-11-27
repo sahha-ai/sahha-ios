@@ -168,7 +168,7 @@ actor HealthKitTagCoordinator: HealthKitTagCoordinatorProtocol, Disposable {
 
                 var pagesCompleted = 0
                 while !Task.isCancelled {
-                    let (samples, newAnchor) = try await runAnchorQueryWithTimeout(
+                    let page = try await runAnchorQueryWithTimeout(
                         for: sampleType,
                         startDate: startDate,
                         endDate: endDate,
@@ -176,12 +176,19 @@ actor HealthKitTagCoordinator: HealthKitTagCoordinatorProtocol, Disposable {
                         sensor: sensor,
                         pagesCompleted: pagesCompleted
                     )
-                    guard !samples.isEmpty else {
+                    guard !page.isEmpty else {
                         // Caught up: a sensor whose pages shrank after a timeout goes
                         // back to full-size pages.
                         await self.pager.sensorCaughtUp(sensor)
                         break
                     }
+                    // A page of deletions with no samples is not the end (see
+                    // AnchoredQueryPage). Its anchor is saved below like any other, so
+                    // the next page starts past those deletions. Stopping here instead
+                    // would re-read the same deletions on every run and never reach
+                    // the samples behind them.
+                    let samples = page.samples
+                    let newAnchor = page.anchor
                     pagesCompleted += 1
 
                     totalSamples += samples.count
@@ -255,7 +262,7 @@ actor HealthKitTagCoordinator: HealthKitTagCoordinatorProtocol, Disposable {
         anchor: HKQueryAnchor?,
         sensor: SahhaSensor,
         pagesCompleted: Int
-    ) async throws -> ([HKSample], HKQueryAnchor?) {
+    ) async throws -> AnchoredQueryPage {
         do {
             return try await pager.fetchPage(
                 for: sensor,
