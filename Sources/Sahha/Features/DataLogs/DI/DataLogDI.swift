@@ -74,12 +74,17 @@ final class DefaultUploadPriorityAssigner: UploadPriorityAssignerProtocol {
             return .critical
         }
 
+        // High: device lock and unlock events, ahead of the app lifecycle device logs
+        if log.dataType == SahhaSensor.device_lock.rawValue {
+            return .high
+        }
+
         // High: All HealthKit data types
         switch log.logType {
         case .sleep, .activity, .heart, .blood, .oxygen, .energy, .temperature, .body:
             return .high
 
-        // Normal: Device logs, demographic, and everything else
+        // Normal: app lifecycle device logs, demographic, and everything else
         default:
             return .normal
         }
