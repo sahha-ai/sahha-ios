@@ -326,7 +326,9 @@ public static func enableSensors(_ sensors: Set<SahhaSensor>, callback: @escapin
 > **Note**: `enableSensors` is declarative — the set you pass **replaces** the enabled set, it
 > does not add to it. This includes narrowing: sensors missing from the passed set stop
 > collecting. To add a sensor later, pass the complete set you want enabled, not just the new
-> sensor.
+> sensor. An empty set is rejected with an error and leaves the enabled set unchanged, so
+> `enableSensors` can't turn every sensor off; [`deauthenticate`](#deauthenticate) stops all
+> collection.
 
 **Example usage**:
 
