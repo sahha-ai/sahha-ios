@@ -196,7 +196,8 @@ actor HealthKitDataLogCoordinator: HealthKitDataLogCoordinatorProtocol, Disposab
                     let recentSamples = samples.filter { $0.endDate >= cutoffDate }
 
                     let profileId = self.profileIdProvider.profileId()
-                    let dataLogs = recentSamples.flatMap { self.normaliser.normalise($0, profileId: profileId) }
+                    // One batch per page: sleep sessions are derived across the page.
+                    let dataLogs = self.normaliser.normalise(recentSamples, profileId: profileId)
                     totalLogs += dataLogs.count
 
                     guard !Task.isCancelled else { break }
