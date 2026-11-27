@@ -112,8 +112,9 @@ DELIVERY = "Background delivery triggered for "
 # Logged after the query a delivery triggers: its status and how many logs it produced.
 QUERY = re.compile(r"Background observer query completed for (\w+): (\w+), samples: (\d+), logs: (\d+)")
 # The uploader sends one priority per chunk: steps go as critical, other HealthKit data
-# as high, and device logs (one at every launch, among others) as normal. Only the first
-# two are evidence that health data went up.
+# as high, and app lifecycle device logs (one at every launch) as normal. Only the first
+# two count as health data. Device lock and unlock logs would blur that, but Wake Check
+# doesn't enable the device_lock sensor, so it sends none.
 UPLOADED = re.compile(r"Successfully uploaded chunk with (\d+) items \(priority: (\w+)\)")
 HEALTH_PRIORITIES = {"critical", "high"}
 # "Stored batch … while offline" isn't counted: at launch the network monitor hasn't
