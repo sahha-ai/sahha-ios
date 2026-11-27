@@ -98,3 +98,16 @@ TEST_RUNNER_SAHHA_CLEANUP=1 DeviceTests/run.sh <udid> SeedCleanupDeviceTests
 
 XCTest can't lock the phone, suspend the app, wait for iOS to deliver background updates,
 or install an older SDK release. Those checks are in [MANUAL_CHECKLIST.md](MANUAL_CHECKLIST.md).
+
+The background checks use **Wake Check**, a second app in this project
+(`ai.sahha.sdk.wakecheck`) that integrates the SDK as a customer's app does and logs a
+timeline of launches, HealthKit deliveries and uploads:
+
+```bash
+DeviceTests/wake-check.sh install   # build, install, sign in with the .env.local credentials
+DeviceTests/wake-check.sh log       # copy the timeline back and sum up what happened
+```
+
+It's separate from the test host on purpose: its own keychain, Health permissions and
+profile (`sahha-ios-wake-check`), so the suites and the manual checks don't disturb each
+other.

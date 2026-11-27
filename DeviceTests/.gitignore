@@ -4,3 +4,5 @@ Derived/
 results/
 # Local settings and credentials for run.sh. Never commit.
 .env.local
+# Wake Check build output (wake-check.sh).
+build/
