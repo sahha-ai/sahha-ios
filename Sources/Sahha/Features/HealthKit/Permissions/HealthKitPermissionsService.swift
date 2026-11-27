@@ -13,13 +13,17 @@ final class HealthKitPermissionsService: HealthKitPermissionsServiceProtocol {
     /// permission sheet is up) can leave one continuation suspended forever; queueing
     /// the second request until the first resolves avoids that.
     private let requestSerializer = AsyncSemaphore(value: 1)
+    /// Holds each request until the screen can take its sheet. See `PermissionSheetSettling`.
+    private let sheetSettler: PermissionSheetSettling
 
     init(
         healthStore: HKHealthStore = .init(),
-        requestTimeout: TimeInterval = HealthKitPermissionsService.defaultRequestTimeout
+        requestTimeout: TimeInterval = HealthKitPermissionsService.defaultRequestTimeout,
+        sheetSettler: PermissionSheetSettling = PermissionSheetSettler()
     ) {
         self.healthStore = healthStore
         self.requestTimeout = requestTimeout
+        self.sheetSettler = sheetSettler
     }
 
     func requestPermissions(for sensors: Set<SahhaSensor>) async throws {
@@ -34,6 +38,12 @@ final class HealthKitPermissionsService: HealthKitPermissionsServiceProtocol {
         guard !permissions.isEmpty else { return }
 
         await requestSerializer.wait()
+
+        // A sheet still on screen (one the host app requested, say) or a presentation
+        // still animating would swallow this request's sheet, leaving it to time out.
+        await sheetSettler.waitUntilSettled()
+
+        let outcome: Result<Void, Error>
         do {
             let healthStore = self.healthStore
             try await withAbandoningTimeout(
@@ -42,11 +52,19 @@ final class HealthKitPermissionsService: HealthKitPermissionsServiceProtocol {
             ) {
                 try await healthStore.requestAuthorization(toShare: [], read: permissions)
             }
+            outcome = .success(())
         } catch {
-            await requestSerializer.signal()
-            throw error
+            outcome = .failure(error)
         }
+
+        // HealthKit calls back while the sheet is still animating away. Hold the
+        // serializer, and the caller, until it has gone, so the next request (queued
+        // here, or the host app's own) and any UI the host presents on return have
+        // somewhere to present. Without this, a second enableSensors right after the
+        // first showed no sheet on iOS 27 and failed at the request timeout.
+        await sheetSettler.waitUntilSettled()
         await requestSerializer.signal()
+        try outcome.get()
     }
     
     func getPermissionsStatus(for sensors: Set<SahhaSensor>) async throws -> HKAuthorizationRequestStatus {
