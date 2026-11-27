@@ -19,6 +19,9 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
     private let logLabel: String
     private let chunkQueue = PriorityChunkQueue<Request>()
     private var uploadTask: Task<Void, Never>? = nil
+    /// Set when work arrives while a loop that expiry cancelled is still stopping.
+    /// That loop won't pick the work up, so it starts a fresh loop as it stops.
+    private var startLoopWhenStopped = false
     private var hasLoadedPersistedData = false
     /// Latched by `dispose()` (container teardown, e.g. deauthentication). An upload
     /// flight that resolves after teardown must not write batches back into the
@@ -73,8 +76,17 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
 
     func retryPendingUploads() async {
         guard !disposed else { return }
-        guard uploadTask == nil else {
-            Sahha.log("[\(logLabel)] Upload loop already running, skipping retry")
+        if let uploadTask {
+            if uploadTask.isCancelled {
+                // A loop that expiry cancelled can still be stopping when the app
+                // next wakes: iOS may suspend the app before the loop clears
+                // uploadTask. It won't pick anything up, so it starts a fresh loop
+                // as it stops (see runUploadLoop).
+                startLoopWhenStopped = true
+                Sahha.log("[\(logLabel)] Upload loop is stopping; a fresh loop starts once it has")
+            } else {
+                Sahha.log("[\(logLabel)] Upload loop already running, skipping retry")
+            }
             return
         }
 
@@ -103,6 +115,7 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
 
     func dispose() async {
         disposed = true
+        startLoopWhenStopped = false
         uploadTask?.cancel()
         uploadTask = nil
         await chunkQueue.clear()
@@ -119,7 +132,13 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
     // MARK: - Upload Loop
 
     private func startUploadLoopIfNeeded() async {
-        guard !disposed, uploadTask == nil else { return }
+        guard !disposed else { return }
+        if let uploadTask {
+            // As in retryPendingUploads: a loop that expiry cancelled won't dequeue
+            // this work, so it starts a fresh loop as it stops.
+            if uploadTask.isCancelled { startLoopWhenStopped = true }
+            return
+        }
 
         if !hasLoadedPersistedData {
             await loadPersistedData()
@@ -202,6 +221,12 @@ actor UnifiedUploader<Item: Sendable, Request: UploadableRequest>: Disposable {
         }
         await networkMonitor.stopMonitoring()
         uploadTask = nil
+        // Work arrived while this loop was stopping after expiry, so the app is
+        // awake again: start a fresh loop, under a background task of its own.
+        if startLoopWhenStopped {
+            startLoopWhenStopped = false
+            await startUploadLoopIfNeeded()
+        }
     }
 
     private func uploadChunk(_ queuedChunk: QueuedChunk<Request>) async {

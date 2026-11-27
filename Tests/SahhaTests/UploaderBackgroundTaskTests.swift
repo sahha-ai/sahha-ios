@@ -92,7 +92,7 @@ private final class FakeBackgroundTaskProvider: BackgroundTaskProviding {
 
 /// A one-shot signal: `wait()` returns once `open()` has been called.
 private actor Latch {
-    private var isOpen = false
+    private(set) var isOpen = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
     func wait() async {
@@ -226,7 +226,7 @@ struct UploaderBackgroundTaskTests {
         }
 
         await uploader.enqueue(makeChunk(["a"]))
-        await inFlight.wait()
+        try #require(await waitUntil { await inFlight.isOpen }, "The upload never started")
 
         // UIKit calls the expiration handler synchronously on the main thread and
         // terminates the app if the task is still held when time runs out, so the
@@ -306,7 +306,7 @@ struct UploaderBackgroundTaskTests {
         #expect(await waitUntil { log.events.contains(.ended(1)) })
 
         await uploader.enqueue(makeChunk(["a"]))
-        await inFlight.wait()
+        try #require(await waitUntil { await inFlight.isOpen }, "The upload never started")
         await provider.expire()
         #expect(await waitUntil { !(await uploader.isUploadLoopRunning) })
         #expect(log.events.contains(.ended(2)))
@@ -318,6 +318,80 @@ struct UploaderBackgroundTaskTests {
         await uploader.enqueue(makeChunk(["b"]))
         #expect(await waitUntil { log.events.contains(.ended(3)) })
         #expect(log.events == atStop + [.began(taskName), .uploadSent(["a"]), .uploadSent(["b"]), .ended(3)])
+        #expect(await uploader.getDLQStatistics().totalBatches == 0)
+
+        await uploader.dispose()
+    }
+
+    /// How the app's next wake reaches the uploader.
+    enum Wake: CaseIterable, Sendable {
+        /// A resume, foreground or unlock calls `retryPendingUploads()`.
+        case retry
+        /// New data calls `enqueue(_:)`.
+        case enqueue
+    }
+
+    @Test(
+        "Work that arrives while an expired loop is still stopping starts a fresh loop once it stops",
+        arguments: Wake.allCases
+    )
+    func workDuringStopStartsFreshLoop(wake: Wake) async throws {
+        let tempDir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let log = EventLog()
+        let provider = FakeBackgroundTaskProvider(log: log)
+        let inFlight = Latch()
+        let stopping = Latch()
+        // The first attempt at "a" ignores the cancellation until `stopping` opens,
+        // so the expired loop is still stopping when the app next wakes, as it is
+        // when iOS suspends the app before the loop gets to finish. Every other
+        // upload is sent at once.
+        let uploader = makeUploader(tempDir: tempDir, provider: provider) { requests in
+            let ids = requests.map(\.id)
+            if ids == ["a"], !log.events.contains(.uploadStarted(["a"])) {
+                log.record(.uploadStarted(ids))
+                await inFlight.open()
+                await stopping.wait()
+                log.record(.uploadCancelled(ids))
+                throw URLError(.cancelled)
+            }
+            log.record(.uploadSent(ids))
+        }
+
+        // Run one batch through first, as in the test above, so the loop under test
+        // starts with only what is queued in memory.
+        await uploader.enqueue(makeChunk(["w"]))
+        #expect(await waitUntil { log.events.contains(.ended(1)) })
+
+        await uploader.enqueue(makeChunk(["a"]))
+        try #require(await waitUntil { await inFlight.isOpen }, "The upload never started")
+        await provider.expire()
+        #expect(log.events.contains(.ended(2)))
+        let atExpiry = log.events
+
+        // The app wakes while the expired loop is still stopping.
+        switch wake {
+        case .retry:
+            await uploader.retryPendingUploads()
+        case .enqueue:
+            await uploader.enqueue(makeChunk(["b"]))
+        }
+        #expect(await uploader.isUploadLoopRunning)
+
+        // Once it stops, a fresh loop under a fresh task sends what is queued.
+        await stopping.open()
+        #expect(
+            await waitUntil { log.events.contains(.ended(3)) },
+            "No fresh loop started after the expired loop stopped"
+        )
+        let afterExpiry = log.events.dropFirst(atExpiry.count)
+        #expect(afterExpiry.first == EventLog.Event.uploadCancelled(["a"]))
+        #expect(afterExpiry.contains(.began(taskName)))
+        #expect(afterExpiry.contains(.uploadSent(["a"])))
+        if wake == .enqueue {
+            #expect(afterExpiry.contains(.uploadSent(["b"])))
+        }
+        #expect(await waitUntil { !(await uploader.isUploadLoopRunning) })
         #expect(await uploader.getDLQStatistics().totalBatches == 0)
 
         await uploader.dispose()
@@ -375,7 +449,7 @@ struct UploaderBackgroundTaskTests {
         }
 
         await uploader.enqueue(makeChunk(["a"]))
-        await inFlight.wait()
+        try #require(await waitUntil { await inFlight.isOpen }, "The upload never started")
 
         // Deauthentication: dispose cancels the loop, and the task ends with it.
         await uploader.dispose()
