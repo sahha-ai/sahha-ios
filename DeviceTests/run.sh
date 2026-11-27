@@ -59,10 +59,13 @@ mkdir -p "$results"
 export TEST_RUNNER_SAHHA_RUN_ID="$run_id"
 
 status=0
+# One suite at a time, whatever the scheme or a test plan says: the suites share the
+# app's HealthKit store, keychain and live profile (see the scheme in Project.swift).
 xcodebuild test \
   -workspace "$here/SahhaDeviceTests.xcworkspace" \
   -scheme SahhaDeviceTests \
   -destination "id=$udid" \
+  -parallel-testing-enabled NO \
   -allowProvisioningUpdates \
   -resultBundlePath "$results/SahhaDeviceTests.xcresult" \
   ${only[@]+"${only[@]}"} || status=$?
